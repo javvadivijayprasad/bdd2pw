@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.tsbuildinfo
+
+# Local runtime state
+.bdd2pw/
+.env
+.env.local
+jobs/
+*.sqlite
+*.sqlite-journal
+*.db
+
+# HTTP job artefacts (ephemeral)
+bdd2pw-jobs/
+
+# OS / editor noise
+Thumbs.db
+.vs/
+*.swp

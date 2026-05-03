@@ -1,0 +1,11 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs/api",
+  "exclude": ["**/*.test.ts", "src/cli.ts", "src/server.ts", "src/http/**"],
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "readme": "README.md",
+  "name": "bdd2pw API",
+  "tsconfig": "tsconfig.json"
+}

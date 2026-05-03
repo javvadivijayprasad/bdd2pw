@@ -1,0 +1,44 @@
+{
+  "_comment": "Snapshot of https://practicetestautomation.com/practice-test-login/ as of 2026. Each entry describes ONLY the attributes the live page actually has — no fictional ARIA roles or aria-labels. Used as the file-based discovery fallback in Phase 1a (real Playwright MCP capture lands in Phase 1b).",
+  "url": "https://practicetestautomation.com/practice-test-login/",
+  "title": "Test Login | Practice Test Automation",
+  "accessibilityTree": [
+    {
+      "_note": "Page heading",
+      "role": "heading", "name": "Test login", "tag": "h2"
+    },
+    {
+      "_note": "Username input — no label, no placeholder, no aria-label. Only id='username'. Picker → locator('#username').",
+      "tag": "input",
+      "cssSelector": "#username"
+    },
+    {
+      "_note": "Password input — same shape as username.",
+      "tag": "input",
+      "cssSelector": "#password"
+    },
+    {
+      "_note": "Submit button — visible text 'Submit' becomes its accessible name. Picker → getByRole('button', { name: 'Submit' }).",
+      "role": "button", "name": "Submit", "tag": "button", "cssSelector": "#submit"
+    },
+    {
+      "_note": "Error div — no role='alert', no aria-label. Only an id='error'. Picker → locator('#error').",
+      "tag": "div",
+      "cssSelector": "#error"
+    },
+    {
+      "_note": "Success page heading.",
+      "role": "heading", "name": "Logged In Successfully", "tag": "h1"
+    },
+    {
+      "_note": "Welcome paragraph on success page.",
+      "tag": "p",
+      "text": "Congratulations student. You successfully logged in!"
+    },
+    {
+      "_note": "Logout link on success page.",
+      "role": "link", "name": "Log out", "tag": "a", "cssSelector": "a.wp-block-button__link"
+    }
+  ],
+  "domSnapshot": ""
+}

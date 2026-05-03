@@ -1,0 +1,44 @@
+{
+  "_comment": "Hand-authored snapshot for https://practicetestautomation.com/practice-test-login/. Each entry describes ONLY the attributes the live page actually has — no fictional ARIA roles or names. The locator picker will choose getByPlaceholder / getByRole / locator(#id) based on what's present.",
+  "url": "https://practicetestautomation.com/practice-test-login/",
+  "title": "Test Login | Practice Test Automation",
+  "accessibilityTree": [
+    {
+      "_note": "Page heading — has visible text but no aria-label",
+      "role": "heading", "name": "Test login", "tag": "h2"
+    },
+    {
+      "_note": "Username input — no label, no placeholder, no aria-label. Only id='username'. Picker → locator('#username').",
+      "tag": "input",
+      "cssSelector": "#username"
+    },
+    {
+      "_note": "Password input — same shape as username.",
+      "tag": "input",
+      "cssSelector": "#password"
+    },
+    {
+      "_note": "Submit button — visible text 'Submit' becomes its accessible name. Picker → getByRole('button', { name: 'Submit' }).",
+      "role": "button", "name": "Submit", "tag": "button", "cssSelector": "#submit"
+    },
+    {
+      "_note": "Error div — no role='alert', no aria-label. Only an id='error'. Picker must fall to css selector: locator('#error').",
+      "tag": "div",
+      "cssSelector": "#error"
+    },
+    {
+      "_note": "Success page — h1 with text 'Logged In Successfully'. Picker → getByRole('heading', { name: '...' }).",
+      "role": "heading", "name": "Logged In Successfully", "tag": "h1"
+    },
+    {
+      "_note": "Welcome paragraph on success page. No role; only visible text. Picker → getByText('Congratulations...').",
+      "tag": "p",
+      "text": "Congratulations student. You successfully logged in!"
+    },
+    {
+      "_note": "Logout link on success page — anchor with text 'Log out'. Picker → getByRole('link', { name: 'Log out' }).",
+      "role": "link", "name": "Log out", "tag": "a", "cssSelector": "a.wp-block-button__link"
+    }
+  ],
+  "domSnapshot": ""
+}

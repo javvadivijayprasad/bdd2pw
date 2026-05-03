@@ -1,0 +1,13 @@
+{
+  "url": "https://app.example.com/login",
+  "title": "Login",
+  "accessibilityTree": [
+    { "role": "heading", "name": "Sign in to your account", "tag": "h1" },
+    { "role": "textbox", "label": "Username", "name": "Username", "tag": "input", "placeholder": "you@example.com" },
+    { "role": "textbox", "label": "Password", "name": "Password", "tag": "input" },
+    { "role": "button", "name": "Login", "tag": "button" },
+    { "role": "alert", "name": "Error message", "text": "Invalid credentials", "tag": "div" },
+    { "role": "heading", "name": "Welcome", "text": "Welcome, Alice", "tag": "h2" }
+  ],
+  "domSnapshot": ""
+}

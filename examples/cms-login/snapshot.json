@@ -1,0 +1,30 @@
+{
+  "_comment": "Snapshot of https://cms.anhtester.com/login. Hand-authored from the live-scan output captured by Phase 1b discovery on 2026-05-02. Used by tests/e2e/cmsLogin.test.ts to keep the regression test offline-friendly. The fields the matcher actually references — email input, password input, login button — are accurate; the rest are omitted.",
+  "url": "https://cms.anhtester.com/login",
+  "title": "Login - Anh Tester CMS",
+  "accessibilityTree": [
+    {
+      "_note": "Page heading",
+      "role": "heading", "name": "Sign in", "tag": "h1"
+    },
+    {
+      "_note": "Email input — has both <label for> and placeholder",
+      "tag": "input",
+      "cssSelector": "#email",
+      "label": "Email",
+      "placeholder": "Email"
+    },
+    {
+      "_note": "Password input — same shape as email",
+      "tag": "input",
+      "cssSelector": "#password",
+      "label": "Password",
+      "placeholder": "Password"
+    },
+    {
+      "_note": "Login button — visible text becomes accessible name via the implicit-role mapper",
+      "role": "button", "name": "Login", "tag": "button", "cssSelector": "#login"
+    }
+  ],
+  "domSnapshot": ""
+}

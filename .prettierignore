@@ -1,0 +1,6 @@
+node_modules
+dist
+examples/output-playwright
+templates
+*.log
+.bdd2pw
