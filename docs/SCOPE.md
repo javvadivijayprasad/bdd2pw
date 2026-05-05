@@ -406,7 +406,7 @@ The release is "done" when:
 | Phase | Status | Headline |
 |---|---|---|
 | **Phase 0** | ✅ Shipped | `@vijaypjavvadi/pw-emit` extracted (file:../pw-emit). bdd2pw consumes it as a regular dep. sel2pw migration tracked separately (still on its own internal copy; byte-identical output verified). |
-| **Phase 1a** | ✅ Shipped | Rule-based step matcher (14 rules), Gherkin parser, repo scanner, locator picker, file-snapshot discovery, end-to-end `scaffold()` against `practice-test-login` (7/7, 0 warnings, locked as regression). |
+| **Phase 1a** | ✅ Shipped | Rule-based step matcher (15 rules — 14 in v1.0, +1 URL-contains in v1.0.1), Gherkin parser, repo scanner, locator picker, file-snapshot discovery, end-to-end `scaffold()` against `practice-test-login` (7/7, 0 warnings, locked as regression). |
 | **Phase 1b** | ✅ Shipped | Live browser discovery via direct `playwright.chromium.launch()` (chose direct Playwright over `@playwright/mcp`). Status-region special case + visibility filter bypass. |
 | **Phase 1c** | ✅ Shipped | Second real fixture (`cms-login`, third-person dialect) — 0 warnings first try. Subject-agnostic prefix locked. |
 | **Phase 2** | ✅ Shipped | `analyze` (dry-run) + `update-pom` (append-only AST surgery via ts-morph). `BDD_REVIEW.md` writer. `tsc --noEmit` validator (soft-fail). |
@@ -476,7 +476,7 @@ The release is "done" when:
   caller-provided `repo` with `<os.tmpdir()>/bdd2pw-jobs/<jobId>/`. The user
   downloads the result via `GET /jobs/:id/artifact`. This means the HTTP path
   never writes into a user's working tree, only the CLI does.
-- **Rule taxonomy: 14 deterministic patterns + compound `customBody`** — locked
+- **Rule taxonomy: 15 deterministic patterns + compound `customBody`** (14 at v1.0, +1 URL-contains in v1.0.1) — locked
   via 6 iteration rounds against `practice-test-login`. Subject-agnostic
   prefix `(?:I|user|User|the user|the User)` so first-person and third-person
   Gherkin dialects both match without rule duplication. Rule 2c emits a

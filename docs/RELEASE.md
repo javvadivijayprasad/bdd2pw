@@ -1,292 +1,379 @@
-# Release Runbook — v1.0.0
+# Release Runbook
 
-> Copy-paste these blocks into **PowerShell** in order. Each block stops at a
-> natural verification point; don't skip the verification commands. Estimated
-> time: ~15 min from cold start, assuming `gh auth login` and `npm login` are
-> already done.
+> **Status as of 2026-05-03:** v1.0.0 of both packages **shipped**.
+> [`@vijaypjavvadi/pw-emit@1.0.0`](https://www.npmjs.com/package/@vijaypjavvadi/pw-emit) ·
+> [`@vijaypjavvadi/bdd2pw@1.0.0`](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw) ·
+> source on [`javvadivijayprasad/pw-emit`](https://github.com/javvadivijayprasad/pw-emit) +
+> [`javvadivijayprasad/bdd2pw`](https://github.com/javvadivijayprasad/bdd2pw),
+> tagged `v1.0.0` on both.
 >
-> **Order matters.** `pw-emit` ships first because `bdd2pw@1.0.0` depends on
-> `@vijaypjavvadi/pw-emit@^1.0.0` from the npm registry. If you publish bdd2pw
-> first, the install will fail.
+> **Current release model: manual `npm publish` from your local machine.**
+> Auto-publish via GitHub Actions is wired but disabled (see §5).
 
 ---
 
-## 0. One-time prerequisites
+## TL;DR — cutting a new release
 
-Run once per machine, then forget about them.
-
-```powershell
-# GitHub CLI auth (browser flow)
-gh auth status
-# If not logged in:
-gh auth login --web --scopes "repo,workflow,write:packages"
-
-# npm auth — needs to land you on https://registry.npmjs.org
-npm whoami
-# If not logged in:
-npm login
-# After login, confirm scope access:
-npm access list packages @vijaypjavvadi
-```
-
-You should see `@vijaypjavvadi/sel2pw` already published (proof your scope is
-active).
-
----
-
-## 0.5. Create the GitHub repos (first-time only)
-
-If `javvadivijayprasad/pw-emit` and `javvadivijayprasad/bdd2pw` don't exist on
-GitHub yet, create them now. Both are MIT-licensed public repos.
+For any future `vX.Y.Z` of either package, run this from PowerShell:
 
 ```powershell
-# Create both repos as PUBLIC (so npm provenance works) with no auto-init —
-# we want our local main as the first commit, no README/LICENSE conflicts.
-gh repo create javvadivijayprasad/pw-emit `
-  --public `
-  --description "Shared emitter library that renders Playwright TypeScript Page Objects, spec files, and project scaffolds from a generic IR. Powers @vijaypjavvadi/sel2pw and @vijaypjavvadi/bdd2pw." `
-  --homepage "https://github.com/javvadivijayprasad/pw-emit"
-
-gh repo create javvadivijayprasad/bdd2pw `
-  --public `
-  --description "Scaffold runnable Playwright TypeScript tests from Gherkin .feature files. CLI + HTTP service. Detects existing Page Objects, scans live pages, emits POMs + specs ready to run." `
-  --homepage "https://github.com/javvadivijayprasad/bdd2pw"
-```
-
-Verify both exist and are empty:
-```powershell
-gh repo view javvadivijayprasad/pw-emit  --json name,visibility,isEmpty
-gh repo view javvadivijayprasad/bdd2pw   --json name,visibility,isEmpty
-# Expect: {"name":"...","visibility":"PUBLIC","isEmpty":true}
-```
-
-> **Why public?** `npm publish --provenance` requires public GitHub repos. If
-> you want them private, you must drop `--provenance` from `release.yml`. For a
-> v1.0 launch, public is the right default — provenance attestations let
-> downstream users verify the tarball came from this exact commit.
-
-### NPM_TOKEN for GitHub Actions auto-publish
-
-The `.github/workflows/release.yml` in **both** repos uses `secrets.NPM_TOKEN`
-to publish on tag push. Generate one **automation** token and add it to both
-repos' secrets:
-
-```powershell
-# 1. Generate token in browser:
-Start-Process "https://www.npmjs.com/settings/$(npm whoami)/tokens/new"
-# Select: Granular Access Token → expiry 90d → packages "@vijaypjavvadi/*" → permissions Read+Write
-# Copy the token (shown ONCE).
-
-# 2. Add it to both GitHub repos:
-$tok = Read-Host -AsSecureString "Paste npm token"
-$plain = (New-Object System.Net.NetworkCredential("", $tok)).Password
-gh secret set NPM_TOKEN --repo javvadivijayprasad/pw-emit --body $plain
-gh secret set NPM_TOKEN --repo javvadivijayprasad/bdd2pw  --body $plain
-Remove-Variable plain
-```
-
-Verify:
-```powershell
-gh secret list --repo javvadivijayprasad/pw-emit
-gh secret list --repo javvadivijayprasad/bdd2pw
-```
-You should see `NPM_TOKEN` in both lists with a recent `Updated` timestamp.
-
----
-
-## 1. Ship `pw-emit@1.0.0`
-
-```powershell
-cd E:\EB1A_Research\pw-emit
-
-# Sanity — manifest already says 1.0.0?
-node -e "console.log(require('./package.json').version)"
-# → 1.0.0
-
-# Clean install (no symlinks)
-Remove-Item -Recurse -Force node_modules, package-lock.json -ErrorAction SilentlyContinue
-npm install
-
-# Build + test must be green
+cd E:\EB1A_Research\<pkg>            # pw-emit or bdd2pw
+npm version <patch|minor|major>      # bumps package.json + creates a vX.Y.Z git commit + tag
+npm install                          # refresh lockfile
 npm run build
 npm test
-
-# Dry-run the publish — confirms what tarball will go up
-npm publish --dry-run --access public
-# Look for: "name: @vijaypjavvadi/pw-emit", "version: 1.0.0",
-# tarball includes dist/, templates/, README.md, CHANGELOG.md, LICENSE, package.json
-# tarball EXCLUDES src/, tests/, node_modules/
-
-# Initialise git + push
-git init -b main
-git add .
-git commit -m "chore(release): pw-emit v1.0.0"
-git remote add origin https://github.com/javvadivijayprasad/pw-emit.git
-git push -u origin main
-
-# Tag — this is what triggers the auto-publish workflow on GitHub
-git tag -a v1.0.0 -m "pw-emit v1.0.0 — first public release"
-git push origin v1.0.0
+npm publish --access public          # Windows Hello prompt — tap PIN/fingerprint
+git push --follow-tags               # pushes commit + tag to GitHub
 ```
 
-**Watch the release workflow:**
-```powershell
-gh run watch --repo javvadivijayprasad/pw-emit
-```
+That's it. The publish step is the only one that needs your physical
+authentication (security key 2FA). Total time per package: ~2 minutes.
 
-When the workflow finishes green, verify:
-```powershell
-# npm registry sees it:
-npm view @vijaypjavvadi/pw-emit version
-# → 1.0.0
-
-# Provenance attestation present:
-npm view @vijaypjavvadi/pw-emit dist.signatures
-# → array with at least one signature
-```
-
-> **If the workflow fails on `npm publish`** with `EOTP` or `E403`, your
-> `NPM_TOKEN` is likely a *legacy* token (not granular) without
-> publish permission for the scope. Regenerate as described in section 0.
-
-> **If the workflow fails on provenance** (`unable to attest`), the most
-> common cause is the workflow not having `id-token: write` permission. The
-> ours does, but if you copied it elsewhere, double-check.
+If you're releasing both packages and bdd2pw needs the new pw-emit, do
+**pw-emit first**, then in bdd2pw run `npm install @vijaypjavvadi/pw-emit@^X.Y.Z`
+to bump the dep, commit, then `npm version ...` and ship.
 
 ---
 
-## 2. Ship `bdd2pw@1.0.0`
+## Detailed flow (per package)
 
-Now that `pw-emit@1.0.0` resolves from the npm registry, bdd2pw can install it
-properly.
+### 1. Bump the version
 
 ```powershell
-cd E:\EB1A_Research\bdd2pw
+cd E:\EB1A_Research\<pkg>
 
-# Sanity — manifest is on 1.0.0 and the dep is "^1.0.0" not "file:../pw-emit"?
-node -e "const p = require('./package.json'); console.log(p.version, p.dependencies['@vijaypjavvadi/pw-emit'])"
-# → 1.0.0 ^1.0.0
+# Pick one — npm version will reject if working tree isn't clean
+npm version patch    # 1.0.0 → 1.0.1   bug fix only
+npm version minor    # 1.0.0 → 1.1.0   new features, backwards-compatible
+npm version major    # 1.0.0 → 2.0.0   breaking changes
+```
 
-# Clean install — pulls @vijaypjavvadi/pw-emit@1.0.0 from npm
+`npm version` does three things in one command:
+1. Edits `package.json` to the new version.
+2. Creates a git commit with message `<new-version>` (e.g. `1.1.0`).
+3. Creates an annotated git tag `v<new-version>`.
+
+If you want a different commit message, pass `-m`:
+```powershell
+npm version minor -m "release: %s — adds X, Y, Z"
+```
+
+### 2. Update CHANGELOG.md
+
+```powershell
+notepad CHANGELOG.md      # or your editor of choice
+```
+
+Add a new entry at the top of `[Unreleased]` describing what's in this version,
+then move it under a new `## [X.Y.Z] — YYYY-MM-DD` heading.
+
+After saving, amend the version commit to include the changelog:
+```powershell
+git add CHANGELOG.md
+git commit --amend --no-edit
+git tag -d v<new-version>      # delete the old tag (it points to the wrong commit now)
+git tag -a v<new-version> -m "<pkg> v<new-version>"   # re-tag the amended commit
+```
+
+### 3. Sanity install + verify
+
+```powershell
 Remove-Item -Recurse -Force node_modules, package-lock.json -ErrorAction SilentlyContinue
 npm install
-
-# Build + full test suite must be green
 npm run build
 npm test
-# → 101 / 101
+```
 
-# Dry-run the publish
+Tests must be green. If they fail, fix and amend the commit.
+
+### 4. Dry-run the publish
+
+Always do this first — confirms what will go up to npm:
+
+```powershell
 npm publish --dry-run --access public
-# Look for: "name: @vijaypjavvadi/bdd2pw", "version: 1.0.0",
-# tarball includes dist/, templates/, README.md, CHANGELOG.md, LICENSE, package.json
-# tarball EXCLUDES src/, tests/, examples/, docs/, node_modules/
-
-# Initialise git + push
-git init -b main
-git add .
-git commit -m "chore(release): bdd2pw v1.0.0"
-git remote add origin https://github.com/javvadivijayprasad/bdd2pw.git
-git push -u origin main
-
-# Tag
-git tag -a v1.0.0 -m "bdd2pw v1.0.0 — first public release"
-git push origin v1.0.0
 ```
 
-**Watch the release workflow:**
+Read the `Tarball Contents` section. It should list files under `dist/`,
+`templates/`, plus `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json`. It
+should **NOT** list `src/`, `tests/`, `examples/`, `docs/`, or `node_modules/`.
+If it does, check the `files` array in `package.json` and `.npmignore`.
+
+### 5. Publish for real
+
 ```powershell
-gh run watch --repo javvadivijayprasad/bdd2pw
+npm publish --access public
 ```
 
-When it finishes green, verify:
-```powershell
-npm view @vijaypjavvadi/bdd2pw version
-# → 1.0.0
+What you see depends on your npm 2FA mode. Today (2026-05-03) the account uses
+**security key 2FA only**, so npm prompts:
 
-npm view @vijaypjavvadi/bdd2pw dependencies
-# → @vijaypjavvadi/pw-emit: ^1.0.0   (NOT "file:../pw-emit")
-
-# Smoke install in a throwaway dir
-$tmp = New-Item -ItemType Directory -Path "$env:TEMP\bdd2pw-smoke-$(Get-Random)"
-cd $tmp
-npm init -y > $null
-npm install @vijaypjavvadi/bdd2pw
-.\node_modules\.bin\bdd2pw --version
-# → 1.0.0
-.\node_modules\.bin\bdd2pw --help
-# → shows scaffold | analyze | update-pom | serve
-cd E:\EB1A_Research\bdd2pw
-Remove-Item -Recurse -Force $tmp
+```
+This operation requires a one-time password.
+Press ENTER to open in the browser...
 ```
 
----
+→ Press Enter → browser opens npm's auth page → Windows Hello prompts for your
+PIN/fingerprint → tap → page says "Authenticated, return to your terminal" →
+the CLI continues and prints:
 
-## 3. Post-release housekeeping
-
-```powershell
-# Mark the GitHub releases as "latest" if needed (release.yml already does this,
-# but if you tag manually later, run:)
-gh release edit v1.0.0 --repo javvadivijayprasad/bdd2pw  --latest
-gh release edit v1.0.0 --repo javvadivijayprasad/pw-emit --latest
-
-# Branch protection for main (optional but strongly recommended)
-gh api -X PUT repos/javvadivijayprasad/bdd2pw/branches/main/protection `
-  --input .github/branch-protection.json
-# (only if you want to lock main behind PRs + green CI; skip for solo dev)
-
-# Pre-bump versions for next dev cycle
-cd E:\EB1A_Research\pw-emit
-npm version 1.0.1 --no-git-tag-version    # or 1.1.0-dev.0 if you prefer pre-release
-cd E:\EB1A_Research\bdd2pw
-npm version 1.0.1 --no-git-tag-version
-# Commit + push to main; the release workflow won't fire (no tag pushed).
+```
++ @vijaypjavvadi/<pkg>@<new-version>
 ```
 
----
+That `+` line is the success signal. Anything else (especially `npm error E403`)
+means the publish failed; see §7.
 
-## 4. Auto-deployment recap — what happens on each push from here on
-
-| Trigger                    | Workflow                  | What it does |
-|----------------------------|---------------------------|--------------|
-| Push to `main` / open PR   | `.github/workflows/ci.yml`| Matrix build + test on Ubuntu/macOS/Windows × Node 18/20/22. Uploads coverage artefact (non-blocking). |
-| Push tag `vX.Y.Z`          | `.github/workflows/release.yml` | `npm ci` → `npm run lint` → `npm run build` → `npm test` → `npm publish --provenance --access public` → create a GitHub Release with auto-generated notes. |
-| Daily (Dependabot)         | `.github/dependabot.yml`  | Opens PRs for outdated npm + actions versions. Falls into the CI gate above. |
-
-So the steady-state release ritual reduces to:
+### 6. Push the source + tag to GitHub
 
 ```powershell
-# In whichever repo:
-git switch main
-git pull
-# bump version (or use changesets if you adopt them later)
-npm version minor    # creates a v1.1.0 commit + tag
 git push --follow-tags
 ```
 
-`--follow-tags` is the magic — it pushes the tag in the same `git push`, which
-fires the release workflow, which publishes to npm. End-to-end you do nothing
-beyond `npm version` + `git push --follow-tags`.
+The `--follow-tags` flag pushes both the new commit on `main` *and* the
+`v<new-version>` tag in one go. This triggers two GitHub Actions workflows:
+
+- **CI** (matrix build + test on Ubuntu/macOS/Windows × Node 18/20/22) → goes green.
+- **Release** (the auto-publish one) → goes red at the `npm publish` step. This
+  is **expected and harmless** because `NPM_TOKEN` is currently a revoked
+  granular token. We've already published manually in step 5. See §5 of the
+  "Why auto-publish is off" section below.
+
+### 7. Verify
+
+```powershell
+# Wait ~30 seconds for npm CDN to propagate, then:
+npm view @vijaypjavvadi/<pkg> version
+# → should match what you just published
+
+# Visually confirm
+Start-Process "https://www.npmjs.com/package/@vijaypjavvadi/<pkg>"
+```
+
+The npm website's package banner should show the new version with "Published a
+few seconds ago." If the website lags but `npm view` shows the new version,
+that's fine — the install path uses the API directly.
+
+### 8. Smoke test from a stranger's perspective
+
+For meaningful releases (anything more than a typo fix), prove the published
+package works end-to-end with a fresh install:
+
+```powershell
+$tmp = New-Item -ItemType Directory -Path "$env:TEMP\<pkg>-smoke-$(Get-Random)"
+cd $tmp
+npm init -y > $null
+npm install @vijaypjavvadi/<pkg>
+.\node_modules\.bin\<pkg> --version    # should match new version
+.\node_modules\.bin\<pkg> --help
+cd E:\EB1A_Research\<pkg>
+Remove-Item -Recurse -Force $tmp
+```
+
+For bdd2pw specifically, the canonical end-to-end smoke is in §6 below.
 
 ---
 
-## 5. Rollback
+## Coordinated bump — releasing pw-emit + bdd2pw together
+
+When a change touches both packages:
 
 ```powershell
-# If a bad version went up within 72h, you can deprecate (preferred) or unpublish.
-# DEPRECATE — the package stays installable but warns:
-npm deprecate "@vijaypjavvadi/bdd2pw@1.0.0" "Critical bug, use 1.0.1+"
+# 1. Ship pw-emit first (so its new version is on the registry)
+cd E:\EB1A_Research\pw-emit
+npm version <patch|minor|major>
+# ... update CHANGELOG, amend, retag ...
+npm install
+npm run build
+npm test
+npm publish --access public           # tap Windows Hello
+git push --follow-tags
 
-# UNPUBLISH — only within 72h, only for that exact version:
-npm unpublish @vijaypjavvadi/bdd2pw@1.0.0
-# (npm policy: after 72h, unpublish requires support intervention.)
+# Wait 30s for npm CDN
+Start-Sleep 30
+npm view @vijaypjavvadi/pw-emit version
+
+# 2. Bump pw-emit dep in bdd2pw
+cd E:\EB1A_Research\bdd2pw
+npm install @vijaypjavvadi/pw-emit@^<new-version>
+git add package.json package-lock.json
+git commit -m "chore: bump pw-emit to <new-version>"
+
+# 3. Now bump bdd2pw itself
+npm version <patch|minor|major>
+# ... update CHANGELOG, amend, retag ...
+npm install
+npm run build
+npm test
+npm publish --access public           # tap Windows Hello
+git push --follow-tags
+```
+
+Order matters: bdd2pw can't `npm install` a pw-emit version that isn't on the
+registry yet, so always publish pw-emit first.
+
+---
+
+## End-to-end smoke test for bdd2pw
+
+Beyond `--version` / `--help`, prove a real scaffold run works. Uses snapshot
+mode so no live browser or network needed:
+
+```powershell
+$test = "$env:TEMP\bdd2pw-smoke"
+Remove-Item -Recurse -Force $test -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $test | Out-Null
+cd $test
+npm init -y > $null
+npm install @vijaypjavvadi/bdd2pw
+
+@'
+Feature: Login
+  Scenario: Successful login
+    Given I am on the login page
+    When I enter "admin" in the username field
+    And I enter "password" in the password field
+    And I click the Sign in button
+    Then I should see the welcome message
+'@ | Out-File -Encoding utf8 login.feature
+
+@'
+{
+  "url": "https://example.com/login",
+  "title": "Login",
+  "elements": [
+    { "tag": "input",  "label": "Username", "cssSelector": "#username" },
+    { "tag": "input",  "label": "Password", "cssSelector": "#password" },
+    { "tag": "button", "role": "button", "name": "Sign in", "cssSelector": "button[type=submit]" },
+    { "tag": "div",    "text": "Welcome", "cssSelector": ".welcome-msg" }
+  ]
+}
+'@ | Out-File -Encoding utf8 snapshot.json
+
+.\node_modules\.bin\bdd2pw scaffold .\login.feature `
+  --url https://example.com/login `
+  --page LoginPage `
+  --repo .\generated `
+  --snapshot-file .\snapshot.json `
+  --no-discovery `
+  --no-validate
+
+cd .\generated
+npm install
+npx tsc --noEmit
+echo "tsc exit: $LASTEXITCODE"
+cd ..
+```
+
+Pass criteria: `tsc exit: 0` and the `generated/` directory contains
+`pages/login.page.ts`, `tests/login.spec.ts`, `BDD_REVIEW.md`, plus the
+project skeleton (`package.json`, `playwright.config.ts`, `tsconfig.json`,
+`.gitignore`).
+
+---
+
+## Why auto-publish is off (the NPM_TOKEN story)
+
+Both repos have `.github/workflows/release.yml` configured to run on tag push,
+which would `npm publish --provenance --access public` automatically. **It
+doesn't work right now**, by design. Background:
+
+- npm enforces 2FA-on-publish for the `@vijaypjavvadi` scope (rolled out
+  ~2024 to combat supply-chain attacks).
+- Granular Access Tokens cannot bypass this unless the account has 2FA
+  enabled in **"Authorization only"** mode (not "Authorization and writes").
+- During v1.0 setup, account 2FA was enabled in security-key-only mode (no
+  TOTP). Security keys can't be tapped from a CI runner, so the granular
+  token kept getting `403 Forbidden ... Two-factor authentication or
+  granular access token with bypass 2fa enabled is required to publish`.
+- We revoked the broken token but left `NPM_TOKEN` set in both repos to the
+  revoked value. The release workflow runs on every tag push, gets through
+  lint+build+test, and fails at the publish step. Build/test signal still
+  works; the failure is loud but harmless.
+
+**This is fine.** Manual publish from local PowerShell takes ~2 minutes per
+release (steps 1–7 above), and it gives you a physical 2FA tap as the last
+gate before code goes public — arguably *better* than fully-automated
+publishing for a small package with infrequent releases.
+
+### Upgrade path: enabling auto-publish later
+
+If release cadence ever becomes high enough that the 2-minute manual ritual
+hurts, here's the path back to auto-publish:
+
+1. Add a TOTP authenticator app (Google Authenticator, Authy, 1Password TOTP)
+   to your npm 2FA — npm allows multiple methods. Settings → Account
+   → Two-Factor Authentication → "Add another method".
+2. Switch 2FA mode from "Authorization and writes" (current implicit default)
+   to **"Authorization only"** in the same panel.
+3. Generate a fresh Granular Access Token at
+   <https://www.npmjs.com/settings/vijaypjavvadi/tokens/new>:
+   - Type: Granular Access Token
+   - Name: `gh-actions-publish-vijaypjavvadi`
+   - Expiration: 90 or 365 days
+   - Permissions → Packages and scopes: **Read and write**
+   - Select packages and scopes: scope `@vijaypjavvadi`
+4. Update both GitHub repos:
+   ```powershell
+   $tok = Read-Host -AsSecureString "Paste new token (input hidden)"
+   $plain = (New-Object System.Net.NetworkCredential("", $tok)).Password
+   gh secret set NPM_TOKEN --repo javvadivijayprasad/pw-emit --body $plain
+   gh secret set NPM_TOKEN --repo javvadivijayprasad/bdd2pw  --body $plain
+   Remove-Variable plain, tok
+   ```
+5. Re-run the most recent failed Release workflow on each repo to confirm
+   the token works:
+   ```powershell
+   gh run list --repo javvadivijayprasad/pw-emit --workflow=release.yml --limit 1
+   gh run rerun <run-id> --repo javvadivijayprasad/pw-emit
+   gh run watch --repo javvadivijayprasad/pw-emit
+   ```
+
+After that, the cadence becomes:
+
+```powershell
+npm version <patch|minor|major> && git push --follow-tags
+```
+
+Workflow takes over from there. You don't even need to be at a computer.
+
+---
+
+## Auto-deployment recap — what each push triggers today
+
+| Trigger              | Workflow              | Status today | Notes |
+|----------------------|-----------------------|--------------|-------|
+| Push to `main` / PR  | `ci.yml`              | ✅ Green     | Matrix build + test on Ubuntu/macOS/Windows × Node 18/20/22 |
+| Push tag `vX.Y.Z`    | `release.yml`         | ❌ Red       | Stops at `npm publish` due to broken NPM_TOKEN. Build/test pass first. |
+| Daily (Dependabot)   | `dependabot.yml`      | ✅ Active    | Opens PRs for outdated npm + actions versions, gated by ci.yml |
+
+The red Release runs are expected. They mean "lint/build/test passed but I
+couldn't publish for you" — which is correct; you publish manually.
+
+---
+
+## Rollback
+
+If a bad version went up, you have two options. **Prefer deprecate over
+unpublish** — unpublish breaks anyone's lockfile that pinned the bad version,
+deprecate just adds a warning.
+
+```powershell
+# DEPRECATE — package stays installable but warns on every install:
+npm deprecate "@vijaypjavvadi/<pkg>@X.Y.Z" "Critical bug, use X.Y.Z+1 instead"
+
+# UNPUBLISH — only allowed within 72h of publish, only for that exact version:
+npm unpublish @vijaypjavvadi/<pkg>@X.Y.Z
 ```
 
 For GitHub:
 ```powershell
-gh release delete v1.0.0 --repo javvadivijayprasad/bdd2pw --yes
-git push origin :refs/tags/v1.0.0
+gh release delete vX.Y.Z --repo javvadivijayprasad/<repo> --yes
+git push origin :refs/tags/vX.Y.Z
+git tag -d vX.Y.Z
 ```
+
+Then ship a real fix with `npm version patch` etc.
 
 ---
 
@@ -294,13 +381,29 @@ git push origin :refs/tags/v1.0.0
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `npm install` complains about `file:../pw-emit` | You didn't run section 1 first, or the bdd2pw manifest still has the local path | Confirm `package.json` shows `"^1.0.0"`, not `"file:../pw-emit"`, then `npm install` again |
-| Release workflow `403 Forbidden` on npm publish | `NPM_TOKEN` missing/expired or token doesn't cover the `@vijaypjavvadi` scope | Regenerate per section 0; `gh secret set NPM_TOKEN ...` |
+| `403 Forbidden ... Two-factor authentication or granular access token with bypass 2fa enabled is required` | npm requires 2FA-on-publish; your CLI session expired or token doesn't bypass | Re-run `npm publish` and complete the security-key prompt; for CI, follow the upgrade path above |
 | `npm publish` says "You cannot publish over the previously published versions" | Version not bumped — npm rejects re-publishing the same version | `npm version patch` and re-tag |
-| `gh run watch` says workflow not found | Tag hasn't reached GitHub yet | `git push origin v1.0.0` (or check `git push --follow-tags` was used) |
-| Release workflow green but `npm view` returns old version | Caching — npm CDN can lag ~30s | Wait 60s and retry, or `npm view --registry https://registry.npmjs.org/` |
+| `npm error code E404 ... '@vijaypjavvadi/X@^Y' is not in this registry` after publishing X | npm CDN propagation lag (~30-60s) | Wait 30s, retry; or `npm install --prefer-online` to skip cache |
+| Release workflow `403 Forbidden` on npm publish | Expected — `NPM_TOKEN` is the revoked granular token | Ignore; or follow the upgrade path |
+| `npm install` fails with `'@vijaypjavvadi/pw-emit@^X.Y.Z' not in registry` from bdd2pw | You bumped bdd2pw before publishing pw-emit | Publish pw-emit first, then retry |
+| `vitest` not recognized after `npm install` | `NODE_ENV=production` is set, npm skipped devDependencies | `$env:NODE_ENV = "development"; npm install --include=dev` |
+| Release workflow can't find tag | Tag didn't reach GitHub | Used `git push --follow-tags`? Otherwise: `git push origin v<version>` |
 
 ---
 
-**That's the runbook.** Once you've ridden it through once, the v1.1.0 release
-is just `npm version minor` + `git push --follow-tags` in each repo.
+## v1.0.0 release log (for posterity)
+
+The original v1.0.0 cut, 2026-05-03:
+
+- pw-emit: published from local PowerShell with security-key 2FA at ~22:11 UTC.
+- bdd2pw: published from local PowerShell with security-key 2FA at ~22:23 UTC.
+- Both source pushes + `v1.0.0` tags landed on GitHub immediately after.
+- Smoke test run in `$env:TEMP\bdd2pw-real-test`: scaffolded a synthetic Login
+  feature, generated TS compiled clean (`tsc exit: 0`).
+- Release workflows on tag push: red on publish step (expected, see §5
+  above), green on CI workflow.
+- npm registry confirmation:
+  - <https://www.npmjs.com/package/@vijaypjavvadi/pw-emit>
+  - <https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw>
+
+Future versions follow the TL;DR at the top.

@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.0.1] — 2026-05-04
+
+### Fixed
+
+- **New step-matcher rule 11a — `URL contains "X"`.** Steps like
+  `Then user redirected to dashboard (URL contains "/dashboard")` or
+  `Then URL contains "/foo?bar=baz"` now correctly emit
+  `await expect(page).toHaveURL(new RegExp("..."))`. Previously these fell
+  through to rule 11 (the greedy "redirected to ..." rule), which produced
+  a wrong assertion or dropped the step to `BDD_REVIEW.md` as a TODO.
+- The captured URL fragment is **regex-escaped** before being wrapped in
+  `new RegExp(...)`, so metacharacters like `?`, `+`, `.`, `(`, `)`, `[`, `]`
+  in URLs (query strings, encoded paths) match literally.
+- Rule order matters: 11a is tried **before** 11b (the redirect rule) because
+  11b's pattern is greedy and would otherwise swallow the parenthetical hint.
+
+### Tests
+
+- `tests/unit/stepMatcher.test.ts` — added two regression cases:
+  - Plain URL fragment (`/dashboard`) → exact `new RegExp("/dashboard")`.
+  - Fragment with regex metacharacter (`/search?q=test`) → `?` is escaped to
+    `\?` so the literal `?` matches.
+
+### Docs
+
+- Bumped rule count from 14 to 15 across `README.md`, `docs/SCOPE.md`,
+  `docs/STATUS.md`.
+
 ## [1.0.0] — 2026-05-03
 
 First public npm release. Six phases shipped, two real-world fixtures locked,

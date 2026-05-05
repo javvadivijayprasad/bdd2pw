@@ -55,6 +55,29 @@ describe("stepMatcher rules", () => {
     expect(b.assertion?.expected).toBe('"Invalid credentials"');
   });
 
+  it("URL contains: 'redirected to dashboard (URL contains \"/dashboard\")' → toHaveURL with literal regex", () => {
+    const b = matchStep(
+      step("Then", 'user redirected to dashboard (URL contains "/dashboard")'),
+      pom,
+      "loginPage",
+    );
+    expect(b.assertion?.matcher).toBe("toHaveURL");
+    expect(b.assertion?.locator).toBe("loginPage.page");
+    // Forward slashes are not regex metachars, but the rule still wraps in RegExp
+    expect(b.assertion?.expected).toBe('new RegExp("/dashboard")');
+  });
+
+  it("URL contains: regex metacharacters in fragment are escaped", () => {
+    // '?' is a regex metachar; the fix MUST escape it so the literal '?' is matched.
+    const b = matchStep(
+      step("Then", 'URL contains "/search?q=test"'),
+      pom,
+      "loginPage",
+    );
+    expect(b.assertion?.matcher).toBe("toHaveURL");
+    expect(b.assertion?.expected).toBe('new RegExp("/search\\\\?q=test")');
+  });
+
   it("unmatched step → warning, no pomCall", () => {
     const b = matchStep(step("When", "I do something exotic"), pom, "loginPage");
     expect(b.warning).toBeTruthy();

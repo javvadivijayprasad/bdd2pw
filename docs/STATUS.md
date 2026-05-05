@@ -55,7 +55,7 @@ the e2e tests don't depend on the live site being up.
   > CSS > xpath. `dedupeLocators()` collapses by `(api, args)` identity,
   preferring longer field names. Status-region special case: id-derived field
   names + bypass visibility filter.
-- **Step matcher** (`src/transformers/stepMatcher.ts`) — 14 deterministic
+- **Step matcher** (`src/transformers/stepMatcher.ts`) — 15 deterministic
   rules. Subject-agnostic prefix `(?:I|user|User|the user|the User)`. Rule 2c
   emits `customBody` for compound multi-statement steps. Rule 9a → `toContainText`
   for "containing" assertions. No LLM in v1.0 — explicit `// TODO:` comment is
@@ -110,7 +110,7 @@ Useful flags wired: `--snapshot-file`, `--no-discovery`, `--no-validate`,
 |--------------------------------------------------|------------|----------------|
 | `tests/unit/gherkinParser.test.ts`               | 8          | Parser smoke + edge cases |
 | `tests/unit/locatorPicker.test.ts`               | 11         | Priority + dedupe |
-| `tests/unit/stepMatcher.test.ts`                 | 18         | All 14 rules + subject variants |
+| `tests/unit/stepMatcher.test.ts`                 | 20         | All 15 rules + subject variants + regex-escape regression |
 | `tests/unit/pomResolver.test.ts`                 | 6          | reuse / augment / create |
 | `tests/unit/repoScanner.test.ts`                 | 5          | ts-morph extraction |
 | `tests/snapshot/emitter.test.ts`                 | 6          | Golden POM + spec output |
@@ -153,7 +153,7 @@ Pending verifications **before tagging v1.0.0**:
 | Phase  | Headline | State |
 |--------|----------|-------|
 | 0      | `@vijaypjavvadi/pw-emit` extracted; sel2pw migrated; both produce byte-identical POM/spec shapes | ✅ Shipped |
-| 1a     | Rule-based matcher + file-snapshot mode + 14-rule taxonomy locked via `practice-test-login` (6 iteration rounds, 0→7 mapped) | ✅ Shipped |
+| 1a     | Rule-based matcher + file-snapshot mode + 14-rule taxonomy locked via `practice-test-login` (6 iteration rounds, 0→7 mapped); URL-contains rule added as 11a in v1.0.1 (15 rules total) | ✅ Shipped |
 | 1b     | Live `playwright.chromium.launch()` discovery; status-region special case; 4 iteration rounds against the live site, snapshot now stable | ✅ Shipped |
 | 1c     | Second real fixture (`cms-login`, third-person dialect from selenium14) — 0 warnings first try | ✅ Shipped |
 | 2      | `analyze` (dry-run) + `update-pom` (append-only AST surgery via ts-morph) | ✅ Shipped |

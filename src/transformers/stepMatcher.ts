@@ -364,9 +364,34 @@ const RULES: Rule[] = [
     },
   },
 
-  // 11. Redirect: "I should be redirected to the logged-in page" / "to /dashboard"
-  //     Asserts URL changed away from the previous page. Best-effort: regex matches
-  //     the target token in the URL.
+  // 11a. URL contains: "<subj> redirected to <description> (URL contains 'X')"
+  //      / "URL contains 'X'" / "Page URL contains 'X'".
+  //      The parenthetical 'X' is the AUTHORITATIVE URL fragment — use it directly
+  //      and ignore the descriptive prose. This must come before rule 11b which is
+  //      greedy and would otherwise swallow the parenthetical.
+  //      Prefix is `.*?\b` (any chars + word boundary) so `(URL contains "X")`,
+  //      `URL contains "X"`, `Page URL contains "X"` all match — `(?:.+?\s)?` was
+  //      too strict because it required whitespace immediately before URL.
+  {
+    pattern: /^.*?\b(?:URL|url)\s+contains\s+["']([^"']+)["']/i,
+    build: (m, step, _pom, pageVar) => {
+      const fragment = m[1];
+      // Escape regex metacharacters so the URL fragment matches literally.
+      const escaped = fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return {
+        step,
+        assertion: {
+          locator: `${pageVar}.page`,
+          matcher: "toHaveURL",
+          expected: `new RegExp(${JSON.stringify(escaped)})`,
+        },
+      };
+    },
+  },
+
+  // 11b. Redirect: "I should be redirected to the logged-in page" / "to /dashboard"
+  //      Asserts URL changed away from the previous page. Best-effort: regex matches
+  //      the target token in the URL.
   {
     pattern: new RegExp(`^${SUBJ} (?:should be |am |is )?redirected to (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
