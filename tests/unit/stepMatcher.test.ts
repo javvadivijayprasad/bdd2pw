@@ -83,4 +83,195 @@ describe("stepMatcher rules", () => {
     expect(b.warning).toBeTruthy();
     expect(b.pomCall).toBeUndefined();
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // LLM-narrative dialect rules (v1.1.1)
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("LLM-narrative — N1 Locate-and-fill", () => {
+    it("'Locate the username input field and enter \\'student\\'' → usernameInput.fill", () => {
+      const b = matchStep(
+        step("When", "Locate the username input field and enter 'student'"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+      expect(b.pomCall?.args).toEqual(['"student"']);
+    });
+
+    it("'Locate the password field and type \\'pw\\'' → passwordInput.fill (no 'input' suffix)", () => {
+      const b = matchStep(
+        step("When", "Locate the password field and type 'pw'"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"pw"']);
+    });
+
+    it("'Find the username and fill \\'X\\'' → usernameInput.fill (no UI suffix at all)", () => {
+      const b = matchStep(
+        step("When", "Find the username and fill 'X'"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+    });
+  });
+
+  describe("LLM-narrative — N2 Leave field empty", () => {
+    it("'Leave the username input field empty (do not type anything)' → comment", () => {
+      const b = matchStep(
+        step("When", "Leave the username input field empty (do not type anything)"),
+        pom,
+        "loginPage",
+      );
+      expect(b.customBody).toBe("// intentionally left empty: username");
+      expect(b.pomCall).toBeUndefined();
+    });
+
+    it("'Leave the password field blank' → comment (different verb)", () => {
+      const b = matchStep(
+        step("When", "Leave the password field blank"),
+        pom,
+        "loginPage",
+      );
+      expect(b.customBody).toBe("// intentionally left empty: password");
+    });
+  });
+
+  describe("LLM-narrative — N3 Observe / Note annotations", () => {
+    it("'Observe the resulting page and URL' → comment (strips leading 'the')", () => {
+      const b = matchStep(
+        step("When", "Observe the resulting page and URL"),
+        pom,
+        "loginPage",
+      );
+      // Rule strips the optional "the " prefix so the comment is cleaner.
+      expect(b.customBody).toBe("// observation: resulting page and URL");
+    });
+
+    it("'Note the error message' → comment", () => {
+      const b = matchStep(
+        step("When", "Note the error message"),
+        pom,
+        "loginPage",
+      );
+      expect(b.customBody).toBe("// observation: error message");
+    });
+  });
+
+  describe("LLM-narrative — N4 URL does not change", () => {
+    it("'URL does not change to the success page' → not.toHaveURL", () => {
+      const b = matchStep(
+        step("Then", "URL does not change to the success page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("not.toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("success")');
+    });
+
+    it("'URL doesn\\'t change' (no destination) defaults to 'success' fragment", () => {
+      const b = matchStep(
+        step("Then", "URL doesn't change"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("not.toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("success")');
+    });
+  });
+
+  describe("LLM-narrative — N5 narrative text-contains (such as / e.g.)", () => {
+    it("'Page displays a success message such as \\'Welcome\\'' → toContainText", () => {
+      const b = matchStep(
+        step("Then", "Page displays a success message such as 'Welcome'"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toContainText");
+      expect(b.assertion?.expected).toBe('"Welcome"');
+    });
+
+    it("'An error message is displayed (e.g., \\'Invalid!\\')' → toContainText against error field", () => {
+      const b = matchStep(
+        step("Then", "An error message is displayed (e.g., 'Invalid!')"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toContainText");
+      expect(b.assertion?.expected).toBe('"Invalid!"');
+      // POM has errorMessageAlert, the rule should pick it up
+      expect(b.assertion?.locator).toContain("errorMessage");
+    });
+
+    it("'... indicating \\'X\\'' alternation also captures", () => {
+      const b = matchStep(
+        step("Then", "An error message is displayed indicating 'Bad password'"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toContainText");
+      expect(b.assertion?.expected).toBe('"Bad password"');
+    });
+  });
+
+  describe("LLM-narrative — N6 A 'X' button is visible", () => {
+    it("synthesises getByRole when POM lacks the field", () => {
+      const b = matchStep(
+        step("Then", "A 'Log out' button is visible on the page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      expect(b.assertion?.locator).toContain('getByRole("button"');
+      expect(b.assertion?.locator).toContain('name: "Log out"');
+    });
+
+    it("uses POM field if name matches an existing one", () => {
+      const b = matchStep(
+        step("Then", "A 'Login' button is visible on the page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      // POM has 'loginButton' — should resolve to that field, not synthesise
+      expect(b.assertion?.locator).toBe("loginPage.loginButton");
+    });
+  });
+
+  describe("LLM-narrative — N7 No 'X' appears / No <noun> displayed", () => {
+    it("'No \\'Log out\\' button appears' → not.toBeVisible (synthesised getByRole)", () => {
+      const b = matchStep(
+        step("Then", "No 'Log out' button appears"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("not.toBeVisible");
+      expect(b.assertion?.locator).toContain('getByRole("button"');
+      expect(b.assertion?.locator).toContain('name: "Log out"');
+    });
+
+    it("'No error messages are displayed' → not.toBeVisible against error field", () => {
+      const b = matchStep(
+        step("Then", "No error messages are displayed"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("not.toBeVisible");
+      expect(b.assertion?.locator).toContain("errorMessage");
+    });
+
+    it("'No success message is shown' → not.toBeVisible (no field on this POM, falls back to getByText)", () => {
+      const b = matchStep(
+        step("Then", "No success message is shown"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("not.toBeVisible");
+      // POM has no success* field, falls back to getByText with the description
+      expect(b.assertion?.locator).toContain("getByText");
+    });
+  });
 });

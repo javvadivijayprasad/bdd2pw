@@ -55,7 +55,7 @@ the e2e tests don't depend on the live site being up.
   > CSS > xpath. `dedupeLocators()` collapses by `(api, args)` identity,
   preferring longer field names. Status-region special case: id-derived field
   names + bypass visibility filter.
-- **Step matcher** (`src/transformers/stepMatcher.ts`) — 15 deterministic
+- **Step matcher** (`src/transformers/stepMatcher.ts`) — 22 deterministic
   rules. Subject-agnostic prefix `(?:I|user|User|the user|the User)`. Rule 2c
   emits `customBody` for compound multi-statement steps. Rule 9a → `toContainText`
   for "containing" assertions. No LLM in v1.0 — explicit `// TODO:` comment is
@@ -110,7 +110,7 @@ Useful flags wired: `--snapshot-file`, `--no-discovery`, `--no-validate`,
 |--------------------------------------------------|------------|----------------|
 | `tests/unit/gherkinParser.test.ts`               | 8          | Parser smoke + edge cases |
 | `tests/unit/locatorPicker.test.ts`               | 11         | Priority + dedupe |
-| `tests/unit/stepMatcher.test.ts`                 | 20         | All 15 rules + subject variants + regex-escape regression |
+| `tests/unit/stepMatcher.test.ts`                 | 36         | All 22 rules + subject variants + LLM-narrative dialects |
 | `tests/unit/pomResolver.test.ts`                 | 6          | reuse / augment / create |
 | `tests/unit/repoScanner.test.ts`                 | 5          | ts-morph extraction |
 | `tests/snapshot/emitter.test.ts`                 | 6          | Golden POM + spec output |

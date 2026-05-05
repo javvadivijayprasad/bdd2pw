@@ -1,0 +1,44 @@
+{
+  "_comment": "Snapshot of https://practicetestautomation.com/practice-test-login/ — same site as practice-test-login fixture, but used here as the discovery target for the LLM-narrative .feature dialect. Locked alongside login.feature so the regression test stays hermetic.",
+  "url": "https://practicetestautomation.com/practice-test-login/",
+  "title": "Test Login | Practice Test Automation",
+  "accessibilityTree": [
+    {
+      "_note": "Page heading",
+      "role": "heading", "name": "Test login", "tag": "h2"
+    },
+    {
+      "_note": "Username input — no label, no placeholder, no aria-label. Only id='username'. Picker → locator('#username') → fieldName 'username'.",
+      "tag": "input",
+      "cssSelector": "#username"
+    },
+    {
+      "_note": "Password input — same shape as username.",
+      "tag": "input",
+      "cssSelector": "#password"
+    },
+    {
+      "_note": "Submit button — visible text 'Submit' becomes its accessible name. Picker → getByRole('button', { name: 'Submit' }) → fieldName 'submitButton'.",
+      "role": "button", "name": "Submit", "tag": "button", "cssSelector": "#submit"
+    },
+    {
+      "_note": "Error div — no role='alert'. Only id='error'. Picker → locator('#error') → fieldName 'error'.",
+      "tag": "div",
+      "cssSelector": "#error"
+    },
+    {
+      "_note": "Success page heading.",
+      "role": "heading", "name": "Logged In Successfully", "tag": "h1"
+    },
+    {
+      "_note": "Welcome paragraph on success page.",
+      "tag": "p",
+      "text": "Congratulations student. You successfully logged in!"
+    },
+    {
+      "_note": "Logout link on success page.",
+      "role": "link", "name": "Log out", "tag": "a", "cssSelector": "a.wp-block-button__link"
+    }
+  ],
+  "domSnapshot": ""
+}

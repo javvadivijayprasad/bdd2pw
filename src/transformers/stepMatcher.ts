@@ -348,9 +348,11 @@ const RULES: Rule[] = [
     },
   },
 
-  // 10. Remain on page: "I should remain on the login page"
+  // 10. Remain on page: "I should remain on the login page" / "User remains on the login page"
+  //     Both forms — "should remain" (modal) and "remains" (present-tense narrative,
+  //     common in LLM-generated Gherkin) match.
   {
-    pattern: new RegExp(`^${SUBJ} should remain on (?:the )?(.+?)(?: page)?$`, "i"),
+    pattern: new RegExp(`^${SUBJ} (?:should remain|remain|remains) on (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
       const target = m[1].trim();
       return {
@@ -448,6 +450,241 @@ const RULES: Rule[] = [
       };
     },
   },
+
+  // ────────────────────────────────────────────────────────────────────────
+  // LLM-narrative dialect rules (v1.1.1)
+  //
+  // Real LLM test-case-generation services produce more narrative,
+  // subject-less Gherkin than hand-authored suites. The rules below cover
+  // the patterns observed on actual cloud-jobs-template runs against the
+  // `R-8BE659B5-001` fixture (saved at examples/llm-narrative-login/).
+  // Each rule has a regression test in tests/unit/stepMatcher.test.ts.
+  //
+  // Note: "Navigate to <URL>" is already handled by rule 1 (the optional
+  // SUBJ prefix accepts subject-less variants). "Click the 'X' button" is
+  // already handled by rule 3. Both verified against the LLM fixture.
+  // ────────────────────────────────────────────────────────────────────────
+
+  // N1. "Locate the X (input field|input|field|box|...) and (enter|type|fill) 'V'"
+  //     Compound locate-and-fill — splits into a single .fill() against the
+  //     POM field that best matches X. If the POM has no matching field,
+  //     falls through to TODO so the gap shows up in BDD_REVIEW.md.
+  {
+    pattern:
+      /^(?:Locate|Find) (?:the )?(.+?) and (?:enter|enters|type|types|input|inputs|fill|fills) ["']([^"']*)["']$/i,
+    build: (m, step, pom, pageVar) => {
+      const desc = stripUiSuffix(m[1]);
+      return fillFieldBinding(step, pom, pageVar, desc, m[2]);
+    },
+  },
+
+  // N2. "Leave the X (input)? field empty (do not type anything)"
+  //     Intentional skip — emit a comment so the spec is honest about what
+  //     the scenario asks for. Per design call (3): explicit comment so
+  //     reviewers see the intent in the spec.
+  {
+    pattern:
+      /^Leave (?:the )?(.+?)\s+(?:empty|blank|untouched|unchanged|alone)(?:\s*\([^)]+\))?$/i,
+    build: (m, step) => ({
+      step,
+      customBody: `// intentionally left empty: ${stripUiSuffix(m[1])}`,
+    }),
+  },
+
+  // N3. "Observe ..." / "Note ..." — annotation steps with no real action.
+  //     Same treatment as N2 — emit a comment so the spec preserves the
+  //     scenario's narrative without producing TODO noise.
+  {
+    pattern:
+      /^(?:Observe|Note|Watch|See visually|Verify(?: that)?(?: visually)?)\s+(?:the )?(.+)$/i,
+    build: (m, step) => ({
+      step,
+      customBody: `// observation: ${m[1].trim()}`,
+    }),
+  },
+
+  // N4. "URL does(?:n't| not) change(?:\s+to (?:the )?<description> page)?"
+  //     Negative URL assertion. The captured description (e.g. "the success
+  //     page" → "success") is used as a regex slug; the assertion fires
+  //     `not.toHaveURL`. Soft assertion — meaningful when the step describes
+  //     a known forbidden destination.
+  {
+    pattern:
+      /^(?:the )?URL does(?:n't| not) change(?:\s+to\s+(?:the )?(.+?))?(?:\s+page)?$/i,
+    build: (m, step, _pom, pageVar) => {
+      const target = (m[1] ?? "success").trim();
+      const slug = target
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\s+/g, "[-_/]?");
+      return {
+        step,
+        assertion: {
+          locator: `${pageVar}.page`,
+          matcher: "not.toHaveURL",
+          expected: `new RegExp(${JSON.stringify(slug)})`,
+        },
+      };
+    },
+  },
+
+  // N4b. Narrative error/validation visibility — no quoted value.
+  //      "An error message is displayed indicating that credentials are required"
+  //      "A validation message appears"
+  //      "A warning is shown"
+  //      Asserts the error/alert region is visible. Less specific than N5
+  //      (which captures a quoted expected value) but still honest. Must run
+  //      BEFORE N5 only if the step has no quote — N5's pattern requires a
+  //      quote, so they don't conflict; N5 wins when the quote is present.
+  {
+    pattern:
+      /^An?\s+(error|validation|warning|alert)(?:\s+\w+)*\s+(?:is|are)\s+(?:displayed|shown|visible|present)/i,
+    build: (m, step, pom, pageVar) => {
+      // Only fire if the step has NO quoted value — otherwise let N5 handle it.
+      if (/["'][^"']+["']/.test(step.text)) return null;
+      void m;
+      const field =
+        findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
+        findField(pom, "error", ["Alert", "Error"]);
+      const locatorExpr = field
+        ? `${pageVar}.${field.fieldName}`
+        : `${pageVar}.page.getByRole("alert")`;
+      return {
+        step,
+        assertion: { locator: locatorExpr, matcher: "toBeVisible" },
+      };
+    },
+  },
+
+  // N5. Narrative text-contains — quoted V revealed by "such as 'V'",
+  //     "(e.g., 'V')", "(for example, 'V')", "indicating 'V'", "like 'V'".
+  //     Picks an error/alert/success field from the POM if the description
+  //     hints at one; otherwise falls back to `getByText(V)`.
+  {
+    pattern:
+      /^.+?(?:\s+such as\s+|\s*\(\s*e\.g\.,?\s*|\s*\(\s*for example,?\s*|\s+for example\s+|\s+indicating\s+|\s+like\s+)["']([^"']+)["']/i,
+    build: (m, step, pom, pageVar) => {
+      const expected = m[1];
+      const description = step.text.toLowerCase();
+      let field;
+      if (/\b(error|invalid|fail|forbidden|unauthor)/i.test(description)) {
+        field =
+          findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
+          findField(pom, "error", ["Alert", "Error"]);
+      } else if (
+        /\b(success|congrat|welcome|logged.?in|logged.?on)/i.test(description)
+      ) {
+        field =
+          findField(pom, "successMessage", ["Heading", "Message", "Banner"]) ??
+          findField(pom, "success", ["Heading", "Message"]) ??
+          findField(pom, "welcome", ["Heading", "Message"]);
+      }
+      const locatorExpr = field
+        ? `${pageVar}.${field.fieldName}`
+        : `${pageVar}.page.getByText(${JSON.stringify(expected)})`;
+      return {
+        step,
+        assertion: {
+          locator: locatorExpr,
+          matcher: "toContainText",
+          expected: JSON.stringify(expected),
+        },
+      };
+    },
+  },
+
+  // N6. "A 'X' (button|link|...)? is visible on the page"
+  //     Subject-less visibility. Quoted name + optional role. Per design
+  //     call (4): when the POM has no matching field, synthesize a
+  //     `getByRole(role, { name: 'X' })` locator rather than dropping to
+  //     TODO — this turns false-positive passes into honest assertions.
+  {
+    pattern:
+      /^A\s+["']([^"']+)["']\s+(button|link|icon|element|tab)?\s*(?:is visible|appears|is shown|is displayed)(?:\s+on\s+(?:the )?page)?$/i,
+    build: (m, step, pom, pageVar) => {
+      const name = m[1].trim();
+      const role = (m[2] ?? "button").toLowerCase();
+      const field = findFieldByDescription(name, pom, [
+        capitalize(role),
+        "Button",
+        "Link",
+      ]);
+      const locatorExpr = field
+        ? `${pageVar}.${field.fieldName}`
+        : `${pageVar}.page.getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`;
+      return {
+        step,
+        assertion: { locator: locatorExpr, matcher: "toBeVisible" },
+      };
+    },
+  },
+
+  // N7. "No 'X' (button|...)? appears" / "No <noun> are/is displayed"
+  //     Subject-less negative visibility. Two cases:
+  //       - quoted: 'No \"Log out\" button appears' → POM lookup, fallback
+  //         to getByRole synthesis.
+  //       - unquoted plural: 'No error messages are displayed' →
+  //         findField(error/alert) fallback to getByRole('alert').
+  //     Per design call (4): always emit a real assertion, never a TODO.
+  {
+    pattern:
+      /^No\s+(.+?)\s+(?:appear(?:s)?|are visible|is visible|is displayed|are displayed|is shown|are shown)(?:\s+on\s+(?:the )?page)?$/i,
+    build: (m, step, pom, pageVar) => {
+      const desc = m[1].trim();
+      const quoted = desc.match(
+        /^["']([^"']+)["']\s*(button|link|icon|element|tab)?$/i,
+      );
+      let locatorExpr: string;
+      // Dispatcher order matters: check success/congrat BEFORE error/message,
+      // because "success message" contains both keywords and we want the
+      // success branch to win. Word boundaries (\b) prevent spurious matches
+      // (e.g. "alert" inside "alerted" — though unlikely in practice).
+      const lowered = desc.toLowerCase();
+      if (quoted) {
+        const name = quoted[1];
+        const role = (quoted[2] ?? "button").toLowerCase();
+        const field = findFieldByDescription(name, pom, [
+          capitalize(role),
+          "Button",
+          "Link",
+        ]);
+        locatorExpr = field
+          ? `${pageVar}.${field.fieldName}`
+          : `${pageVar}.page.getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`;
+      } else if (/\b(success|congrat|welcome)\b/.test(lowered)) {
+        const field =
+          findField(pom, "successMessage", ["Heading", "Message", "Banner"]) ??
+          findField(pom, "success", ["Heading", "Message"]) ??
+          findField(pom, "welcome", ["Heading", "Message"]);
+        locatorExpr = field
+          ? `${pageVar}.${field.fieldName}`
+          : `${pageVar}.page.getByText(${JSON.stringify(desc)})`;
+      } else if (/\b(error|invalid|fail|forbidden|unauthor|alert|warning)\b/.test(lowered)) {
+        const field =
+          findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
+          findField(pom, "error", ["Alert", "Error"]);
+        locatorExpr = field
+          ? `${pageVar}.${field.fieldName}`
+          : `${pageVar}.page.getByRole("alert")`;
+      } else if (/\bmessage(s)?\b/.test(lowered)) {
+        // Generic "message" without success/error context — fall back to alert
+        const field =
+          findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
+          findField(pom, "error", ["Alert", "Error"]);
+        locatorExpr = field
+          ? `${pageVar}.${field.fieldName}`
+          : `${pageVar}.page.getByRole("alert")`;
+      } else {
+        const field = findFieldByDescription(desc, pom, []);
+        locatorExpr = field
+          ? `${pageVar}.${field.fieldName}`
+          : `${pageVar}.page.getByText(${JSON.stringify(desc)})`;
+      }
+      return {
+        step,
+        assertion: { locator: locatorExpr, matcher: "not.toBeVisible" },
+      };
+    },
+  },
 ];
 
 /**
@@ -506,6 +743,7 @@ function findField(
   pom: PageObjectIR,
   hint: string,
   preferredSuffixes: string[],
+  opts: { strict?: boolean } = {},
 ) {
   const norm = camelCase(hint.replace(/[^a-zA-Z0-9 ]/g, ""));
   const lower = norm.toLowerCase();
@@ -531,15 +769,23 @@ function findField(
       (x) => x.fieldName.toLowerCase().includes(lower) || lower.includes(x.fieldName.toLowerCase()),
     );
     if (f) return f;
-    // 3b. exactly one suffix-matched field on the whole page → use it
-    if (suffixMatched.length === 1) return suffixMatched[0];
+    // 3b. exactly one suffix-matched field on the whole page → use it.
+    //     SKIPPED in strict mode: LLM-narrative rules (N6/N7) call
+    //     `findFieldByDescription({strict: true})` because "Log out" with
+    //     a POM that has only `loginButton` should NOT silently resolve
+    //     to that wrong button — it should fall to synthesis.
+    if (!opts.strict && suffixMatched.length === 1) return suffixMatched[0];
   }
 
-  // 4. Generic substring match (last resort, may hit cross-role fields)
-  f = pom.fields.find((x) => x.fieldName.toLowerCase().includes(lower));
-  if (f) return f;
-  f = pom.fields.find((x) => lower.includes(x.fieldName.toLowerCase()));
-  return f;
+  // 4. Generic substring match (last resort, may hit cross-role fields).
+  //     Also skipped in strict mode for the same reason as 3b.
+  if (!opts.strict) {
+    f = pom.fields.find((x) => x.fieldName.toLowerCase().includes(lower));
+    if (f) return f;
+    f = pom.fields.find((x) => lower.includes(x.fieldName.toLowerCase()));
+    return f;
+  }
+  return undefined;
 }
 
 function findOrSynthMethod(
@@ -554,4 +800,44 @@ function findOrSynthMethod(
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Strip trailing UI-element words from a description so findField sees the
+ * core noun. "username input field" → "username", "Log out button" → "Log out",
+ * "error message" → "error message" (we leave compound nouns alone — the
+ * caller's `preferredSuffixes` will resolve them).
+ *
+ * Order matters — multi-word suffixes (e.g. "input field") must be tried
+ * before single-word ones so "username input field" → "username" rather than
+ * "username input".
+ */
+function stripUiSuffix(desc: string): string {
+  return desc
+    .replace(
+      /\s+(?:input\s+field|text\s+box|input|field|box|element|control|textbox)\s*$/i,
+      "",
+    )
+    .trim();
+}
+
+/**
+ * Look up a POM field given a descriptive phrase like "username input field"
+ * or "Log out button". Strips trailing UI-element words then defers to
+ * `findField` with sensible suffix preferences.
+ *
+ * Used by the LLM-narrative dialect rules (N1, N6, N7). Exposed at module
+ * scope (not exported) so future rules can share the same field-lookup
+ * semantics without duplicating the strip-and-normalize dance.
+ */
+function findFieldByDescription(
+  desc: string,
+  pom: PageObjectIR,
+  preferredSuffixes: string[] = ["Input", "Field", "Box", "Textbox"],
+) {
+  // Strict mode: skip 3b ("exactly one suffix-matched on the page") and the
+  // generic substring fallback (4). LLM rules synthesise a `getByRole` /
+  // `getByText` locator when no real match is found, which is more honest
+  // than wrong-element heuristics.
+  return findField(pom, stripUiSuffix(desc), preferredSuffixes, { strict: true });
 }

@@ -9,6 +9,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.1] — 2026-05-05
+
+### Fixed — LLM-narrative Gherkin dialect
+
+Real test-case-generation services (cloud-jobs-template) produce more
+verbose, subject-less Gherkin than hand-authored suites. Before 1.1.1, six
+out of nine steps in a typical TC-001 (Successful login) fell through to
+`// TODO`. Result: forms didn't get filled, Submit clicked an empty form,
+URL never changed, `toHaveURL` timed out — the test reported as failed
+honestly. Worse, the negative scenarios (TC-002/3/4) reported as **passed**
+because every assertion was a silent no-op TODO.
+
+1.1.1 adds **7 new step-matcher rules** plus the
+`examples/llm-narrative-login/` regression fixture (locked from a real
+production run, `j-20f3defc3044f7ec`).
+
+#### New rules
+
+| # | Pattern | Emits |
+|---|---|---|
+| N1 | `Locate the X (input)? field and (enter\|type\|fill) 'V'` | `<field>.fill("V")` via stripUiSuffix + findField |
+| N2 | `Leave the X field empty (do not type anything)` | `// intentionally left empty: <X>` (explicit comment) |
+| N3 | `Observe ...` / `Note ...` | `// observation: <X>` |
+| N4 | `URL does (not\|n't) change (to <description>)?` | `not.toHaveURL(new RegExp("<slug>"))` |
+| N5 | `... such as 'V'` / `... (e.g., 'V')` / `... indicating 'V'` / `... like 'V'` | `toContainText("V")` against error/success field |
+| N6 | `A 'X' (button\|link\|...)? is visible on the page` | `toBeVisible` against POM field, fallback to synthesised `getByRole(role, { name: 'X' })` |
+| N7 | `No 'X' (button\|...)? appears` / `No <noun> are/is displayed` | `not.toBeVisible` against POM field, fallback to synthesised role/text locator |
+
+`Navigate to <URL>` is already handled by rule 1 (the optional SUBJ prefix
+accepts subject-less variants); `Click the 'X' button` is already handled
+by rule 3. Both verified against the LLM fixture.
+
+Total rule count: **15 → 22** deterministic patterns.
+
+#### Helper: `findFieldByDescription`
+
+New module-private helper in `stepMatcher.ts`. Strips trailing UI-element
+words (`input field`, `field`, `box`, `element`, ...) from a description
+then defers to `findField` with the appropriate suffix preferences. Used
+by rules N1, N6, N7. Pure deterministic, no fuzzy matching.
+
+#### Per design call (4): negative assertions never drop to TODO
+
+For `No 'X' button appears` / `No error messages are displayed` / `A 'X' is
+visible`, when the POM has no matching field, the rule **synthesises** a
+`getByRole`/`getByText` locator from the description rather than emitting
+`// TODO`. This turns false-positive passes (silent no-op TODOs) into
+honest assertions that actually exercise the page.
+
+Caveat: synthesised locators can be over-permissive (e.g.
+`getByRole('button', { name: 'Log out' })` will match a logout link with
+`role="button"` aria attribute even if the page layout differs from the
+fixture). When this matters, hand-edit the spec — the rule report flags
+none of these synthesises as warnings, so they're invisible to the report.
+
+#### Tests
+
+- New e2e: `tests/e2e/llmNarrativeLogin.test.ts` — locks the
+  `examples/llm-narrative-login/` fixture as a regression. Asserts:
+  - 0 warning-level review items (every step matches a rule).
+  - All 4 scenarios produce real fills/clicks (no TODOs).
+  - The new rules emit the expected matchers (`not.toHaveURL`,
+    `toContainText`, `toBeVisible`, etc.) against the right locators.
+- Extended unit tests: `tests/unit/stepMatcher.test.ts` — one `describe`
+  block per new rule covering subject-less variants, edge cases, and
+  POM-vs-synthesised-locator branching.
+
+#### Files
+
+- New: `examples/llm-narrative-login/{login.feature, snapshot.json, README.md}`.
+- New: `tests/e2e/llmNarrativeLogin.test.ts`.
+- Modified: `src/transformers/stepMatcher.ts` (+7 rules, +stripUiSuffix,
+  +findFieldByDescription).
+- Modified: `tests/unit/stepMatcher.test.ts` (+~16 tests across 7 describe blocks).
+
+#### Migration notes
+
+Pure additive — no existing rule changed semantics. Specs that already
+matched 15 rules continue to match the same way. The 7 new rules **only**
+fire on patterns that previously produced `// TODO` warnings, so existing
+fixtures (`practice-test-login`, `cms-login`) regress to zero diff.
+
+If you have a cloud-jobs-template pinned to 1.1.0, bump to 1.1.1 and
+re-run any failing TC-001-style scenario — fills should now be real.
+
 ## [1.1.0] — 2026-05-05
 
 ### Added — `--self-healing` flag (scaffold-level integration)
