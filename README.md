@@ -15,7 +15,7 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 
 - **Specific `.feature` files** — quoted credentials, concrete assertion targets, standard verb forms — convert to **runnable specs with zero hand-edits**. Validated end-to-end against a real public site (`https://practicetestautomation.com/practice-test-login/`): 7/7 scenarios green.
 - **Vague `.feature` files** — "Enter valid username and password and click login button" with no quoted values — get partial coverage. Steps that can't be unambiguously mapped land as `// TODO` comments in the spec, and warnings in `BDD_REVIEW.md`. The user finishes the 1-3 ambiguous steps; the locators, POM scaffold, project config, and Background `goto()` are already done.
-- **No LLM in the v1.0 hot path.** The 22-rule matcher (14 in v1.0, +1 URL-contains in v1.0.1, +7 LLM-narrative dialects in v1.1.1) covers three Cucumber dialects (first-person, third-person, no-subject) plus compound input steps. Genuinely vague steps are inherently ambiguous and get `// TODO` — better than an LLM guessing.
+- **No LLM in the v1.0 hot path.** The 26-rule matcher (14 in v1.0, +1 URL-contains in v1.0.1, +7 LLM-narrative in v1.1.1, +4 second-batch LLM-narrative in v1.1.2) covers three Cucumber dialects (first-person, third-person, no-subject) plus compound input steps. Genuinely vague steps are inherently ambiguous and get `// TODO` — better than an LLM guessing.
 - **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical. Never deletes, never renames, never modifies.
 
 > **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest.
@@ -152,7 +152,7 @@ In production, the platform gateway proxies `/api/v1/scaffold/*` to `:4300`. Dir
 └──────┬───────┘
        ▼
 ┌──────────────┐
-│ stepMatcher  │  22 rules — subject-agnostic, dialect-tolerant,
+│ stepMatcher  │  26 rules — subject-agnostic, dialect-tolerant,
 │              │  compound-input via customBody
 └──────┬───────┘
        ▼

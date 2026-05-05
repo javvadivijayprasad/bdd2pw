@@ -274,4 +274,118 @@ describe("stepMatcher rules", () => {
       expect(b.assertion?.locator).toContain("getByText");
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // LLM-narrative dialect rules — v1.1.2 (Background, page-level, subject-prefixed)
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("LLM-narrative — N1.5 'the X page is displayed'", () => {
+    it("'Given the login page is displayed' → goto", () => {
+      const b = matchStep(
+        step("Given", "the login page is displayed"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+
+    it("'the dashboard page is loaded' → goto with synthesised method", () => {
+      const b = matchStep(
+        step("Given", "the dashboard page is loaded"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+  });
+
+  describe("LLM-narrative — N2.5 subject-prefixed Leave-empty", () => {
+    it("'the user leaves the username field empty' → comment", () => {
+      const b = matchStep(
+        step("When", "the user leaves the username field empty"),
+        pom,
+        "loginPage",
+      );
+      expect(b.customBody).toBe("// intentionally left empty: username");
+    });
+
+    it("'I leave the password field blank' → comment (first-person variant)", () => {
+      const b = matchStep(
+        step("When", "I leave the password field blank"),
+        pom,
+        "loginPage",
+      );
+      expect(b.customBody).toBe("// intentionally left empty: password");
+    });
+  });
+
+  describe("LLM-narrative — N5b page-level text assertion", () => {
+    it("'the page displays \"Logged In Successfully\"' → getByText.toBeVisible", () => {
+      const b = matchStep(
+        step("And", 'the page displays "Logged In Successfully"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      expect(b.assertion?.locator).toContain('getByText("Logged In Successfully")');
+    });
+
+    it("'the page contains the message \"Welcome\"' → getByText.toBeVisible", () => {
+      const b = matchStep(
+        step("Then", 'the page contains the message "Welcome"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      expect(b.assertion?.locator).toContain('getByText("Welcome")');
+    });
+  });
+
+  describe("LLM-narrative — N5c subject-less specific-message containing", () => {
+    it("'an error message containing \"Bad pwd\" is displayed' → toContainText against error field", () => {
+      const b = matchStep(
+        step("Then", 'an error message containing "Bad pwd" is displayed'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toContainText");
+      expect(b.assertion?.expected).toBe('"Bad pwd"');
+      // POM has errorMessageAlert
+      expect(b.assertion?.locator).toContain("errorMessage");
+    });
+
+    it("'a success message containing \"OK\" is shown' → toContainText against success field (or getByText)", () => {
+      const b = matchStep(
+        step("Then", 'a success message containing "OK" is shown'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toContainText");
+      expect(b.assertion?.expected).toBe('"OK"');
+    });
+  });
+
+  describe("LLM-narrative — N6 unquoted role+name variant", () => {
+    it("'a Logout button is visible' (unquoted) → synthesises getByRole", () => {
+      const b = matchStep(
+        step("And", "a Logout button is visible"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      // Test pom has no Logout field, so synthesise getByRole
+      expect(b.assertion?.locator).toContain('getByRole("button"');
+      expect(b.assertion?.locator).toContain('name: "Logout"');
+    });
+
+    it("'A Login button is visible' (unquoted) → resolves to loginButton (POM has it)", () => {
+      const b = matchStep(
+        step("Then", "A Login button is visible"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toBeVisible");
+      expect(b.assertion?.locator).toBe("loginPage.loginButton");
+    });
+  });
 });

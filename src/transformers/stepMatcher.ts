@@ -452,6 +452,105 @@ const RULES: Rule[] = [
   },
 
   // ────────────────────────────────────────────────────────────────────────
+  // LLM-narrative dialect rules — v1.1.2 (second batch — Background steps,
+  // page-level assertions, subject-prefixed leaves, unquoted role+name)
+  // ────────────────────────────────────────────────────────────────────────
+
+  // N1.5. "[Given|And] (the )? <X> page is displayed/loaded/shown/visible"
+  //       Background-style precondition that asserts we're on a page.
+  //       Treated as goto() + toHaveURL(<X>) — same as rule 1 + rule 10
+  //       but for the LLM dialect that drops the navigation verb.
+  {
+    pattern:
+      /^(?:the )?(.+?) page (?:is|are) (?:displayed|shown|loaded|visible|present|open(?:ed)?)$/i,
+    build: (m, step, pom, pageVar) => {
+      const target = m[1].trim();
+      // Prefer the synthesised goto() if the POM has one; otherwise
+      // emit a goto(target) call.
+      const hasGoto = pom.methods.some((mm) => mm.name === "goto");
+      return {
+        step,
+        pomCall: hasGoto
+          ? { page: pageVar, method: "goto", args: [] }
+          : { page: pageVar, method: "goto", args: [JSON.stringify(target)] },
+      };
+    },
+  },
+
+  // N2.5. "[the user|user|I|...] leaves the X field empty (do not type anything)"
+  //       Subject-prefixed variant of N2. Same emit (comment), different
+  //       starting tokens. The original N2 (`^Leave ...`) doesn't accept a
+  //       subject prefix.
+  {
+    pattern: new RegExp(
+      `^${SUBJ}\\s+leaves?\\s+(?:the )?(.+?)\\s+(?:empty|blank|untouched|unchanged|alone)(?:\\s*\\([^)]+\\))?$`,
+      "i",
+    ),
+    build: (m, step) => ({
+      step,
+      customBody: `// intentionally left empty: ${stripUiSuffix(m[1])}`,
+    }),
+  },
+
+  // N5b. Page-level text assertion — "the page (displays|contains|shows) [the message] 'X'"
+  //      Asserts the page body contains the given text. Uses
+  //      \`getByText('X')\` + \`toBeVisible\` rather than a body-level
+  //      \`toContainText\` because getByText is more idiomatic and gives
+  //      better error messages when the text isn't found.
+  {
+    pattern:
+      /^(?:the )?page\s+(?:displays?|shows?|contains?)(?:\s+the\s+(?:message|text|content))?\s+["']([^"']+)["']/i,
+    build: (m, step, _pom, pageVar) => {
+      const expected = m[1];
+      return {
+        step,
+        assertion: {
+          locator: `${pageVar}.page.getByText(${JSON.stringify(expected)})`,
+          matcher: "toBeVisible",
+        },
+      };
+    },
+  },
+
+  // N5c. Subject-less specific-message visibility — "An <severity> message containing 'V' is displayed"
+  //      Captures both the severity (error/validation/warning/success) AND
+  //      the expected text. Picks an appropriate POM field for the severity;
+  //      asserts toContainText against that field. More specific than N5
+  //      (which doesn't require "containing").
+  //
+  //      Must come BEFORE N5 so the severity-aware field selection wins.
+  {
+    pattern:
+      /^(?:An?|the)\s+(error|validation|warning|alert|success)\s+message\s+containing\s+["']([^"']+)["']\s+(?:is|are)\s+(?:displayed|shown|visible)/i,
+    build: (m, step, pom, pageVar) => {
+      const severity = m[1].toLowerCase();
+      const expected = m[2];
+      let field;
+      if (severity === "success") {
+        field =
+          findField(pom, "successMessage", ["Heading", "Message", "Banner"]) ??
+          findField(pom, "success", ["Heading", "Message"]) ??
+          findField(pom, "welcome", ["Heading", "Message"]);
+      } else {
+        field =
+          findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
+          findField(pom, "error", ["Alert", "Error"]);
+      }
+      const locatorExpr = field
+        ? `${pageVar}.${field.fieldName}`
+        : `${pageVar}.page.getByText(${JSON.stringify(expected)})`;
+      return {
+        step,
+        assertion: {
+          locator: locatorExpr,
+          matcher: "toContainText",
+          expected: JSON.stringify(expected),
+        },
+      };
+    },
+  },
+
+  // ────────────────────────────────────────────────────────────────────────
   // LLM-narrative dialect rules (v1.1.1)
   //
   // Real LLM test-case-generation services produce more narrative,
@@ -592,17 +691,24 @@ const RULES: Rule[] = [
     },
   },
 
-  // N6. "A 'X' (button|link|...)? is visible on the page"
-  //     Subject-less visibility. Quoted name + optional role. Per design
-  //     call (4): when the POM has no matching field, synthesize a
-  //     `getByRole(role, { name: 'X' })` locator rather than dropping to
-  //     TODO — this turns false-positive passes into honest assertions.
+  // N6. "A 'X' (button|link|...)? is visible on the page" / "a Logout button is visible"
+  //     Subject-less visibility. Both QUOTED ("'Log out'") and UNQUOTED
+  //     ("Logout") name forms are accepted. Per design call (4): when the
+  //     POM has no matching field, synthesize a `getByRole(role, { name })`
+  //     locator rather than dropping to TODO — turns false-positive passes
+  //     into honest assertions.
+  //
+  //     Two-branch capture:
+  //       m[1] = quoted name (with quotes stripped) — when present
+  //       m[2] = unquoted name — when present
+  //       m[3] = optional role (button|link|icon|element|tab)
   {
     pattern:
-      /^A\s+["']([^"']+)["']\s+(button|link|icon|element|tab)?\s*(?:is visible|appears|is shown|is displayed)(?:\s+on\s+(?:the )?page)?$/i,
+      /^A\s+(?:["']([^"']+)["']|([A-Za-z][A-Za-z0-9 _-]*?))\s+(button|link|icon|element|tab)\s*(?:is visible|appears|is shown|is displayed)(?:\s+on\s+(?:the )?page)?$/i,
     build: (m, step, pom, pageVar) => {
-      const name = m[1].trim();
-      const role = (m[2] ?? "button").toLowerCase();
+      const name = (m[1] ?? m[2] ?? "").trim();
+      if (!name) return null;
+      const role = m[3].toLowerCase();
       const field = findFieldByDescription(name, pom, [
         capitalize(role),
         "Button",

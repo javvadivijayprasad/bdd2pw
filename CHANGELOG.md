@@ -9,6 +9,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.2] — 2026-05-05
+
+### Fixed — second batch of LLM-narrative dialect gaps
+
+A real cloud-jobs run of `R-5D89B426-001.feature` on bdd2pw 1.1.1 produced
+**11 unmatched warnings** across 4 scenarios — six new patterns the LLM
+service is generating that 1.1.1's 22 rules don't cover. All 12 tests
+"passed" but most assertions were silent TODOs. Same false-positive issue
+as before 1.1.1 fixed it for the first batch.
+
+1.1.2 closes the second batch with **+4 new rules + extensions to N2/N6**.
+Total rule count: **22 → 26**.
+
+#### New / extended rules
+
+| # | Pattern | Emits |
+|---|---|---|
+| N1.5 | `[Given\|And] the <X> page is (displayed\|loaded\|shown\|visible\|present)` | `goto()` (Background-style precondition that drops the navigation verb) |
+| N2.5 | `<subject> leaves the <X> field empty (do not type anything)` | `// intentionally left empty: <X>` (subject-prefixed variant of N2) |
+| N5b | `the page (displays\|contains\|shows) [the message] 'X'` | `page.getByText("X").toBeVisible()` (page-level text assertion) |
+| N5c | `an <severity> message containing 'V' is displayed` | `toContainText("V")` against severity-aware field (error/success) |
+| N6 ext | `a Logout button is visible` (unquoted role+name) | `toBeVisible` against POM field, synthesises `getByRole` fallback |
+
+#### Why 4 rules + 2 extensions, not 6 fresh rules
+
+- N2 already handled `Leave the X field empty`; adding subject prefix
+  (`<subject> leaves`) was a small extension in front of the existing pattern.
+- N6 already handled quoted `"X"` button visibility; adding a second
+  capture branch for unquoted names reused the same build path.
+
+Both extensions are fully backwards-compatible — every step that matched in
+1.1.1 still matches the same way in 1.1.2.
+
+#### Tests
+
+- Extended `tests/unit/stepMatcher.test.ts` with 5 new describe blocks (~10
+  test cases) covering each new pattern + edge cases (POM field present
+  vs synthesised fallback, unquoted vs quoted, severity dispatch).
+
+#### Production impact
+
+The cloud-jobs run that surfaced these gaps was hitting:
+- `Given the login page is displayed` (Background, every scenario × 4)
+- `When the user leaves the username field empty` (TC-003)
+- `And the page displays "Logged In Successfully"` (TC-001)
+- `Then the page contains the message "X"` (Outline rows × 3)
+- `Then an error message containing "X" is displayed` (TC-002)
+- `And a Logout button is visible` (TC-001)
+
+After 1.1.2 + repin, all six patterns produce real assertions instead of
+silent TODOs. TC-001 → genuine end-to-end check; TC-002/3/4 → actual error
+display assertions instead of silent passes.
+
+#### Files
+
+- Modified: `src/transformers/stepMatcher.ts` (+4 rules, N2 + N6 extended).
+- Modified: `tests/unit/stepMatcher.test.ts` (+5 describe blocks).
+- Doc bump 22 → 26 across `README.md`, `docs/SCOPE.md`, `docs/STATUS.md`.
+
 ## [1.1.1] — 2026-05-05
 
 ### Fixed — LLM-narrative Gherkin dialect
