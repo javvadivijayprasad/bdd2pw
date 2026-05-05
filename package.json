@@ -1,15 +1,30 @@
 {
   "name": "@vijaypjavvadi/bdd2pw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scaffold runnable Playwright TypeScript tests from Gherkin .feature files. Detects existing Page Objects, scans live pages via Microsoft Playwright MCP, emits POMs + specs, ready for execution. CLI + HTTP service. Optional governed LLM fallback (Anthropic / OpenAI / Gemini).",
-  "bin": { "bdd2pw": "dist/cli.js" },
+  "bin": {
+    "bdd2pw": "dist/cli.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "templates", "README.md", "CHANGELOG.md", "LICENSE"],
-  "repository": { "type": "git", "url": "git+https://github.com/javvadivijayprasad/bdd2pw.git" },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/javvadivijayprasad/bdd2pw.git"
+  },
   "homepage": "https://github.com/javvadivijayprasad/bdd2pw#readme",
-  "bugs": { "url": "https://github.com/javvadivijayprasad/bdd2pw/issues" },
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/javvadivijayprasad/bdd2pw/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
@@ -25,8 +40,21 @@
     "lint": "eslint . --ext .ts && tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
   },
-  "keywords": ["playwright", "bdd", "gherkin", "cucumber", "page-object", "test-automation", "scaffold", "mcp"],
-  "author": { "name": "Vijay Prasad", "email": "jvijayprasad@gmail.com", "url": "https://github.com/javvadivijayprasad" },
+  "keywords": [
+    "playwright",
+    "bdd",
+    "gherkin",
+    "cucumber",
+    "page-object",
+    "test-automation",
+    "scaffold",
+    "mcp"
+  ],
+  "author": {
+    "name": "Vijay Prasad",
+    "email": "jvijayprasad@gmail.com",
+    "url": "https://github.com/javvadivijayprasad"
+  },
   "license": "MIT",
   "dependencies": {
     "@cucumber/gherkin": "^28.0.0",
@@ -43,8 +71,14 @@
     "undici": "^6.19.0",
     "zod": "^3.23.8"
   },
-  "peerDependencies": { "@playwright/test": ">=1.40.0" },
-  "peerDependenciesMeta": { "@playwright/test": { "optional": true } },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
     "better-sqlite3": "^11.0.0",
@@ -65,5 +99,7 @@
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
