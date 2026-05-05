@@ -137,6 +137,31 @@ export interface ScaffoldOptions {
    * offline runs.
    */
   snapshotFile?: string;
+  /**
+   * Enable self-healing locator integration (v1.1+).
+   *
+   * When true:
+   *   1. Emitted POM imports `healOrThrow` from `@platform/sdk-self-healing`
+   *      and wraps every locator initialiser in it.
+   *   2. The scaffolder generates `lib/heal.ts` (a local TypeScript helper
+   *      providing `healOrThrow`) and a `tsconfig.json` path alias mapping
+   *      `@platform/sdk-self-healing` -> `./lib/heal`. Result: generated
+   *      repo compiles + runs without any external SDK dependency.
+   *   3. At runtime, `lib/heal.ts` registers every locator creation event
+   *      to `artefacts/heal-events.jsonl` for the offline self-heal
+   *      pipeline (`E:\EB1A_Research\self_healing_stage_services`) to
+   *      consume.
+   *
+   * v1.1 scope: registration + JSONL logging only. Action-time healing
+   * (catch failed `.click()` / `.fill()`, POST to /api/v1/heal, retry
+   * with suggested locator) is deferred to v1.2 — pw-emit's POM uses
+   * Locator objects rather than string selectors, so the existing
+   * Playwright SDK's wrap-the-page approach doesn't compose; the v1.2
+   * adapter wraps Locator action methods instead.
+   *
+   * Default: false (purely additive minor bump).
+   */
+  selfHealing?: boolean;
 }
 
 export interface ScaffoldResult {

@@ -46,6 +46,11 @@ program
   .option("--no-validate", "Skip tsc --noEmit step")
   .option("--telemetry", "Enable local SQLite failure telemetry", false)
   .option("--force", "Overwrite existing spec files", false)
+  .option(
+    "--self-healing",
+    "Wrap emitted locators in healOrThrow() and generate lib/heal.ts + tsconfig path alias. Locator events are logged to artefacts/heal-events.jsonl for the offline self-heal pipeline. Action-time healing is v1.2.",
+    false,
+  )
   .action(async (feature: string, opts) => {
     try {
       const result = await scaffold({
@@ -66,6 +71,7 @@ program
         snapshotFile: opts.snapshotFile,
         // Commander negates --no-discovery into opts.discovery=false
         noDiscovery: opts.discovery === false,
+        selfHealing: opts.selfHealing,
       });
       logger.info({ result }, "scaffold complete");
     } catch (err) {

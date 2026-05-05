@@ -9,6 +9,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.0] — 2026-05-05
+
+### Added — `--self-healing` flag (scaffold-level integration)
+
+Optional integration with the local `self_healing_stage_services` pipeline
+([source](https://github.com/...)). When enabled, generated POMs register
+every locator with the offline self-heal pipeline so the model knows which
+locators each test references.
+
+**Scope of v1.1.0** — registration + JSONL logging only. **Action-time
+healing is v1.2** (see "Deferred" below).
+
+#### What `--self-healing` does
+
+- New CLI flag: `bdd2pw scaffold ... --self-healing` (off by default).
+  Programmatic API: `scaffold({ ..., selfHealing: true })`.
+- Plumbs `selfHealingShim: true` to `@vijaypjavvadi/pw-emit`'s
+  `emitPageObject`. Emitted POMs now wrap every locator initialiser:
+
+  ```ts
+  // Before (default):
+  this.usernameInput = page.getByLabel("Username");
+
+  // With --self-healing:
+  this.usernameInput = healOrThrow(page, {
+    preferred: page.getByLabel("Username"),
+    context: { page: "LoginPage", name: "usernameInput" },
+  });
+  ```
+- New scaffolder branch generates **`lib/heal.ts`** in the target repo —
+  a self-contained TypeScript helper that:
+  - Exports `healOrThrow(page, { preferred, context })` matching pw-emit's
+    contract.
+  - Registers every locator creation event to
+    **`artefacts/heal-events.jsonl`** for the offline self-heal pipeline
+    (`E:\EB1A_Research\self_healing_stage_services`) to consume.
+  - Optional fire-and-forget heartbeat to `${SELF_HEALING_URL}/api/v1/register`
+    when the env var is set. Best-effort — failures are silent.
+  - Honours `HEAL_DISABLE=1` for CI runs that don't want the artefact noise.
+  - Honours `HEAL_EVENTS_PATH` to override the JSONL path.
+- Patches the generated `tsconfig.json` with a path alias:
+  ```jsonc
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@platform/sdk-self-healing": ["./lib/heal"] }
+  }
+  ```
+  so the POM's `import { healOrThrow } from "@platform/sdk-self-healing"`
+  resolves to the local helper. No external SDK dependency.
+- Creates `artefacts/.gitkeep` so the JSONL output directory exists on a
+  fresh checkout.
+
+#### What `--self-healing` does NOT do (v1.2 scope)
+
+**Action-time healing.** When `await loginPage.usernameInput.click()` fails
+because the locator no longer matches, this v1.1 helper will not catch the
+failure, POST `/api/v1/heal`, and retry with the suggested locator. That
+requires a Locator-wrapping proxy that intercepts every action method
+(`.click`, `.fill`, `.check`, `.selectOption`, `.hover`, `.focus`,
+`.textContent`, `.innerText`, `.getAttribute`, `.isVisible`,
+`.waitForSelector`, ...).
+
+The existing self-healing SDK (`self_healing_stage_services/sdk/playwright/self_healing_page.js`)
+does this — but for *string-selector*-based test code (`page.fill('#username', ...)`).
+pw-emit's POMs use Locator objects, so the v1.2 wrapper has a different
+shape. Tracked for v1.2.
+
+In the meantime, the JSONL feed gives the offline self-heal pipeline visibility
+into what locators each test references, which is the v1 ranker's input
+anyway — so v1.1 is functionally useful even without action-time recovery.
+
+#### Files
+
+- New: `templates/heal.ts.tmpl` — the heal helper template.
+- Modified: `src/types.ts`, `src/cli.ts`, `src/index.ts`,
+  `src/repo/projectScaffolder.ts`.
+
 ## [1.0.1] — 2026-05-04
 
 ### Fixed

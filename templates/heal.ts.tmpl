@@ -1,0 +1,178 @@
+/**
+ * Self-healing locator helper — v1.1 scaffold.
+ *
+ * GENERATED FILE. Do not edit directly; this file is rewritten on every
+ * `bdd2pw scaffold --self-healing` invocation. To customise, fork it under
+ * a different filename and update the `tsconfig.json` `paths` mapping.
+ *
+ * What this provides today (v1.1)
+ * --------------------------------
+ *   - `healOrThrow(page, { preferred, context })` — a passthrough that
+ *     returns the `preferred` Playwright Locator unchanged, AND records
+ *     the locator-creation event to `artefacts/heal-events.jsonl` for the
+ *     offline self-heal pipeline to consume.
+ *   - Optional fire-and-forget heartbeat to `${SELF_HEALING_URL}/api/v1/register`
+ *     so the service knows which locators a test references. The heartbeat is
+ *     a best-effort POST — failures are silently swallowed so a missing
+ *     service doesn't break tests.
+ *
+ * What this does NOT do yet (deferred to v1.2)
+ * --------------------------------------------
+ *   - **Action-time healing.** When `await locator.click()` fails because
+ *     the locator changed, this helper will not catch the failure, call
+ *     `/api/v1/heal`, and retry with a suggested locator. That requires a
+ *     Locator-wrapping proxy that intercepts every action method (.click,
+ *     .fill, .check, .selectOption, .hover, .focus, .textContent,
+ *     .innerText, .getAttribute, .isVisible, .waitForSelector, ...). The
+ *     existing self-healing SDK does this for *string-selector*-based test
+ *     code (`page.fill('#username', ...)`); pw-emit's POMs use Locator
+ *     objects (`this.usernameInput.fill(...)`), so the v1.2 wrapper has a
+ *     different shape.
+ *
+ *   Until v1.2 ships, this file is a registration scaffold: the offline
+ *   self-heal pipeline (`E:\EB1A_Research\self_healing_stage_services`)
+ *   sees what locators each test references via the JSONL feed, but
+ *   recovery still has to happen through that pipeline's batch processing
+ *   rather than at action time.
+ *
+ * Environment variables
+ * ---------------------
+ *   SELF_HEALING_URL    Base URL of the self-healing service (e.g.
+ *                       http://localhost:8003). When set, every locator
+ *                       creation triggers a fire-and-forget POST to
+ *                       `${SELF_HEALING_URL}/api/v1/register`. When unset,
+ *                       no network calls are made; events still land in
+ *                       JSONL.
+ *
+ *   HEAL_EVENTS_PATH    Override the JSONL output path. Defaults to
+ *                       `artefacts/heal-events.jsonl` relative to the
+ *                       process cwd (typically the repo root when running
+ *                       `npx playwright test`).
+ *
+ *   HEAL_DISABLE        Set to "1" or "true" to disable both JSONL writes
+ *                       and heartbeats. Useful in CI when you don't want
+ *                       the artefact noise.
+ */
+
+import * as fs from "fs";
+import * as path from "path";
+import * as http from "http";
+import * as https from "https";
+import type { Locator, Page } from "@playwright/test";
+
+export interface HealContext {
+  /** PascalCase Page Object class name, e.g. "LoginPage". */
+  page: string;
+  /** camelCase field name, e.g. "usernameInput". */
+  name: string;
+}
+
+export interface HealOrThrowOptions {
+  /** The locator the emitter chose for this field. */
+  preferred: Locator;
+  /** Static metadata that uniquely identifies this locator across runs. */
+  context: HealContext;
+}
+
+interface HealEvent {
+  ts: string;
+  event: "register";
+  page: string;
+  name: string;
+  pid: number;
+  cwd: string;
+}
+
+const DISABLED = process.env.HEAL_DISABLE === "1" || process.env.HEAL_DISABLE === "true";
+const SERVICE_URL = process.env.SELF_HEALING_URL ?? "";
+const EVENTS_PATH = process.env.HEAL_EVENTS_PATH ?? "artefacts/heal-events.jsonl";
+
+let writerInitialised = false;
+
+function ensureArtefactsDir(): string {
+  const fullPath = path.resolve(process.cwd(), EVENTS_PATH);
+  const dir = path.dirname(fullPath);
+  if (!writerInitialised) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      writerInitialised = true;
+    } catch {
+      /* best-effort */
+    }
+  }
+  return fullPath;
+}
+
+function appendEvent(event: HealEvent): void {
+  if (DISABLED) return;
+  const fullPath = ensureArtefactsDir();
+  try {
+    fs.appendFileSync(fullPath, JSON.stringify(event) + "\n", "utf8");
+  } catch {
+    /* best-effort — never break tests for logging */
+  }
+}
+
+function heartbeat(context: HealContext): void {
+  if (DISABLED || !SERVICE_URL) return;
+  let url: URL;
+  try {
+    url = new URL("/api/v1/register", SERVICE_URL);
+  } catch {
+    return;
+  }
+  const payload = JSON.stringify({
+    page: context.page,
+    name: context.name,
+    pid: process.pid,
+    ts: new Date().toISOString(),
+  });
+  const client = url.protocol === "https:" ? https : http;
+  try {
+    const req = client.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        timeout: 1000,
+      },
+      (res) => res.resume(),
+    );
+    req.on("error", () => {});
+    req.on("timeout", () => req.destroy());
+    req.write(payload);
+    req.end();
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * Register a locator with the self-healing pipeline and return it unchanged.
+ *
+ * The emitted POM constructor calls this for every field:
+ *
+ *   this.usernameInput = healOrThrow(page, {
+ *     preferred: page.getByLabel("Username"),
+ *     context: { page: "LoginPage", name: "usernameInput" },
+ *   });
+ *
+ * v1.1 returns `preferred` as-is — no wrapping, no proxy, no action-time
+ * healing. The locator is registered to JSONL + heartbeat so the offline
+ * self-heal pipeline sees it. v1.2 will wrap action methods.
+ */
+export function healOrThrow(_page: Page, opts: HealOrThrowOptions): Locator {
+  appendEvent({
+    ts: new Date().toISOString(),
+    event: "register",
+    page: opts.context.page,
+    name: opts.context.name,
+    pid: process.pid,
+    cwd: process.cwd(),
+  });
+  heartbeat(opts.context);
+  return opts.preferred;
+}

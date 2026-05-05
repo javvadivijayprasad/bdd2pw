@@ -96,6 +96,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     templatesDir: opts.templates,
     baseUrl: opts.url,
     projectName: feature.name.toLowerCase().replace(/\s+/g, "-"),
+    selfHealing: opts.selfHealing,
   });
   reviewItems.push(...scaffoldResult.warnings);
 
@@ -259,6 +260,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       existing: decision.existing
         ? await fs.readFile(decision.existing.filePath, "utf8").catch(() => undefined)
         : undefined,
+      selfHealingShim: opts.selfHealing,
     });
     reviewItems.push(
       ...pomEmit.warnings.map((w) => ({ ...w, file: finalPom.filePath })),
