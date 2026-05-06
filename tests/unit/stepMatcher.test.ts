@@ -401,4 +401,107 @@ describe("stepMatcher rules", () => {
       expect(b.assertion?.locator).toBe("loginPage.loginButton");
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // v1.1.4 — article stripping + N5d optional URL
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("v1.1.4 — article stripping in URL slugs", () => {
+    it("'redirected to a logged-in page' → slug strips 'a'", () => {
+      const b = matchStep(
+        step("Then", "the user is redirected to a logged-in page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      // Without stripArticles, this would emit "a[-_/]?logged-in" and fail
+      // to match /logged-in-successfully/ on real sites.
+      expect(b.assertion?.expected).toBe('new RegExp("logged-in")');
+    });
+
+    it("'redirected to an admin dashboard' → slug strips 'an'", () => {
+      const b = matchStep(
+        step("Then", "I should be redirected to an admin dashboard"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("admin[-_/]?dashboard")');
+    });
+
+    it("'should remain on a login page' → slug strips 'a'", () => {
+      const b = matchStep(
+        step("Then", "I should remain on a login page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("login")');
+    });
+  });
+
+  describe("v1.1.4 — N5d optional URL suffix", () => {
+    it("'the user is on the login page' (no 'at URL') → goto", () => {
+      const b = matchStep(
+        step("Given", "the user is on the login page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+
+    it("'the user is on the login page at \"URL\"' (with URL) → still goto", () => {
+      const b = matchStep(
+        step("Given", 'the user is on the login page at "https://example.com/login"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // v1.1.5 — rule 2b SUBJ optional (subject-less compact form)
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("v1.1.5 — subject-less 'enters <field> \"V\"'", () => {
+    it("'enters password \"Password123\"' → passwordInput.fill", () => {
+      const b = matchStep(
+        step("And", 'enters password "Password123"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"Password123"']);
+    });
+
+    it("'enters username \"alice\"' → usernameInput.fill", () => {
+      const b = matchStep(
+        step("When", 'enters username "alice"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+      expect(b.pomCall?.args).toEqual(['"alice"']);
+    });
+
+    it("subject-prefix forms still match (regression — original rule 2b coverage)", () => {
+      const b = matchStep(
+        step("When", 'User enters username "alice"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+    });
+
+    it("'types the password \"secret\"' (verb 'types', article 'the') → passwordInput.fill", () => {
+      const b = matchStep(
+        step("And", 'types the password "secret"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"secret"']);
+    });
+  });
 });

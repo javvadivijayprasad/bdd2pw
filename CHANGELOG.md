@@ -9,6 +9,118 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.5] — 2026-05-05
+
+### Fixed — subject-less compact 'enters password "X"' form
+
+LLM produces compact verb-first input forms freely:
+```
+And enters password "Password123"
+When enters username "alice"
+And types the password "secret"
+```
+
+Rule 2b previously required a `${SUBJ}` prefix (`I` / `User` / `the user`).
+The compact form was hitting TODO. Rule 2b's SUBJ is now optional via
+`(?:${SUBJ}\s+)?`, so all four shapes match the same way:
+
+| Form | Status before 1.1.5 | Status after 1.1.5 |
+|---|---|---|
+| `I enter username "alice"` | ✅ rule 2b | ✅ rule 2b |
+| `User enters username "alice"` | ✅ rule 2b | ✅ rule 2b |
+| `the user enters username "alice"` | ✅ rule 2b | ✅ rule 2b |
+| `enters password "Password123"` | ❌ TODO | ✅ rule 2b |
+| `And enters username "alice"` | ❌ TODO | ✅ rule 2b |
+
+#### Why this is a one-line change
+
+The fix is purely the regex prefix:
+- Before: `^${SUBJ} (?:enter|enters|...) (?:the )?(.+?) ["']([^"']*)["']$`
+- After:  `^(?:${SUBJ}\s+)?(?:enter|enters|...) (?:the )?(.+?) ["']([^"']*)["']$`
+
+The build function is unchanged — same `fillFieldBinding(...)` flow.
+Existing rule 2a (`I enter "X" into the field`) still claims its territory
+because its pattern has `["']<value>["']` early; the subject-less compact
+form ends with the value, which only matches rule 2b's structure.
+
+#### Known limitation (deferred)
+
+The vague form `user enters valid password` (no quoted value) is still a
+TODO. Without a value, we can't generate a working `.fill()` call. A human
+has to provide the credentials. This is a generation-input gap, not a rule
+gap — adding a TODO with explanatory comment would be misleading.
+
+#### Tests
+
+- `tests/unit/stepMatcher.test.ts` +4 new tests under
+  `v1.1.5 — subject-less 'enters <field> "V"'`:
+  - subject-less `enters password "X"`
+  - subject-less `enters username "X"`
+  - regression: subject-prefixed `User enters username "X"` still matches
+  - subject-less `types the password "X"` (alt verb + article)
+
+#### Files
+
+- Modified: `src/transformers/stepMatcher.ts` (rule 2b regex prefix only).
+- Modified: `tests/unit/stepMatcher.test.ts` (+4 tests).
+
+## [1.1.4] — 2026-05-05
+
+### Fixed — article-leak in URL slugs + N5d without URL
+
+A run of `R-5D89B426-001.feature` on bdd2pw 1.1.3 cut failures from 6 → 2,
+but two real bugs remain:
+
+#### 1. English articles leak into URL regex slugs
+
+**Symptom:** `Then the user is redirected to a logged-in page` →
+emitted regex `/a[-_/]?logged-in/` → fails against
+`https://practicetestautomation.com/logged-in-successfully/` because the
+URL has no "a" before "logged-in".
+
+**Root cause:** rule 11b (and rules 10, N4, N5e) capture the page-name
+description and slugify it. The capture preserves English articles
+("a", "an", "the") if they're not stripped by the rule's `(?:the )?`
+prefix — which only handles "the".
+
+**Fix:** new `stripArticles(s)` helper removes leading/internal/trailing
+"a"/"an"/"the" tokens before slugifying. Applied to rules 10, 11b, N4,
+N5e — every rule that converts a description to a regex slug.
+
+```ts
+// Before:    "redirected to a logged-in page" → "a[-_/]?logged-in"
+// After:     "redirected to a logged-in page" → "logged-in"  ✓ matches /logged-in-successfully/
+
+// Before:    "remain on a login page" → "a[-_/]?login"
+// After:     "remain on a login page" → "login"  ✓
+```
+
+#### 2. N5d required `at "URL"` suffix
+
+**Symptom:** 6 TODOs for `Given the user is on the login page` (no URL).
+N5d's pattern from 1.1.3 mandated `at "URL"`. LLM produces both forms.
+
+**Fix:** extended N5d pattern — `at "URL"` is now optional. Both
+`Given the user is on the login page` and
+`Given the user is on the login page at "URL"` map to `goto()`.
+
+#### Tests
+
+- `tests/unit/stepMatcher.test.ts` +5 new tests across 2 describe blocks
+  (3 article-stripping cases + 2 N5d optional-URL cases).
+
+#### Production impact
+
+The 2 remaining failures from R-5D89B426-001 (`toHaveURL` timeouts on
+`/a[-_/]?logged-in/`) and the 6 TODOs (`Given the user is on the login
+page`) are both eliminated. Repin cloud-jobs-template to 1.1.4 to verify.
+
+#### Files
+
+- Modified: `src/transformers/stepMatcher.ts` (+stripArticles helper,
+  applied to rules 10/11b/N4/N5e; N5d pattern extended).
+- Modified: `tests/unit/stepMatcher.test.ts` (+5 tests).
+
 ## [1.1.3] — 2026-05-05
 
 ### Fixed — production failure modes from cloud-jobs run on 1.1.2

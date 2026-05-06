@@ -166,10 +166,15 @@ const RULES: Rule[] = [
   },
 
   // 2b. Reversed word order: 'I enter username "alice"' / 'I type password "secret"'
-  //     Common in real-world Cucumber suites (e.g. test/test/login.feature).
-  //     Also handles empty values: `I enter username ""`.
+  //     v1.1.5 — also matches subject-less compact form: 'enters password "X"' /
+  //     'And enters username "Y"'. The LLM produces these freely. SUBJ is
+  //     optional via `(?:${SUBJ}\s+)?` so all three forms work:
+  //       'I enter username "alice"'           ← original
+  //       'User enters username "alice"'        ← original third-person
+  //       'enters password "Password123"'       ← v1.1.5 subject-less
+  //     Also handles empty values: `I enter username ""` / `enters password ""`.
   {
-    pattern: new RegExp(`^${SUBJ} (?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`, "i"),
+    pattern: new RegExp(`^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`, "i"),
     build: (m, step, pom, pageVar) => {
       // If the captured "field" is itself a quoted value already handled by 2a,
       // skip — but 2a's pattern wouldn't end here so 2b is safe.
@@ -354,7 +359,9 @@ const RULES: Rule[] = [
   {
     pattern: new RegExp(`^${SUBJ} (?:should remain|remain|remains) on (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
-      const target = m[1].trim();
+      // v1.1.4: strip articles so "remain on a login page" → slug "login",
+      // not "a[-_/]?login" which wouldn't match real URLs.
+      const target = stripArticles(m[1].trim());
       return {
         step,
         assertion: {
@@ -392,13 +399,19 @@ const RULES: Rule[] = [
   },
 
   // 11b. Redirect: "I should be redirected to the logged-in page" / "to /dashboard"
-  //      Asserts URL changed away from the previous page. Best-effort: regex matches
-  //      the target token in the URL.
+  //      / "redirected to a logged-in page" — articles stripped from the slug.
+  //      Asserts URL changed away from the previous page. Best-effort: regex
+  //      matches the target token in the URL.
   {
     pattern: new RegExp(`^${SUBJ} (?:should be |am |is )?redirected to (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
-      const target = m[1].trim();
-      const slug = target.replace(/\s+/g, "[-_/]?");
+      // v1.1.4: stripArticles fixes "redirected to a logged-in page" — without
+      // this, slug becomes "a[-_/]?logged-in" which fails to match
+      // /logged-in-successfully/ (URL has no "a" before "logged-in").
+      const target = stripArticles(m[1].trim());
+      const slug = target
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\s+/g, "[-_/]?");
       return {
         step,
         assertion: {
@@ -512,13 +525,15 @@ const RULES: Rule[] = [
     },
   },
 
-  // N5d. "<subject> is on (the)? <X> page at 'URL'" — Background-style
-  //      precondition that DOES include the URL inline. Treated as goto()
-  //      (Background usually handles the actual navigation; the URL is just
-  //      narrative context). Per design call (3): match it, don't fail.
+  // N5d. "<subject> is on (the)? <X> page" / "... at 'URL'" — Background-style
+  //      precondition. "at 'URL'" suffix is OPTIONAL (v1.1.4 — production hits
+  //      both forms, often without the URL part). Treated as goto() since
+  //      Background usually handles the actual navigation; the page name and
+  //      URL are just narrative context.
+  //      Per design call (3): match it, don't fail.
   {
     pattern: new RegExp(
-      `^${SUBJ}\\s+(?:is|are|am)\\s+on\\s+(?:the\\s+)?(?:.+?)\\s+page\\s+at\\s+["']([^"']+)["']\\s*$`,
+      `^${SUBJ}\\s+(?:is|are|am)\\s+on\\s+(?:the\\s+)?(?:.+?)\\s+page(?:\\s+at\\s+["']([^"']+)["'])?\\s*$`,
       "i",
     ),
     build: (_m, step, pom, pageVar) => {
@@ -541,7 +556,8 @@ const RULES: Rule[] = [
       "i",
     ),
     build: (m, step, _pom, pageVar) => {
-      const target = m[1].trim();
+      // v1.1.4: stripArticles
+      const target = stripArticles(m[1].trim());
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -655,7 +671,8 @@ const RULES: Rule[] = [
     pattern:
       /^(?:the )?URL does(?:n't| not) change(?:\s+to\s+(?:the )?(.+?))?(?:\s+page)?$/i,
     build: (m, step, _pom, pageVar) => {
-      const target = (m[1] ?? "success").trim();
+      // v1.1.4: stripArticles
+      const target = stripArticles((m[1] ?? "success").trim());
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -997,6 +1014,26 @@ function findFieldByDescription(
   // `getByText` locator when no real match is found, which is more honest
   // than wrong-element heuristics.
   return findField(pom, stripUiSuffix(desc), preferredSuffixes, { strict: true });
+}
+
+/**
+ * Strip English articles ("a", "an", "the") from a description so they
+ * don't leak into URL regex slugs as literal characters.
+ *
+ * Without this, "redirected to a logged-in page" → slug "a[-_/]?logged-in",
+ * which fails to match URL "/logged-in-successfully/" because the actual
+ * URL has no "a" before "logged-in".
+ *
+ * Applied to rule 10, 11b, N4, N5e — every rule that slugifies a captured
+ * page-name description. Rules that just emit goto(<URL>) don't need this
+ * (URLs don't contain English articles as path segments).
+ */
+function stripArticles(s: string): string {
+  return s
+    .replace(/^\s*(?:a|an|the)\s+/i, "")
+    .replace(/\s+(?:a|an|the)\s+/gi, " ")
+    .replace(/\s+(?:a|an|the)\s*$/i, "")
+    .trim();
 }
 
 /**
