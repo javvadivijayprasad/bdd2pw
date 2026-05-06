@@ -218,15 +218,21 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N6 A 'X' button is visible", () => {
-    it("synthesises getByRole when POM lacks the field", () => {
+    it("synthesises cross-role locator when POM lacks the field (v1.1.3)", () => {
       const b = matchStep(
         step("Then", "A 'Log out' button is visible on the page"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("toBeVisible");
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Log out"');
+      // v1.1.3: cross-role + flexible-text synthesis to handle button-vs-link
+      // and "Logout" vs "Log out" mismatches.
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      // Spaces stripped before regex assembly: "Log out" → "Logout" → flexible regex
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("uses POM field if name matches an existing one", () => {
@@ -242,15 +248,18 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N7 No 'X' appears / No <noun> displayed", () => {
-    it("'No \\'Log out\\' button appears' → not.toBeVisible (synthesised getByRole)", () => {
+    it("'No \\'Log out\\' button appears' → not.toBeVisible (cross-role synthesis, v1.1.3)", () => {
       const b = matchStep(
         step("Then", "No 'Log out' button appears"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("not.toBeVisible");
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Log out"');
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("'No error messages are displayed' → not.toBeVisible against error field", () => {
@@ -366,16 +375,20 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N6 unquoted role+name variant", () => {
-    it("'a Logout button is visible' (unquoted) → synthesises getByRole", () => {
+    it("'a Logout button is visible' (unquoted) → cross-role synthesis (v1.1.3)", () => {
       const b = matchStep(
         step("And", "a Logout button is visible"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("toBeVisible");
-      // Test pom has no Logout field, so synthesise getByRole
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Logout"');
+      // Test pom has no Logout field; synthesise cross-role locator with
+      // flexible regex so "Logout" matches both "Logout" and "Log out".
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("'A Login button is visible' (unquoted) → resolves to loginButton (POM has it)", () => {
@@ -386,6 +399,109 @@ describe("stepMatcher rules", () => {
       );
       expect(b.assertion?.matcher).toBe("toBeVisible");
       expect(b.assertion?.locator).toBe("loginPage.loginButton");
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // v1.1.4 — article stripping + N5d optional URL
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("v1.1.4 — article stripping in URL slugs", () => {
+    it("'redirected to a logged-in page' → slug strips 'a'", () => {
+      const b = matchStep(
+        step("Then", "the user is redirected to a logged-in page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      // Without stripArticles, this would emit "a[-_/]?logged-in" and fail
+      // to match /logged-in-successfully/ on real sites.
+      expect(b.assertion?.expected).toBe('new RegExp("logged-in")');
+    });
+
+    it("'redirected to an admin dashboard' → slug strips 'an'", () => {
+      const b = matchStep(
+        step("Then", "I should be redirected to an admin dashboard"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("admin[-_/]?dashboard")');
+    });
+
+    it("'should remain on a login page' → slug strips 'a'", () => {
+      const b = matchStep(
+        step("Then", "I should remain on a login page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("login")');
+    });
+  });
+
+  describe("v1.1.4 — N5d optional URL suffix", () => {
+    it("'the user is on the login page' (no 'at URL') → goto", () => {
+      const b = matchStep(
+        step("Given", "the user is on the login page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+
+    it("'the user is on the login page at \"URL\"' (with URL) → still goto", () => {
+      const b = matchStep(
+        step("Given", 'the user is on the login page at "https://example.com/login"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // v1.1.5 — rule 2b SUBJ optional (subject-less compact form)
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe("v1.1.5 — subject-less 'enters <field> \"V\"'", () => {
+    it("'enters password \"Password123\"' → passwordInput.fill", () => {
+      const b = matchStep(
+        step("And", 'enters password "Password123"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"Password123"']);
+    });
+
+    it("'enters username \"alice\"' → usernameInput.fill", () => {
+      const b = matchStep(
+        step("When", 'enters username "alice"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+      expect(b.pomCall?.args).toEqual(['"alice"']);
+    });
+
+    it("subject-prefix forms still match (regression — original rule 2b coverage)", () => {
+      const b = matchStep(
+        step("When", 'User enters username "alice"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+    });
+
+    it("'types the password \"secret\"' (verb 'types', article 'the') → passwordInput.fill", () => {
+      const b = matchStep(
+        step("And", 'types the password "secret"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"secret"']);
     });
   });
 });

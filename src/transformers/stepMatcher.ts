@@ -166,10 +166,15 @@ const RULES: Rule[] = [
   },
 
   // 2b. Reversed word order: 'I enter username "alice"' / 'I type password "secret"'
-  //     Common in real-world Cucumber suites (e.g. test/test/login.feature).
-  //     Also handles empty values: `I enter username ""`.
+  //     v1.1.5 — also matches subject-less compact form: 'enters password "X"' /
+  //     'And enters username "Y"'. The LLM produces these freely. SUBJ is
+  //     optional via `(?:${SUBJ}\s+)?` so all three forms work:
+  //       'I enter username "alice"'           ← original
+  //       'User enters username "alice"'        ← original third-person
+  //       'enters password "Password123"'       ← v1.1.5 subject-less
+  //     Also handles empty values: `I enter username ""` / `enters password ""`.
   {
-    pattern: new RegExp(`^${SUBJ} (?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`, "i"),
+    pattern: new RegExp(`^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`, "i"),
     build: (m, step, pom, pageVar) => {
       // If the captured "field" is itself a quoted value already handled by 2a,
       // skip — but 2a's pattern wouldn't end here so 2b is safe.
@@ -354,7 +359,9 @@ const RULES: Rule[] = [
   {
     pattern: new RegExp(`^${SUBJ} (?:should remain|remain|remains) on (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
-      const target = m[1].trim();
+      // v1.1.4: strip articles so "remain on a login page" → slug "login",
+      // not "a[-_/]?login" which wouldn't match real URLs.
+      const target = stripArticles(m[1].trim());
       return {
         step,
         assertion: {
@@ -392,13 +399,19 @@ const RULES: Rule[] = [
   },
 
   // 11b. Redirect: "I should be redirected to the logged-in page" / "to /dashboard"
-  //      Asserts URL changed away from the previous page. Best-effort: regex matches
-  //      the target token in the URL.
+  //      / "redirected to a logged-in page" — articles stripped from the slug.
+  //      Asserts URL changed away from the previous page. Best-effort: regex
+  //      matches the target token in the URL.
   {
     pattern: new RegExp(`^${SUBJ} (?:should be |am |is )?redirected to (?:the )?(.+?)(?: page)?$`, "i"),
     build: (m, step, _pom, pageVar) => {
-      const target = m[1].trim();
-      const slug = target.replace(/\s+/g, "[-_/]?");
+      // v1.1.4: stripArticles fixes "redirected to a logged-in page" — without
+      // this, slug becomes "a[-_/]?logged-in" which fails to match
+      // /logged-in-successfully/ (URL has no "a" before "logged-in").
+      const target = stripArticles(m[1].trim());
+      const slug = target
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\s+/g, "[-_/]?");
       return {
         step,
         assertion: {
@@ -494,9 +507,9 @@ const RULES: Rule[] = [
 
   // N5b. Page-level text assertion — "the page (displays|contains|shows) [the message] 'X'"
   //      Asserts the page body contains the given text. Uses
-  //      \`getByText('X')\` + \`toBeVisible\` rather than a body-level
-  //      \`toContainText\` because getByText is more idiomatic and gives
-  //      better error messages when the text isn't found.
+  //      `.getByText("X").first()` to avoid Playwright strict-mode violations
+  //      when the same text appears in multiple elements (e.g. an error div
+  //      AND a `<b>` highlight repeat).
   {
     pattern:
       /^(?:the )?page\s+(?:displays?|shows?|contains?)(?:\s+the\s+(?:message|text|content))?\s+["']([^"']+)["']/i,
@@ -505,8 +518,55 @@ const RULES: Rule[] = [
       return {
         step,
         assertion: {
-          locator: `${pageVar}.page.getByText(${JSON.stringify(expected)})`,
+          locator: synthFlexibleTextLocator(pageVar, expected),
           matcher: "toBeVisible",
+        },
+      };
+    },
+  },
+
+  // N5d. "<subject> is on (the)? <X> page" / "... at 'URL'" — Background-style
+  //      precondition. "at 'URL'" suffix is OPTIONAL (v1.1.4 — production hits
+  //      both forms, often without the URL part). Treated as goto() since
+  //      Background usually handles the actual navigation; the page name and
+  //      URL are just narrative context.
+  //      Per design call (3): match it, don't fail.
+  {
+    pattern: new RegExp(
+      `^${SUBJ}\\s+(?:is|are|am)\\s+on\\s+(?:the\\s+)?(?:.+?)\\s+page(?:\\s+at\\s+["']([^"']+)["'])?\\s*$`,
+      "i",
+    ),
+    build: (_m, step, pom, pageVar) => {
+      const hasGoto = pom.methods.some((mm) => mm.name === "goto");
+      return {
+        step,
+        pomCall: hasGoto
+          ? { page: pageVar, method: "goto", args: [] }
+          : { page: pageVar, method: "goto", args: [] },
+      };
+    },
+  },
+
+  // N5e. "<subject> is/are NOT redirected away from (the )? <X> page"
+  //      Negative redirect — assert URL still contains the page name. Soft
+  //      assertion: matches by slug. Surfaced from R-5D89B426-001.
+  {
+    pattern: new RegExp(
+      `^${SUBJ}\\s+(?:is|are|am)\\s+(?:not|NOT)\\s+redirected\\s+(?:away\\s+from|from)\\s+(?:the\\s+)?(.+?)(?:\\s+page)?$`,
+      "i",
+    ),
+    build: (m, step, _pom, pageVar) => {
+      // v1.1.4: stripArticles
+      const target = stripArticles(m[1].trim());
+      const slug = target
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\s+/g, "[-_/]?");
+      return {
+        step,
+        assertion: {
+          locator: `${pageVar}.page`,
+          matcher: "toHaveURL",
+          expected: `new RegExp(${JSON.stringify(slug)})`,
         },
       };
     },
@@ -538,7 +598,7 @@ const RULES: Rule[] = [
       }
       const locatorExpr = field
         ? `${pageVar}.${field.fieldName}`
-        : `${pageVar}.page.getByText(${JSON.stringify(expected)})`;
+        : synthFlexibleTextLocator(pageVar, expected);
       return {
         step,
         assertion: {
@@ -611,7 +671,8 @@ const RULES: Rule[] = [
     pattern:
       /^(?:the )?URL does(?:n't| not) change(?:\s+to\s+(?:the )?(.+?))?(?:\s+page)?$/i,
     build: (m, step, _pom, pageVar) => {
-      const target = (m[1] ?? "success").trim();
+      // v1.1.4: stripArticles
+      const target = stripArticles((m[1] ?? "success").trim());
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -646,7 +707,7 @@ const RULES: Rule[] = [
         findField(pom, "error", ["Alert", "Error"]);
       const locatorExpr = field
         ? `${pageVar}.${field.fieldName}`
-        : `${pageVar}.page.getByRole("alert")`;
+        : `${pageVar}.page.getByRole("alert").first()`;
       return {
         step,
         assertion: { locator: locatorExpr, matcher: "toBeVisible" },
@@ -679,7 +740,7 @@ const RULES: Rule[] = [
       }
       const locatorExpr = field
         ? `${pageVar}.${field.fieldName}`
-        : `${pageVar}.page.getByText(${JSON.stringify(expected)})`;
+        : synthFlexibleTextLocator(pageVar, expected);
       return {
         step,
         assertion: {
@@ -714,9 +775,13 @@ const RULES: Rule[] = [
         "Button",
         "Link",
       ]);
+      // v1.1.3: when synthesising, use a cross-role locator (a + button +
+      // role=button + role=link) with a flexible text regex so "Logout"
+      // matches a `<a>Log out</a>` on the page. Resolves the
+      // button-vs-link mismatch from cloud-jobs runs.
       const locatorExpr = field
         ? `${pageVar}.${field.fieldName}`
-        : `${pageVar}.page.getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`;
+        : synthRoleNameLocator(pageVar, name);
       return {
         step,
         assertion: { locator: locatorExpr, matcher: "toBeVisible" },
@@ -745,6 +810,10 @@ const RULES: Rule[] = [
       // success branch to win. Word boundaries (\b) prevent spurious matches
       // (e.g. "alert" inside "alerted" — though unlikely in practice).
       const lowered = desc.toLowerCase();
+      // v1.1.3: every synthesised fallback ends in `.first()` to avoid
+      // strict-mode violations when the same text/role appears multiple
+      // times on the page (very common with error messages echoed in
+      // <div id="error"> AND <b> highlight repeats).
       if (quoted) {
         const name = quoted[1];
         const role = (quoted[2] ?? "button").toLowerCase();
@@ -755,7 +824,7 @@ const RULES: Rule[] = [
         ]);
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
-          : `${pageVar}.page.getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`;
+          : synthRoleNameLocator(pageVar, name);
       } else if (/\b(success|congrat|welcome)\b/.test(lowered)) {
         const field =
           findField(pom, "successMessage", ["Heading", "Message", "Banner"]) ??
@@ -763,27 +832,26 @@ const RULES: Rule[] = [
           findField(pom, "welcome", ["Heading", "Message"]);
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
-          : `${pageVar}.page.getByText(${JSON.stringify(desc)})`;
+          : synthFlexibleTextLocator(pageVar, desc);
       } else if (/\b(error|invalid|fail|forbidden|unauthor|alert|warning)\b/.test(lowered)) {
         const field =
           findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
           findField(pom, "error", ["Alert", "Error"]);
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
-          : `${pageVar}.page.getByRole("alert")`;
+          : `${pageVar}.page.getByRole("alert").first()`;
       } else if (/\bmessage(s)?\b/.test(lowered)) {
-        // Generic "message" without success/error context — fall back to alert
         const field =
           findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
           findField(pom, "error", ["Alert", "Error"]);
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
-          : `${pageVar}.page.getByRole("alert")`;
+          : `${pageVar}.page.getByRole("alert").first()`;
       } else {
         const field = findFieldByDescription(desc, pom, []);
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
-          : `${pageVar}.page.getByText(${JSON.stringify(desc)})`;
+          : synthFlexibleTextLocator(pageVar, desc);
       }
       return {
         step,
@@ -946,4 +1014,72 @@ function findFieldByDescription(
   // `getByText` locator when no real match is found, which is more honest
   // than wrong-element heuristics.
   return findField(pom, stripUiSuffix(desc), preferredSuffixes, { strict: true });
+}
+
+/**
+ * Strip English articles ("a", "an", "the") from a description so they
+ * don't leak into URL regex slugs as literal characters.
+ *
+ * Without this, "redirected to a logged-in page" → slug "a[-_/]?logged-in",
+ * which fails to match URL "/logged-in-successfully/" because the actual
+ * URL has no "a" before "logged-in".
+ *
+ * Applied to rule 10, 11b, N4, N5e — every rule that slugifies a captured
+ * page-name description. Rules that just emit goto(<URL>) don't need this
+ * (URLs don't contain English articles as path segments).
+ */
+function stripArticles(s: string): string {
+  return s
+    .replace(/^\s*(?:a|an|the)\s+/i, "")
+    .replace(/\s+(?:a|an|the)\s+/gi, " ")
+    .replace(/\s+(?:a|an|the)\s*$/i, "")
+    .trim();
+}
+
+/**
+ * Build a regex literal expression that matches a name flexibly:
+ *   - case-insensitive
+ *   - whitespace-tolerant ("Logout" matches both "Logout" and "Log out")
+ *   - anchored start/end to avoid partial matches
+ *
+ * "Logout" → `new RegExp("^L\\s*o\\s*g\\s*o\\s*u\\s*t$", "i")`
+ *
+ * Used by the synthesised cross-role locators (v1.1.3) so the LLM's spelling
+ * variant doesn't cause `expect.toBeVisible()` failures against pages that
+ * use a different spelling/spacing.
+ */
+function flexibleNameRegex(name: string): string {
+  const cleaned = name.replace(/\s+/g, "").trim();
+  const escaped = cleaned
+    .split("")
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s*");
+  // JSON.stringify wraps in quotes and escapes embedded backslashes/quotes —
+  // perfect for embedding the pattern into the emitted TypeScript source.
+  return `new RegExp(${JSON.stringify("^" + escaped + "$")}, "i")`;
+}
+
+/**
+ * Synthesise a cross-role locator that matches both `<a>` and `<button>`
+ * (and ARIA role variants) by visible text — flexible to spelling
+ * differences. Used by N6/N7 when the POM has no field for the named
+ * element. Resolves the "LLM says button but page has link" mismatch.
+ */
+function synthRoleNameLocator(pageVar: string, name: string): string {
+  const flex = flexibleNameRegex(name);
+  // The selector covers the common cases. Filter by hasText with the
+  // flexible regex to handle "Logout" vs "Log out" etc. `.first()` is
+  // mandatory because Playwright's expect runs in strict mode and the
+  // text could appear in a parent + child.
+  return `${pageVar}.page.locator("a, button, [role='button'], [role='link']").filter({ hasText: ${flex} }).first()`;
+}
+
+/**
+ * Synthesise a flexible getByText locator with `.first()`. Used by N5b and
+ * any rule that asserts "page contains text X" — text often appears in
+ * multiple elements (heading + bold copy + paragraph) and strict mode would
+ * fail otherwise.
+ */
+function synthFlexibleTextLocator(pageVar: string, text: string): string {
+  return `${pageVar}.page.getByText(${JSON.stringify(text)}).first()`;
 }
