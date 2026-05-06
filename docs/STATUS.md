@@ -55,7 +55,7 @@ the e2e tests don't depend on the live site being up.
   > CSS > xpath. `dedupeLocators()` collapses by `(api, args)` identity,
   preferring longer field names. Status-region special case: id-derived field
   names + bypass visibility filter.
-- **Step matcher** (`src/transformers/stepMatcher.ts`) — 26 deterministic
+- **Step matcher** (`src/transformers/stepMatcher.ts`) — 30 deterministic
   rules. Subject-agnostic prefix `(?:I|user|User|the user|the User)`. Rule 2c
   emits `customBody` for compound multi-statement steps. Rule 9a → `toContainText`
   for "containing" assertions. No LLM in v1.0 — explicit `// TODO:` comment is

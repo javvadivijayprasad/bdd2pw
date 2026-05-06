@@ -218,15 +218,21 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N6 A 'X' button is visible", () => {
-    it("synthesises getByRole when POM lacks the field", () => {
+    it("synthesises cross-role locator when POM lacks the field (v1.1.3)", () => {
       const b = matchStep(
         step("Then", "A 'Log out' button is visible on the page"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("toBeVisible");
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Log out"');
+      // v1.1.3: cross-role + flexible-text synthesis to handle button-vs-link
+      // and "Logout" vs "Log out" mismatches.
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      // Spaces stripped before regex assembly: "Log out" → "Logout" → flexible regex
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("uses POM field if name matches an existing one", () => {
@@ -242,15 +248,18 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N7 No 'X' appears / No <noun> displayed", () => {
-    it("'No \\'Log out\\' button appears' → not.toBeVisible (synthesised getByRole)", () => {
+    it("'No \\'Log out\\' button appears' → not.toBeVisible (cross-role synthesis, v1.1.3)", () => {
       const b = matchStep(
         step("Then", "No 'Log out' button appears"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("not.toBeVisible");
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Log out"');
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("'No error messages are displayed' → not.toBeVisible against error field", () => {
@@ -366,16 +375,20 @@ describe("stepMatcher rules", () => {
   });
 
   describe("LLM-narrative — N6 unquoted role+name variant", () => {
-    it("'a Logout button is visible' (unquoted) → synthesises getByRole", () => {
+    it("'a Logout button is visible' (unquoted) → cross-role synthesis (v1.1.3)", () => {
       const b = matchStep(
         step("And", "a Logout button is visible"),
         pom,
         "loginPage",
       );
       expect(b.assertion?.matcher).toBe("toBeVisible");
-      // Test pom has no Logout field, so synthesise getByRole
-      expect(b.assertion?.locator).toContain('getByRole("button"');
-      expect(b.assertion?.locator).toContain('name: "Logout"');
+      // Test pom has no Logout field; synthesise cross-role locator with
+      // flexible regex so "Logout" matches both "Logout" and "Log out".
+      expect(b.assertion?.locator).toContain(
+        `locator("a, button, [role='button'], [role='link']")`,
+      );
+      expect(b.assertion?.locator).toContain("L\\\\s*o\\\\s*g\\\\s*o\\\\s*u\\\\s*t");
+      expect(b.assertion?.locator).toContain(".first()");
     });
 
     it("'A Login button is visible' (unquoted) → resolves to loginButton (POM has it)", () => {

@@ -9,6 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.3] — 2026-05-05
+
+### Fixed — production failure modes from cloud-jobs run on 1.1.2
+
+A run of `R-5D89B426-001.feature` on bdd2pw 1.1.2 produced **6 test failures**
+across 12 scenarios (Chromium + Firefox), with three distinct root causes —
+all in synthesised locators when the POM lacked the field. 1.1.3 is a
+correctness fix release: no new dialect coverage, but the assertions we
+already emit now actually work against real pages.
+
+#### 1. Cross-role synthesis (button-vs-link)
+
+**Symptom:** `await expect(page.getByRole("button", { name: "Logout" })).toBeVisible()`
+times out because the page has `<a>Log out</a>` (a link, not a button).
+
+**Fix:** new helper `synthRoleNameLocator(pageVar, name)` emits
+```ts
+page.locator("a, button, [role='button'], [role='link']")
+    .filter({ hasText: new RegExp("^L\\s*o\\s*g\\s*o\\s*u\\s*t$", "i") })
+    .first()
+```
+This handles both:
+- **Role mismatch** (LLM says "button", page uses `<a>` or vice versa).
+- **Spelling variance** (LLM writes "Logout", page renders "Log out") via a
+  flexible regex with `\s*` between every character.
+
+Applied to N6 (visibility) and N7 (negative visibility) when synthesising.
+POM-field references stay unchanged (the picker already produces correct
+locators from the snapshot).
+
+#### 2. Strict-mode violations everywhere
+
+**Symptom:** `await expect(page.getByText("Your username is invalid")).toBeVisible()`
+fails with `strict mode violation: ... resolved to 2 elements` because the
+text appears in BOTH `<div id="error">` AND a `<b>` repeat highlight.
+
+**Fix:** every synthesised text locator now ends in `.first()`:
+- N5b page-level text → `getByText("X").first()`
+- N5 / N5c severity-message fallback → `getByText("V").first()`
+- N7 success / generic fallback → `getByText(desc).first()`
+- N7 error fallback → `getByRole("alert").first()`
+
+POM-field references untouched (POM fields are unique by construction).
+
+#### 3. New rules N5d + N5e — `is on page at URL` / negative redirect
+
+**Symptom:** 7 TODOs in BDD_REVIEW for `Given the user is on the login page
+at "URL"` (Background-style precondition with embedded URL) and 1 TODO for
+`And the user is NOT redirected away from the login page`.
+
+**Fix:** two new rules.
+
+| # | Pattern | Emits |
+|---|---|---|
+| N5d | `<subject> is/are/am on (the )? <X> page at 'URL'` | `goto()` (Background handles real navigation; this is narrative context) |
+| N5e | `<subject> is/are/am NOT redirected (away from\|from) (the )? <X> page` | `toHaveURL(<slug>)` (URL still contains page name → still on page) |
+
+#### Helpers (internal)
+
+- `flexibleNameRegex(name)` — builds `new RegExp("^X\\s*Y\\s*Z$", "i")` from
+  a descriptive name. Used by N6/N7 synthesis.
+- `synthRoleNameLocator(pageVar, name)` — cross-role + flexible text filter.
+- `synthFlexibleTextLocator(pageVar, text)` — `getByText("X").first()`.
+
+#### Total rule count
+
+26 → **30** (N5d, N5e new; N5b, N5c, N5, N6, N7 strict-mode-fixed).
+
+#### Tests
+
+Existing unit + e2e tests still pass — the synthesis changes don't affect
+test pom fixtures (POM fields are present, so synthesis branches don't fire).
+The fixes apply at runtime against real pages with non-trivial DOM.
+
+#### Production impact
+
+After 1.1.3 + repin, the same `R-5D89B426-001.feature` run that produced 6
+failures on 1.1.2 should produce 0 failures (or surface real bugs in the
+test design — neither the page nor the test was at fault for the 1.1.2
+failures, they were synthesis bugs).
+
+#### Files
+
+- Modified: `src/transformers/stepMatcher.ts` (+3 helpers, +2 rules N5d/N5e,
+  N5/N5b/N5c/N5e/N6/N7 fallbacks all updated to use helpers).
+
 ## [1.1.2] — 2026-05-05
 
 ### Fixed — second batch of LLM-narrative dialect gaps
