@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.7] — 2026-05-07
+
+### Fixed — N5d 'is on page "URL"' (no 'at') fell through to TODO
+
+LLM produces three variants of the same Background-style precondition:
+
+```
+Given the user is on the login page                                   ← matched (N5d, 1.1.4)
+Given the user is on the login page at "https://example.com/login"    ← matched (N5d, 1.1.3)
+Given the user is on the login page "https://example.com/login"       ← TODO (1.1.6)
+```
+
+The third form — quoted URL appended directly without the word "at" — was
+dropping to TODO. No correctness impact in practice (cloud-jobs-template
+injects a clean `Given I am on the login page` Background at the top of
+every feature, which matched rule 1 → goto), but it filled
+`BDD_REVIEW.md` with noise that obscured real issues.
+
+Fix: inside N5d's optional URL group, the word "at" is now also optional:
+
+- Before: `(?:\s+at\s+["']([^"']+)["'])?`
+- After:  `(?:\s+(?:at\s+)?["']([^"']+)["'])?`
+
+All three forms above resolve to `goto()`.
+
+### Tests
+
+- `tests/unit/stepMatcher.test.ts` +1 test:
+  `the user is on the login page "URL"` → goto.
+  Existing `at "URL"` and bare-page tests still pass (regression).
+
 ## [1.1.6] — 2026-05-07
 
 ### Fixed — subject-less 'Enter "X" in the field' fell through to TODO

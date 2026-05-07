@@ -458,6 +458,18 @@ describe("stepMatcher rules", () => {
       );
       expect(b.pomCall?.method).toBe("goto");
     });
+
+    it("v1.1.7: 'the user is on the login page \"URL\"' (no 'at', URL appended directly) → goto", () => {
+      // LLM sometimes drops the word "at" between "page" and the quoted URL.
+      // Without v1.1.7, this fell to TODO. Background still navigates so tests
+      // still pass, but BDD_REVIEW.md filled with noise.
+      const b = matchStep(
+        step("Given", 'the user is on the login page "https://practicetestautomation.com/practice-test-login/"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("goto");
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────

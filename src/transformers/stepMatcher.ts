@@ -543,15 +543,19 @@ const RULES: Rule[] = [
     },
   },
 
-  // N5d. "<subject> is on (the)? <X> page" / "... at 'URL'" — Background-style
-  //      precondition. "at 'URL'" suffix is OPTIONAL (v1.1.4 — production hits
-  //      both forms, often without the URL part). Treated as goto() since
-  //      Background usually handles the actual navigation; the page name and
-  //      URL are just narrative context.
+  // N5d. "<subject> is on (the)? <X> page" / "... at 'URL'" / "... 'URL'" —
+  //      Background-style precondition. URL suffix is OPTIONAL, and within
+  //      the URL suffix the word "at" is also optional (v1.1.7). Three forms
+  //      observed in production:
+  //        "is on the login page"                 — narrative only
+  //        "is on the login page at 'URL'"        — with explicit "at"
+  //        "is on the login page 'URL'"           — quoted URL appended directly
+  //      All three resolve to goto() since Background usually handles the
+  //      actual navigation; the page name and URL are narrative context.
   //      Per design call (3): match it, don't fail.
   {
     pattern: new RegExp(
-      `^${SUBJ}\\s+(?:is|are|am)\\s+on\\s+(?:the\\s+)?(?:.+?)\\s+page(?:\\s+at\\s+["']([^"']+)["'])?\\s*$`,
+      `^${SUBJ}\\s+(?:is|are|am)\\s+on\\s+(?:the\\s+)?(?:.+?)\\s+page(?:\\s+(?:at\\s+)?["']([^"']+)["'])?\\s*$`,
       "i",
     ),
     build: (_m, step, pom, pageVar) => {
