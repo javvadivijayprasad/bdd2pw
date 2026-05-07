@@ -9,6 +9,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [1.1.6] — 2026-05-07
+
+### Fixed — subject-less 'Enter "X" in the field' fell through to TODO
+
+Rule 2a (Input with explicit value + field) required a `${SUBJ}` prefix
+(`I` / `User` / `the user`). Cloud-jobs-template runs against the LLM
+stack with cache OFF surfaced subject-less variants like:
+
+```
+When Enter 'student' in the username field
+And  Enter 'Password123' into the password field
+```
+
+These hit no rule and silently passed (no fill, no failure). Same fix
+shape as v1.1.5 applied to rule 2b — wrap `${SUBJ}` in
+`(?:${SUBJ}\s+)?` so all four shapes match equivalently.
+
+| Form | Status before 1.1.6 | Status after 1.1.6 |
+|---|---|---|
+| `I enter "alice" into the username field`   | ✅ rule 2a | ✅ rule 2a |
+| `User enters "alice" into the username field` | ✅ rule 2a | ✅ rule 2a |
+| `Enter 'alice' in the username field`         | ❌ TODO    | ✅ rule 2a |
+| `Enter "alice" into the password field`       | ❌ TODO    | ✅ rule 2a |
+
+### Fixed — descriptive parentheticals leaked into URL slug regexes
+
+Rules 10 (remains-on), 11b (redirected-to), N4 (URL doesn't change),
+and N5e (NOT redirected away) all slugify a captured page-name
+description into a URL regex. Production runs hit:
+
+```
+Then User is redirected to logged-in page (URL changes away from login page)
+And  user remains on login page (URL does not change away from login page)
+```
+
+The end-anchor `(?: page)?$` in those rules doesn't fire when the string
+ends in `)`, so the entire parenthetical was being captured as part of
+the description. Slug became
+`/logged-in[-_/]?page[-_/]?\(URL[-_/]?changes[-_/]?away.../`
+which never matches a real URL — assertion silently failed in a way that
+cucumber reported as pass-with-warning rather than actionable failure.
+
+Added `stripParentheticals()` helper and `cleanSlugTarget()` combiner
+that strips parentheticals + articles + trailing ` page`, applied to
+all four affected rules. Rule 11a (`(URL contains 'X')`) still runs
+first and still extracts authoritative URL fragments — only descriptive
+parentheticals fall through to the cleaned slugifier.
+
+### Tests
+
+- `tests/unit/stepMatcher.test.ts` +7 new tests under
+  `v1.1.6 — subject-less 'Enter ...'` and
+  `v1.1.6 — parenthetical prose in URL slug rules`:
+  - subject-less `Enter 'X' in the username field`
+  - subject-less `Enter "X" into the password field`
+  - regression: subject-prefixed `I enter "X" in ...` still matches
+  - rule 11b: parenthetical stripped, slug = `logged-in`
+  - rule 10: parenthetical stripped, slug = `login`
+  - rule N5e: parenthetical stripped, slug = `login`
+  - regression: rule 11a still wins for authoritative parentheticals
+
+### Why this matters
+
+Today's cloud-jobs-template runs went 14/14 → 2/8 between two
+consecutive runs of the same job because the LLM picked different
+phrasings (`in` vs `into`) and added descriptive parentheticals to
+redirect assertions. Pairing this release with TCG temperature=0 and
+re-enabled response cache should stabilise pass-rate run-to-run.
+
 ## [1.1.5] — 2026-05-05
 
 ### Fixed — subject-less compact 'enters password "X"' form

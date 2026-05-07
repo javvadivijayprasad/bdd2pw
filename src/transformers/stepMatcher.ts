@@ -118,8 +118,16 @@ const RULES: Rule[] = [
   },
 
   // 2a. Input with explicit value + field: 'I enter "alice" in(to) the username field'
+  //     v1.1.6 — SUBJ is optional. Real-world LLM output drops the subject
+  //     freely: `Enter 'student' in the username field` (no subject) is just
+  //     as common as `I enter 'student' into the username field`. Without
+  //     `(?:${SUBJ}\s+)?` the subject-less form fell to TODO and the test
+  //     silently passed without filling the field.
+  //
+  //     Both prepositions accepted: `in`, `into`, `in to`. The user-facing
+  //     prompt now says "into" is canonical, but the rule stays tolerant.
   {
-    pattern: new RegExp(`^${SUBJ} (?:enter|enters|type|types|fill|fills) ["']([^"']*)["'] (?:in|into|in to) (?:the )?(.+?)(?: field| input| box)?$`, "i"),
+    pattern: new RegExp(`^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) ["']([^"']*)["'] (?:in|into|in to) (?:the )?(.+?)(?: field| input| box)?$`, "i"),
     build: (m, step, pom, pageVar) => fillFieldBinding(step, pom, pageVar, m[2].trim(), m[1]),
   },
 
@@ -361,7 +369,12 @@ const RULES: Rule[] = [
     build: (m, step, _pom, pageVar) => {
       // v1.1.4: strip articles so "remain on a login page" → slug "login",
       // not "a[-_/]?login" which wouldn't match real URLs.
-      const target = stripArticles(m[1].trim());
+      // v1.1.6: also strip parentheticals — production hits
+      //   "user remains on login page (URL does not change away from login page)"
+      // The end-anchor `(?: page)?$` doesn't fire when the string ends in `)`,
+      // so without cleanSlugTarget the slug includes the parenthetical and
+      // never matches a real URL.
+      const target = cleanSlugTarget(m[1]);
       return {
         step,
         assertion: {
@@ -408,7 +421,12 @@ const RULES: Rule[] = [
       // v1.1.4: stripArticles fixes "redirected to a logged-in page" — without
       // this, slug becomes "a[-_/]?logged-in" which fails to match
       // /logged-in-successfully/ (URL has no "a" before "logged-in").
-      const target = stripArticles(m[1].trim());
+      // v1.1.6: also strip parentheticals — production hits
+      //   "User is redirected to logged-in page (URL changes away from login page)"
+      // 11a (URL contains 'X') would catch authoritative parentheticals; this
+      // one is descriptive prose and falls through to 11b. cleanSlugTarget
+      // handles both the parenthetical and the lingering inner ` page`.
+      const target = cleanSlugTarget(m[1]);
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -556,8 +574,8 @@ const RULES: Rule[] = [
       "i",
     ),
     build: (m, step, _pom, pageVar) => {
-      // v1.1.4: stripArticles
-      const target = stripArticles(m[1].trim());
+      // v1.1.4: stripArticles. v1.1.6: also stripParentheticals via cleanSlugTarget.
+      const target = cleanSlugTarget(m[1]);
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -671,8 +689,10 @@ const RULES: Rule[] = [
     pattern:
       /^(?:the )?URL does(?:n't| not) change(?:\s+to\s+(?:the )?(.+?))?(?:\s+page)?$/i,
     build: (m, step, _pom, pageVar) => {
-      // v1.1.4: stripArticles
-      const target = stripArticles((m[1] ?? "success").trim());
+      // v1.1.4: stripArticles. v1.1.6: also stripParentheticals via cleanSlugTarget
+      // for parity with rules 10/11b. Default "success" when the description is
+      // omitted entirely.
+      const target = cleanSlugTarget(m[1] ?? "success");
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -1034,6 +1054,36 @@ function stripArticles(s: string): string {
     .replace(/\s+(?:a|an|the)\s+/gi, " ")
     .replace(/\s+(?:a|an|the)\s*$/i, "")
     .trim();
+}
+
+/**
+ * Strip parenthetical commentary like `(URL changes away from login page)`
+ * from a description before slugifying it. v1.1.6 — production runs hit
+ * steps shaped like:
+ *   "Then User is redirected to logged-in page (URL changes away from login page)"
+ *   "And user remains on login page (URL does not change away from login page)"
+ * Without this strip, the parenthetical leaks into the URL regex slug as
+ *   /logged-in[-_/]?page[-_/]?\(URL[-_/]?changes[-_/]?away.../
+ * which never matches a real URL.
+ *
+ * Note: rule 11a (URL contains 'X') extracts the AUTHORITATIVE fragment from
+ * the parenthetical and runs first — descriptive parentheticals only reach
+ * rules 10/11b/N4/N5e via this strip.
+ */
+function stripParentheticals(s: string): string {
+  return s.replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Combined strip — articles + parentheticals + a trailing " page" word that
+ * survives because the rule's `(?: page)?$` end-anchor only matches at the
+ * end-of-string. After parentheticals are stripped, an inner ` page` may be
+ * left dangling. Used by every slugifying rule (10, 11b, N4, N5e).
+ */
+function cleanSlugTarget(s: string): string {
+  return stripArticles(
+    stripParentheticals(s).replace(/\s+page$/i, "").trim(),
+  );
 }
 
 /**

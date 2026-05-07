@@ -504,4 +504,99 @@ describe("stepMatcher rules", () => {
       expect(b.pomCall?.args).toEqual(['"secret"']);
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // v1.1.6 — rule 2a SUBJ optional + parenthetical stripping
+  // ──────────────────────────────────────────────────────────────────────
+  //
+  // Two production gaps surfaced when running cloud-jobs against the LLM
+  // stack with cache disabled:
+  //   1. Subject-less `Enter 'X' in the field` (rule 2a required SUBJ).
+  //   2. Descriptive parentheticals leaked into URL slugs in rules 10/11b/N4/N5e.
+  // Both made tests silently pass without doing anything.
+  describe("v1.1.6 — subject-less 'Enter 'X' in the field'", () => {
+    it("subject-less 'Enter 'student' in the username field' → usernameInput.fill", () => {
+      const b = matchStep(
+        step("When", "Enter 'student' in the username field"),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+      expect(b.pomCall?.args).toEqual(['"student"']);
+    });
+
+    it("subject-less 'Enter \"Password123\" into the password field' (preposition 'into')", () => {
+      const b = matchStep(
+        step("And", 'Enter "Password123" into the password field'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("passwordInput.fill");
+      expect(b.pomCall?.args).toEqual(['"Password123"']);
+    });
+
+    it("subject-prefixed 'I enter \"x\" in the username field' still works (regression)", () => {
+      const b = matchStep(
+        step("When", 'I enter "x" in the username field'),
+        pom,
+        "loginPage",
+      );
+      expect(b.pomCall?.method).toBe("usernameInput.fill");
+    });
+  });
+
+  describe("v1.1.6 — parenthetical prose in URL slug rules", () => {
+    it("rule 11b: 'redirected to logged-in page (URL changes away from login page)' → slug 'logged-in', NOT slug with parenthetical", () => {
+      const b = matchStep(
+        step(
+          "Then",
+          "User is redirected to logged-in page (URL changes away from login page)",
+        ),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      // Parenthetical and trailing ` page` should both be stripped before slugifying.
+      // Hyphen is not a regex metachar, so it stays unescaped in the slug.
+      expect(b.assertion?.expected).toBe('new RegExp("logged-in")');
+    });
+
+    it("rule 10: 'remains on login page (URL does not change away from login page)' → slug 'login'", () => {
+      const b = matchStep(
+        step(
+          "And",
+          "user remains on login page (URL does not change away from login page)",
+        ),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("login")');
+    });
+
+    it("rule N5e: 'is NOT redirected away from login page (URL ...)' → slug 'login'", () => {
+      const b = matchStep(
+        step(
+          "Then",
+          "user is NOT redirected away from login page (URL stays the same)",
+        ),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("login")');
+    });
+
+    it("rule 11a still wins for authoritative '(URL contains \"X\")' parentheticals (regression)", () => {
+      // 11a runs first; the parenthetical IS the authoritative URL fragment
+      // and 11a should grab it directly.
+      const b = matchStep(
+        step("Then", 'redirected to logged-in page (URL contains "/logged-in/")'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("/logged-in/")');
+    });
+  });
 });
