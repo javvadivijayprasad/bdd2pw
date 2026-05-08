@@ -9,6 +9,154 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [2.0.0] — 2026-05-08
+
+### Added — LLM fallback for unmatched steps
+
+When a Gherkin step doesn't match any of bdd2pw's 30 deterministic rules,
+v2.0 can defer to an LLM (Anthropic Claude) to produce the binding instead
+of dropping to TODO. Off by default — opt in with `--llm anthropic`.
+
+#### Why a major version bump
+
+This is the largest feature shipped since v1.0.0. Existing flags and
+emitter shapes are unchanged (no breaking API), but adding LLM coverage
+fundamentally changes what bdd2pw is: a deterministic scaffolder with an
+optional probabilistic safety net. The semver impact is more honest as a
+major bump than as 1.2.0.
+
+Existing rule-based behaviour is **identical** when `--llm` is off, so
+upgrading from 1.1.7 → 2.0.0 without `--llm` is a true no-op.
+
+#### How it works
+
+```
+                   matchStep (rules) ─┐
+                                      ├─→ binding ✓ (no LLM call)
+                                      │
+unmatched step ────────────────────────┤
+                                      │
+                   matchStepWithLLM ──┴─→ cache lookup
+                                              │
+                                              ├─→ hit  → cached binding ✓
+                                              │
+                                              └─→ miss → governance /sanitize
+                                                            │
+                                                            ├─→ Anthropic API
+                                                            │     (temp=0,
+                                                            │      JSON output)
+                                                            │
+                                                            ├─→ parse → StepBinding ✓
+                                                            │
+                                                            ├─→ cache
+                                                            │
+                                                            └─→ append to
+                                                                artefacts/
+                                                                candidate-rules.jsonl
+```
+
+Every successful LLM-binding is logged to
+`<repo>/artefacts/candidate-rules.jsonl` so a separate offline review
+pipeline can propose new deterministic rules. **Auto-write back into
+`stepMatcher.ts` is deferred to v2.1** — for v2.0 the LLM is a runtime
+overlay, never a code generator for the matcher itself. The review queue
+keeps a human in the loop on regex changes.
+
+#### New CLI flags
+
+| Flag | Purpose | Default |
+|---|---|---|
+| `--llm anthropic` | Enable LLM fallback (provider). v2.0 ships only Anthropic; OpenAI/Gemini in v2.1+. | off |
+| `--governance-url <url>` | ai-governance sidecar — sanitises prompts before they leave the perimeter. Fail-closed. | http://localhost:4900 |
+| `--llm-model <model>` | Override Anthropic model. | claude-sonnet-4-6 |
+| `--llm-max-calls <n>` | Cost guardrail per scaffold. Cache hits don't count. | 50 |
+| `--llm-cache <path>` | SQLite cache file. Pass `:memory:` for one-shot. | `<repo>/.bdd2pw/llm-cache.sqlite` |
+| `--llm-skip-governance` | Test-only escape hatch. Production runs MUST keep this off. | false |
+
+The `--governance-url` default changed from `http://localhost:8004` (the
+SCOPE.md guess) to `http://localhost:4900` (the actual port the sidecar
+runs on per `ai-governance/service/app.py`).
+
+#### Cost / determinism guardrails (must-have)
+
+- **SQLite cache** keyed by `hash(model + step text + POM signature)`. Same
+  inputs across runs return the same binding — cost goes to zero on
+  re-runs, plus determinism is restored despite the LLM being
+  non-deterministic by nature.
+- **Max-calls guard** stops a single scaffold from spending more than the
+  configured budget. Default 50.
+- **Temperature 0** at the provider call site — same input → same output
+  within Anthropic's deterministic guarantee.
+- **Soft-fail.** Any LLM error (rate limit, network, malformed JSON,
+  governance unreachable) returns the original rule-matcher warning with
+  the LLM error appended. The scaffold completes; the affected step lands
+  as `// TODO` in the spec.
+
+#### Governance integration
+
+Per SCOPE FR-10, the `ai-governance` sidecar's `/sanitize` endpoint
+scrubs every LLM prompt before it leaves the perimeter. v2.0
+**fail-closed** — if the sidecar is unreachable, the LLM call is REFUSED
+and the step falls back to TODO. We don't leak unsanitised payloads.
+
+A test-only `--llm-skip-governance` flag exists for unit tests where the
+prompt is synthetic and the sidecar isn't running. Production must NEVER
+use it.
+
+#### What `candidate-rules.jsonl` looks like
+
+```jsonl
+{"ts":"2026-05-08T11:42:00Z","scaffoldId":"scaffold-1715169720000-x7k2","stepText":"the user activates the boost mode","stepKeyword":"When","binding":{"step":{"keyword":"When","text":"the user activates the boost mode"},"pomCall":{"page":"loginPage","method":"boostButton.click","args":[]}},"pomSignature":{"className":"LoginPage","fieldNames":["usernameInput","passwordInput","boostButton"],"methodNames":[]},"provider":"anthropic","model":"claude-sonnet-4-6","fromCache":false}
+```
+
+The offline review pipeline (separate repo, not part of bdd2pw) consumes
+these to propose new rules via PR.
+
+#### What's NOT in v2.0
+
+- **OpenAI / Gemini providers** — v2.1.
+- **Auto-write rules back to `stepMatcher.ts`** — v2.1+. Risk of regex
+  collisions with existing rules; needs a corpus and a regression-test
+  framework first. Review queue is the safe interim.
+- **LLM streaming responses** — bindings are tiny (a few hundred tokens),
+  no need.
+- **Multi-tenant key management** — single API key per process via
+  `ANTHROPIC_API_KEY` env var.
+- **Auto-promote frequently-cached entries to deterministic rules** —
+  v2.1 stretch.
+
+#### Files
+
+- New: `src/llm/types.ts`, `src/llm/prompt.ts`, `src/llm/cache.ts`,
+  `src/llm/candidateRules.ts`, `src/llm/governanceClient.ts` (replaces
+  Phase-4 stub), `src/llm/anthropicClient.ts`,
+  `src/llm/llmStepMatcher.ts`, `src/llm/index.ts`.
+- New: `tests/unit/llm.test.ts` — MockLLMClient + parseBindingJson +
+  matchStepWithLLM coverage.
+- Modified: `src/types.ts` (`ScaffoldOptions.llmConfig`), `src/cli.ts`
+  (5 new flags + actual wiring), `src/index.ts` (scaffold() now async-iterates
+  steps when an LLM client is present).
+
+#### Migration from 1.1.x
+
+Upgrade is no-op when `--llm` is unset. The legacy top-level `llm` field
+on `ScaffoldOptions` is kept for backwards compatibility — passing
+`{ llm: "anthropic" }` to the programmatic API now wires up a real LLM
+client (it was previously a no-op).
+
+To enable in cloud-jobs-template:
+
+```bash
+bdd2pw scaffold ./feature.feature \
+  --url https://app.example.com \
+  --page LoginPage \
+  --repo ./out \
+  --llm anthropic \
+  --governance-url http://localhost:4900
+```
+
+Make sure `ANTHROPIC_API_KEY` is set in the runner's environment.
+
 ## [1.1.7] — 2026-05-07
 
 ### Fixed — N5d 'is on page "URL"' (no 'at') fell through to TODO

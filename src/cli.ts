@@ -35,12 +35,16 @@ program
     "--no-discovery",
     "Skip page discovery entirely (rule-only probing). Field-referencing rules will fall to TODO.",
   )
-  .option("--llm <provider>", "Enable LLM fallback: anthropic | openai | gemini")
+  .option("--llm <provider>", "Enable LLM fallback for unmatched steps. v2.0: only 'anthropic' wired; openai/gemini land in v2.1.")
   .option(
     "--governance-url <url>",
-    "ai-governance sidecar URL",
-    "http://localhost:8004",
+    "ai-governance sidecar URL — every prompt is sanitised here before leaving the perimeter (fail-closed).",
+    "http://localhost:4900",
   )
+  .option("--llm-model <model>", "Override the LLM model (default: claude-sonnet-4-6 for anthropic).")
+  .option("--llm-max-calls <n>", "Max LLM provider calls per scaffold. Default 50. Cache hits don't count.", "50")
+  .option("--llm-cache <path>", "SQLite cache path. Default <repo>/.bdd2pw/llm-cache.sqlite. Use ':memory:' for one-shot.")
+  .option("--llm-skip-governance", "DO NOT USE in production — bypass the sidecar sanitisation step. Test-only escape hatch.", false)
   .option("--templates <dir>", "Override default project template directory")
   .option("--dry-run", "Print plan, write nothing", false)
   .option("--no-validate", "Skip tsc --noEmit step")
@@ -53,6 +57,22 @@ program
   )
   .action(async (feature: string, opts) => {
     try {
+      // v2.0 — wire the actual LLM config when --llm is passed. The legacy
+      // top-level `llm` field stays for backwards compat; `llmConfig` is the
+      // real one used by scaffold().
+      const llmConfig =
+        opts.llm === "anthropic"
+          ? {
+              provider: "anthropic" as const,
+              model: opts.llmModel,
+              governanceUrl: opts.governanceUrl,
+              maxCalls: opts.llmMaxCalls
+                ? Number(opts.llmMaxCalls)
+                : undefined,
+              cachePath: opts.llmCache,
+              skipGovernance: opts.llmSkipGovernance,
+            }
+          : undefined;
       const result = await scaffold({
         feature: path.resolve(feature),
         url: opts.url,
@@ -62,6 +82,7 @@ program
         storageState: opts.storageState,
         headed: opts.headed,
         llm: opts.llm,
+        llmConfig,
         governanceUrl: opts.governanceUrl,
         templates: opts.templates,
         dryRun: opts.dryRun,

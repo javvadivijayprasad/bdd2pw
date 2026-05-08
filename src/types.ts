@@ -138,6 +138,38 @@ export interface ScaffoldOptions {
    */
   snapshotFile?: string;
   /**
+   * LLM fallback (v2.0+) — when a Gherkin step doesn't match any
+   * deterministic rule, defer to an LLM to produce the binding. Off by
+   * default. Every successful binding is appended to
+   * `<repo>/artefacts/candidate-rules.jsonl` for offline review (v2.0)
+   * or auto-rule-write (v2.1+, deferred).
+   *
+   * - `provider`: "anthropic" (only provider in v2.0). v2.1+ will add
+   *   "openai" and "gemini". The legacy `llm` flag in scaffold options
+   *   already accepts these strings; pass it through.
+   * - `model`: override the default model. Default for Anthropic is
+   *   claude-sonnet-4-6.
+   * - `apiKey`: API key for the provider. Defaults to
+   *   `process.env.ANTHROPIC_API_KEY` when omitted.
+   * - `governanceUrl`: ai-governance sidecar URL. Default
+   *   http://localhost:4900. The sidecar's /sanitize endpoint scrubs
+   *   every prompt before it leaves the perimeter (fail-closed).
+   * - `maxCalls`: max LLM calls per scaffold. Default 50.
+   * - `cachePath`: SQLite cache file. Default
+   *   `<repo>/.bdd2pw/llm-cache.sqlite`. Pass ":memory:" for tests.
+   * - `skipGovernance`: ONLY for tests. When true, prompts skip the
+   *   sidecar. Production runs MUST keep this off.
+   */
+  llmConfig?: {
+    provider: "anthropic";
+    model?: string;
+    apiKey?: string;
+    governanceUrl?: string;
+    maxCalls?: number;
+    cachePath?: string;
+    skipGovernance?: boolean;
+  };
+  /**
    * Enable self-healing locator integration (v1.1+).
    *
    * When true:

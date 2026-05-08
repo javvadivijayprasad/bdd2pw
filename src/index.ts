@@ -32,6 +32,12 @@ import { writeReviewReport } from "./reports/reviewReport";
 import { camelCase } from "./utils/naming";
 import { pageObjectFileName, renderLocatorExpr } from "@vijaypjavvadi/pw-emit";
 import { logger } from "./utils/logger";
+import {
+  CandidateRulesWriter,
+  createLLMClient,
+  matchStepWithLLM,
+  type LLMClient,
+} from "./llm";
 
 /**
  * Field names we never count as "missing" on a POM, because they're
@@ -199,31 +205,64 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     });
   }
 
-  // 7) Re-match steps now that the final POM is known
+  // 7) Re-match steps now that the final POM is known.
+  //    v2.0: when --llm is set, each step that no rule matched is offered
+  //    to the LLM (see src/llm/llmStepMatcher.ts). Every LLM-generated
+  //    binding lands in artefacts/candidate-rules.jsonl for offline review.
+  const llm: LLMClient | undefined = createLLMClient(
+    opts.llmConfig,
+    opts.repo,
+  );
+  const candidates = llm
+    ? new CandidateRulesWriter(opts.repo)
+    : undefined;
+  const scaffoldId = `scaffold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const llmCtx = { llm, candidates, scaffoldId, url: opts.url };
+
   const finalBindingsByScenario: { name: string; bindings: StepBinding[] }[] = [];
   for (const scenario of feature.scenarios) {
-    const bindings = scenario.steps.map((s) => matchStep(s, finalPom, pageVar));
+    const bindings: StepBinding[] = [];
+    for (const s of scenario.steps) {
+      bindings.push(await matchStepWithLLM(s, finalPom, pageVar, llmCtx));
+    }
     finalBindingsByScenario.push({ name: scenario.name, bindings });
   }
-  const beforeEachBindings = (feature.background ?? []).map((s) =>
-    matchStep(s, finalPom, pageVar),
-  );
+  const beforeEachBindings: StepBinding[] = [];
+  for (const s of feature.background ?? []) {
+    beforeEachBindings.push(await matchStepWithLLM(s, finalPom, pageVar, llmCtx));
+  }
 
-  // Outline scenarios — flatten Examples into one test per row
+  // Outline scenarios — flatten Examples into one test per row.
   const flattened: { name: string; bindings: StepBinding[] }[] = [];
   for (const scenario of feature.scenarios) {
     if (scenario.examples && scenario.examples.length > 0) {
       for (const row of scenario.examples) {
-        const expanded = scenario.steps.map((step) => {
+        const expanded: StepBinding[] = [];
+        for (const step of scenario.steps) {
           const text = substituteOutlinePlaceholders(step.text, row);
-          return matchStep({ ...step, text }, finalPom, pageVar);
-        });
+          expanded.push(
+            await matchStepWithLLM(
+              { ...step, text },
+              finalPom,
+              pageVar,
+              llmCtx,
+            ),
+          );
+        }
         const labels = Object.entries(row).map(([k, v]) => `${k}=${v}`).join(", ");
         flattened.push({ name: `${scenario.name} [${labels}]`, bindings: expanded });
       }
     } else {
       flattened.push(finalBindingsByScenario.find((s) => s.name === scenario.name)!);
     }
+  }
+
+  // Log LLM usage stats so the operator sees what got LLM-matched.
+  if (llm) {
+    reviewItems.push({
+      severity: "info",
+      message: `LLM fallback: ${llm.callsMade()} provider call(s) made (max ${opts.llmConfig?.maxCalls ?? 50}). Cached bindings counted as 0 calls.`,
+    });
   }
 
   for (const sc of flattened) {
@@ -312,6 +351,9 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     { filesWritten: filesWritten.length, reviewItems: reviewItems.length, tscErrorCount },
     "scaffold complete",
   );
+
+  // Close the SQLite cache handle if we opened one.
+  if (llm?.close) await llm.close().catch(() => undefined);
 
   return { filesWritten, reviewItems, tscErrorCount, reviewReportPath };
 }
