@@ -9,6 +9,197 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [2.0.2] — 2026-05-08
+
+### Fixed — cache-load failure aborted entire LLM fallback (HIGH, launch-blocker)
+
+When `better-sqlite3`'s native binding failed to load (the classic
+`NODE_MODULE_VERSION` mismatch in cloud-jobs runs — Playwright base
+image with Node 18 trying to use a Node 22-prebuilt binary), bdd2pw
+2.0.0 / 2.0.1 silently aborted **the entire `--llm` feature**:
+
+- LLM provider was never called.
+- Counter showed `0 successful / 0 attempted`.
+- Every unmatched step landed as a `// TODO:` with the cache-load
+  error in the warning text.
+
+**Root cause:** `openSqliteCache` only wrapped `require("better-sqlite3")`
+in try/catch. The actual native binding loads when the SQLite
+constructor runs (`sqlite(cachePath)`), and THAT call's failure escaped
+the catch, propagated up through `ensureCache()` → `generateBinding()`
+→ `matchStepWithLLM`, and was caught only by the outer "LLM fallback
+threw" annotation. The fallback in-memory cache never got installed.
+
+**Fix:** the try/catch in `src/llm/cache.ts` now wraps the FULL SQLite
+setup — `require`, `ensureDir`, constructor call, pragma, schema, all
+prepared statements. ANY failure falls back to `InMemoryCache`. The
+function now returns `{ cache, persistent, fallbackReason }` so callers
+can surface the degradation once per scaffold instead of once per step.
+
+```ts
+// Before (2.0.0/2.0.1):
+let sqlite: any;
+try { sqlite = require("better-sqlite3"); } catch { return new InMemoryCache(); }
+const db = sqlite(cachePath);  // ← ESCAPED THE CATCH ON NATIVE BINDING FAILURE
+
+// After (2.0.2):
+try {
+  const sqlite = require("better-sqlite3");
+  await fs.ensureDir(...);
+  const db = sqlite(cachePath);
+  db.pragma(...); db.exec(...);
+  // ... full setup ...
+  return { cache: realCache, persistent: true };
+} catch (err) {
+  return { cache: new InMemoryCache(), persistent: false, fallbackReason: err.message };
+}
+```
+
+### Added — cache-fallback warning surfaced in BDD_REVIEW.md
+
+When the SQLite cache falls back to in-memory, scaffold() now adds a
+`[warn]` review item with the underlying reason and a remediation
+suggestion (`npm rebuild better-sqlite3 --build-from-source`).
+Operators can see at a glance that the cache isn't durable for this
+run, instead of silently re-paying full LLM cost on every retry.
+
+```
+[warn] LLM cache backend unavailable — fell back to in-memory cache
+       for this run. Underlying reason: The module ... was compiled
+       against a different Node.js version using NODE_MODULE_VERSION
+       127. This version of Node.js requires NODE_MODULE_VERSION 115.
+       Bindings won't persist across runs; every scaffold pays full
+       LLM cost.
+       [suggestion] Run `npm rebuild better-sqlite3 --build-from-source`
+       in the consumer repo, OR ensure the prebuild matches the
+       runtime Node version (NODE_MODULE_VERSION).
+```
+
+The warning fires ONCE per scaffold (not per LLM call) — `cachePersistent`
+is cached on the AnthropicLLMClient after the first `ensureCache()` call.
+
+### Added — `LLMClient.cacheBackendPersistent()` and `cacheBackendFallbackReason()`
+
+Two new optional methods on the `LLMClient` interface. The scaffold
+review-item generator uses them to drive the warning above. Mock LLM
+clients in user tests don't need to implement them (optional).
+
+### Tests
+
+- New: `tests/unit/cacheGracefulDegradation.test.ts` — three cases:
+  - `better-sqlite3` mocked to throw the exact NODE_MODULE_VERSION
+    error from production. Asserts: openSqliteCache returns
+    `persistent: false`, the cache is `InMemoryCache`, fallbackReason
+    is populated and is a single line.
+  - The fallback InMemoryCache supports get/set/size/close normally.
+  - `:memory:` short-circuit still works (no SQLite load attempt).
+
+### Files
+
+- Modified: `src/llm/cache.ts` (try/catch broadened; new `OpenCacheResult`
+  return shape), `src/llm/anthropicClient.ts` (cache fallback state
+  tracking + new accessors), `src/llm/types.ts` (interface additions),
+  `src/index.ts` (review-item warning).
+- New: `tests/unit/cacheGracefulDegradation.test.ts`.
+
+### Production impact
+
+Before 2.0.2, any environment where `better-sqlite3` couldn't load the
+native binding got **0% LLM coverage** despite paying for the API key,
+the governance sidecar, and the deployment plumbing. After 2.0.2, the
+LLM works in the same environment with bindings stored in-memory for
+the duration of the scaffold run. Cache durability across runs is the
+only thing lost; cost goes up but nothing breaks.
+
+### Migration from 2.0.x
+
+Pure bug fix — no API change. Just bump the dep pin.
+
+After 2.0.2 lands, cloud-jobs-template can drop the `npm rebuild
+better-sqlite3 --build-from-source` workaround (still useful for
+performance — re-running the same .feature gets free cache hits — but
+no longer required for correctness).
+
+## [2.0.1] — 2026-05-08
+
+### Fixed — multi-line LLM errors broke `.spec.ts` parse (HIGH)
+
+A multi-line error message bubbling up from the LLM fallback was being
+embedded into a `// TODO: ...` single-line comment without escaping, so
+only the first line carried the `//` prefix and lines 2-N became parsed
+as TypeScript. Result: `SyntaxError: Missing semicolon`, zero tests
+collected.
+
+**Reproduction (from cloud-jobs-template):**
+
+1. Playwright base image with Node 18 (`NODE_MODULE_VERSION` 115).
+2. `better-sqlite3@^11.0.0`'s npm-published prebuild targets Node 22
+   (`NODE_MODULE_VERSION` 127) — incompatible.
+3. The cache backend throws on load with a 5-line error.
+4. That error string flows into a `// TODO:` comment.
+5. The 4 trailing lines fall outside the comment → spec is unparseable.
+
+**Fix:** new `flattenForComment(s: unknown): string` helper in
+`src/utils/commentSafe.ts`. Collapses CR/LF runs into ` | ` separators,
+trims, returns a single-line string safe for embedding inside a
+`// ...` TS comment.
+
+Applied at three sites:
+
+1. `src/llm/llmStepMatcher.ts` — when LLM `result.error` is non-null.
+2. `src/llm/llmStepMatcher.ts` — when `generateBinding()` itself throws.
+3. `src/emitters/facade.ts` — defensively, before EVERY `// TODO:` line
+   gets emitted. This is the belt-and-suspenders catch — any future code
+   path that ever puts a multi-line warning into `StepBinding.warning`
+   is also covered.
+
+```ts
+// Before:
+out.push(`// TODO: ${b.warning ?? "no rule matched this step"}`);
+// After:
+const safeWarning = flattenForComment(b.warning ?? "no rule matched this step");
+out.push(`// TODO: ${safeWarning}`);
+```
+
+### Fixed — LLM call counter only counted successes
+
+`LLM fallback: 0 provider call(s) made` was being logged even when the
+fallback attempted (and failed) on every step. Counter only incremented
+on a parsed binding. Operators couldn't tell from the scaffold log
+whether the LLM was being called at all.
+
+**Fix:** new `attemptsCounter` increments BEFORE the `await` to provider.
+Budget enforcement now runs against attempts (so a run hitting 50
+consecutive failures stops, instead of looping forever). The scaffold
+review-item line now reads:
+
+```
+LLM fallback: 7 successful / 9 attempted (2 failed), max 50. Cache hits counted as 0.
+```
+
+`LLMClient.callsAttempted()` is a new optional method on the interface;
+older callers keep working unchanged.
+
+### Tests
+
+- New: `tests/unit/commentSafe.test.ts` — 8 cases including the exact
+  better-sqlite3 mismatch error from the cloud-jobs report.
+- Extended: `tests/unit/llm.test.ts` — two new cases that script
+  multi-line errors through both the `result.error` path and the
+  `throw` path; assert the resulting `StepBinding.warning` has zero
+  newlines.
+
+### Files
+
+- New: `src/utils/commentSafe.ts`, `tests/unit/commentSafe.test.ts`.
+- Modified: `src/llm/llmStepMatcher.ts`, `src/llm/anthropicClient.ts`,
+  `src/llm/types.ts`, `src/emitters/facade.ts`, `src/index.ts`,
+  `tests/unit/llm.test.ts`.
+
+### Migration from 2.0.0
+
+Pure bug fix — no API change. Just bump the dep pin.
+
 ## [2.0.0] — 2026-05-08
 
 ### Added — LLM fallback for unmatched steps

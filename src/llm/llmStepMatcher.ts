@@ -15,6 +15,7 @@
 
 import { matchStep } from "../transformers/stepMatcher";
 import type { PageObjectIR, StepBinding, StepIR } from "../types";
+import { flattenForComment } from "../utils/commentSafe";
 import { CandidateRulesWriter } from "./candidateRules";
 import type { LLMClient } from "./types";
 
@@ -60,10 +61,14 @@ export async function matchStepWithLLM(
     if (!result.binding) {
       // Annotate the warning with the LLM error so BDD_REVIEW shows why
       // the LLM didn't help. The step still falls through to TODO.
+      // v2.0.1: flattenForComment collapses any newlines in the error so
+      // the resulting `// TODO: ...` line stays a single comment.
+      // Multi-line stack traces (e.g. native-module load failures) used
+      // to bleed past the `//` and break the .spec.ts parse.
       return {
         ...ruleBased,
         warning: result.error
-          ? `${ruleBased.warning} (LLM fallback also failed: ${result.error})`
+          ? `${ruleBased.warning} (LLM fallback also failed: ${flattenForComment(result.error)})`
           : ruleBased.warning,
       };
     }
@@ -87,7 +92,12 @@ export async function matchStepWithLLM(
     }
     return result.binding;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // v2.0.1: flattenForComment so multi-line error messages (the classic
+    // case: better-sqlite3 NODE_MODULE_VERSION mismatch — a 5-line stack
+    // trace) don't bleed past the `//` in the emitted spec.
+    const message = flattenForComment(
+      err instanceof Error ? err.message : err,
+    );
     return {
       ...ruleBased,
       warning: `${ruleBased.warning} (LLM fallback threw: ${message})`,

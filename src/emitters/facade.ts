@@ -25,6 +25,7 @@ import type {
   ReviewItem,
 } from "../types";
 import { camelCase } from "../utils/naming";
+import { flattenForComment } from "../utils/commentSafe";
 
 export class EmitterConsistencyError extends Error {
   constructor(message: string) {
@@ -154,7 +155,14 @@ function bindingsToBody(bindings: StepBinding[], prelude: string[] = []): string
         `await expect(${b.assertion.locator}).${b.assertion.matcher}(${expected});`,
       );
     } else {
-      lines.push(`// TODO: ${b.warning ?? "no rule matched this step"}`);
+      // v2.0.1 — defensively flatten the warning so any newlines in error
+      // messages (e.g. multi-line stack traces from LLM provider errors,
+      // native module load failures) don't bleed past the `//` and break
+      // the .spec.ts parse.
+      const safeWarning = flattenForComment(
+        b.warning ?? "no rule matched this step",
+      );
+      lines.push(`// TODO: ${safeWarning}`);
     }
     lines.push("");
   }

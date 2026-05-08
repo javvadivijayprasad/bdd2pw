@@ -258,11 +258,45 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   }
 
   // Log LLM usage stats so the operator sees what got LLM-matched.
+  // v2.0.1: surface ATTEMPTS not just SUCCESSES — a run that "made 0
+  // calls" but actually attempted 17 (all failing on a bad API key, a
+  // dead governance sidecar, a missing better-sqlite3 native binding,
+  // etc.) was previously invisible from the scaffold log.
+  // v2.0.2: also surface cache-backend fallback once per scaffold so a
+  // NODE_MODULE_VERSION mismatch (or any other cache-load failure) is
+  // visible in BDD_REVIEW.md — not silently buried in heal-events or
+  // missed entirely.
   if (llm) {
+    const succeeded = llm.callsMade();
+    const attempted = llm.callsAttempted ? llm.callsAttempted() : succeeded;
+    const failed = attempted - succeeded;
+    const max = opts.llmConfig?.maxCalls ?? 50;
+    const failPart = failed > 0 ? ` (${failed} failed)` : "";
     reviewItems.push({
       severity: "info",
-      message: `LLM fallback: ${llm.callsMade()} provider call(s) made (max ${opts.llmConfig?.maxCalls ?? 50}). Cached bindings counted as 0 calls.`,
+      message: `LLM fallback: ${succeeded} successful / ${attempted} attempted${failPart}, max ${max}. Cache hits counted as 0.`,
     });
+
+    // v2.0.2 — cache backend status. We check `=== false` (not falsy) so
+    // the null "not yet initialised" case (no LLM calls were made because
+    // every step matched a rule) doesn't produce a noisy false alarm.
+    const persistent = llm.cacheBackendPersistent
+      ? llm.cacheBackendPersistent()
+      : null;
+    if (persistent === false) {
+      const reason = llm.cacheBackendFallbackReason
+        ? llm.cacheBackendFallbackReason()
+        : undefined;
+      reviewItems.push({
+        severity: "warn",
+        message:
+          "LLM cache backend unavailable — fell back to in-memory cache for this run." +
+          (reason ? ` Underlying reason: ${reason}.` : "") +
+          " Bindings won't persist across runs; every scaffold pays full LLM cost.",
+        suggestion:
+          "Run `npm rebuild better-sqlite3 --build-from-source` in the consumer repo, OR ensure the prebuild matches the runtime Node version (NODE_MODULE_VERSION).",
+      });
+    }
   }
 
   for (const sc of flattened) {

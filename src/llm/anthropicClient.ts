@@ -51,7 +51,15 @@ export class AnthropicLLMClient implements LLMClient {
   private cache: BindingCache | null = null;
   private cachePath: string;
   private callsCounter = 0;
+  private attemptsCounter = 0;
   private anthropic: any | null = null; // lazy-loaded SDK instance
+  /**
+   * v2.0.2 — when SQLite cache fails to load, we fall back to an
+   * in-memory cache and surface this once. `cacheFallbackReason` carries
+   * the load error so callers can log it.
+   */
+  private cachePersistent: boolean | null = null;
+  private cacheFallbackReason: string | undefined;
 
   constructor(opts: LLMClientOptions, cachePathDefault: string) {
     this.model = opts.model ?? DEFAULT_MODEL;
@@ -67,16 +75,50 @@ export class AnthropicLLMClient implements LLMClient {
 
   async ensureCache(): Promise<BindingCache> {
     if (!this.cache) {
-      this.cache = await openSqliteCache(this.cachePath);
+      // v2.0.2: openSqliteCache no longer throws — on any failure it
+      // falls back to in-memory and surfaces the reason. We stash the
+      // result so callers / scaffold() can log a single warning instead
+      // of one per LLM call.
+      const result = await openSqliteCache(this.cachePath);
+      this.cache = result.cache;
+      this.cachePersistent = result.persistent;
+      this.cacheFallbackReason = result.fallbackReason;
+      if (!result.persistent && result.fallbackReason) {
+        this.log({
+          kind: "error",
+          phase: "cache_load",
+          message: `Cache backend unavailable, falling back to in-memory for this run. Reason: ${result.fallbackReason}`,
+        });
+      }
     }
     return this.cache;
   }
 
   budgetExhausted(): boolean {
-    return this.callsCounter >= this.maxCalls;
+    // Budget is enforced against ATTEMPTS, not just successes — otherwise a
+    // run that hits 50 consecutive failures would loop forever trying.
+    return this.attemptsCounter >= this.maxCalls;
   }
+  /** Successful provider responses (parseable bindings). */
   callsMade(): number {
     return this.callsCounter;
+  }
+  /** All provider call attempts, including failures. */
+  callsAttempted(): number {
+    return this.attemptsCounter;
+  }
+  /**
+   * v2.0.2 — true when the SQLite cache loaded successfully, false when
+   * we degraded to in-memory. `null` until ensureCache() is called for
+   * the first time. Callers can use this to print a one-time warning at
+   * the end of a scaffold run.
+   */
+  cacheBackendPersistent(): boolean | null {
+    return this.cachePersistent;
+  }
+  /** v2.0.2 — when persistent is false, the underlying load error string. */
+  cacheBackendFallbackReason(): string | undefined {
+    return this.cacheFallbackReason;
   }
 
   async generateBinding(
@@ -160,6 +202,10 @@ export class AnthropicLLMClient implements LLMClient {
     let responseText = "";
     let inputTokens = 0;
     let outputTokens = 0;
+    // v2.0.1 — count the ATTEMPT before the await. A failed call still cost
+    // a round-trip + tokens at the provider; operators need to see them in
+    // the scaffold log to debug "LLM fallback: 0 successful / N attempted".
+    this.attemptsCounter += 1;
     try {
       this.log({
         kind: "provider_call_start",

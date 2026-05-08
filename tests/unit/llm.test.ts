@@ -250,6 +250,59 @@ describe("matchStepWithLLM", () => {
     expect(llm.callsMade()).toBe(0);
   });
 
+  it("v2.0.1 — flattens multi-line LLM errors so the // TODO stays a single comment", async () => {
+    // The exact bug from the cloud-jobs report: better-sqlite3 module-mismatch
+    // throws a 5-line error message. Without flattening, only the first line
+    // gets the // prefix and lines 2-5 become parsed as TypeScript.
+    const llm = new MockLLMClient();
+    const fakeStep = step("Given", "the user has a valid login token");
+    llm.scriptError(
+      fakeStep.text,
+      "The module './better_sqlite3.node'\nwas compiled against a different Node.js version using\nNODE_MODULE_VERSION 127. This version of Node.js requires\nNODE_MODULE_VERSION 115. Please try re-compiling.",
+    );
+    const out = await matchStepWithLLM(fakeStep, pom, "loginPage", {
+      llm,
+      candidates: writer,
+      scaffoldId: "test",
+    });
+    // The warning is a single line — newlines collapsed to ` | ` separators.
+    expect(out.warning).toBeTruthy();
+    expect(out.warning).not.toContain("\n");
+    expect(out.warning).toContain(" | ");
+    expect(out.warning).toContain("LLM fallback also failed");
+  });
+
+  it("v2.0.1 — flattens multi-line caught exceptions thrown from generateBinding", async () => {
+    // When generateBinding itself throws (rather than returning {error}),
+    // the catch block also has to flatten. Most likely cause in production:
+    // better-sqlite3 throws DURING module load, before the AnthropicLLMClient
+    // even gets the chance to return a result object.
+    class ThrowingLLM implements LLMClient {
+      budgetExhausted() {
+        return false;
+      }
+      callsMade() {
+        return 0;
+      }
+      async generateBinding(): Promise<GenerateBindingResult> {
+        throw new Error(
+          "line1 of stack\nline2 of stack\nline3 with backticks `npm install`",
+        );
+      }
+    }
+    const out = await matchStepWithLLM(
+      step("Given", "an unmatched step"),
+      pom,
+      "loginPage",
+      { llm: new ThrowingLLM(), candidates: writer, scaffoldId: "test" },
+    );
+    expect(out.warning).toBeTruthy();
+    expect(out.warning).not.toContain("\n");
+    expect(out.warning).toContain("LLM fallback threw");
+    expect(out.warning).toContain("line1 of stack");
+    expect(out.warning).toContain("line3 with backticks");
+  });
+
   it("appends one candidate-rules entry per LLM success", async () => {
     const llm = new MockLLMClient();
     const stepA = step("When", "alpha-step that no rule covers");

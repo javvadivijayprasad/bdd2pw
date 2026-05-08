@@ -99,8 +99,24 @@ export interface LLMClient {
   generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult>;
   /** Have we hit the max-calls budget for this scaffold? */
   budgetExhausted(): boolean;
-  /** Calls made so far. */
+  /** Successful provider responses (parsed bindings). */
   callsMade(): number;
+  /**
+   * All provider call attempts including failures (v2.0.1+). Optional
+   * for backwards compat — older clients return undefined and callers
+   * should fall back to `callsMade()` for their stats line.
+   */
+  callsAttempted?(): number;
+  /**
+   * v2.0.2+ — null until first generateBinding(), then true if the
+   * persistent SQLite cache loaded, false if we fell back to in-memory
+   * (native binding mismatch, missing module, fs error, etc.). Callers
+   * surface this in the scaffold review report so operators know cache
+   * isn't durable across runs.
+   */
+  cacheBackendPersistent?(): boolean | null;
+  /** v2.0.2+ — when persistent is false, the underlying load reason. */
+  cacheBackendFallbackReason?(): string | undefined;
   /** Close any underlying resources (cache db handle, etc.). */
   close?(): Promise<void>;
 }
