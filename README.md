@@ -58,6 +58,84 @@ npx playwright test
 
 That's it. `./my-tests` now has `pages/login.page.ts`, `tests/login.spec.ts`, `playwright.config.ts`, `package.json`, `tsconfig.json`, `.gitignore`, and `BDD_REVIEW.md`.
 
+## LLM fallback (v2.0+)
+
+When a Gherkin step doesn't match any of bdd2pw's 30 deterministic rules, you can opt-in to an Anthropic-backed LLM fallback that produces the binding instead of dropping to `// TODO`. Off by default.
+
+```bash
+# Anthropic API key — required when --llm anthropic is set
+export ANTHROPIC_API_KEY=sk-ant-api03-...
+
+bdd2pw scaffold ./my.feature \
+  --url https://app.example.com \
+  --page LoginPage \
+  --repo ./out \
+  --llm anthropic \
+  --governance-url http://localhost:4900
+```
+
+Every successful LLM-binding is appended to `<repo>/artefacts/candidate-rules.jsonl` so an offline review pipeline can propose new deterministic rules. Auto-write back to `stepMatcher.ts` is deferred to v2.1+ — for v2.0 the LLM is a runtime overlay, never a code generator for the matcher itself.
+
+### Governance sanitization (mandatory by default)
+
+Per the platform contract, **every prompt passes through the `ai-governance` sidecar's `/sanitize` endpoint** before reaching Anthropic. This scrubs API keys, JWTs, AWS creds, and other secrets that might leak via test data in the `.feature` file. **Fail-closed** — if the sidecar is unreachable, the LLM call is REFUSED and the step falls back to TODO.
+
+Two ways to satisfy this:
+
+**(a) Internal platform users:** the `ai-governance` service is part of your platform service mesh. Just point bdd2pw at it (`--governance-url http://ai-governance:4900` or wherever).
+
+**(b) External users:** run your own sidecar.
+
+```bash
+# Clone and run the sidecar
+git clone https://github.com/javvadivijayprasad/ai-governance
+cd ai-governance
+python -m venv .venv && .\.venv\Scripts\Activate.ps1   # or `source .venv/bin/activate` on Mac/Linux
+pip install fastapi uvicorn pydantic pyyaml
+PYTHONPATH=src uvicorn service.app:app --port 4900
+```
+
+Or there's a Docker image once it's published: `docker run -p 4900:4900 ghcr.io/javvadivijayprasad/ai-governance:latest`.
+
+**Test-only escape hatch:** `--llm-skip-governance` bypasses the sidecar entirely. Use only when your `.feature` data is synthetic (no real credentials, no PII). For production, **always** keep governance on.
+
+```bash
+# UNSAFE for real test data — use only with synthetic fixtures
+bdd2pw scaffold ./my.feature ... --llm anthropic --llm-skip-governance
+```
+
+### Cost + determinism guardrails
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--llm-max-calls <n>` | `50` | Hard cap on provider calls per scaffold. Cache hits don't count. |
+| `--llm-cache <path>` | `<repo>/.bdd2pw/llm-cache.sqlite` | SQLite cache keyed by step text + POM signature + model. Same inputs across runs return the same binding — cost goes to zero on re-runs. Pass `:memory:` for one-shot use. |
+| `--llm-model <model>` | `claude-sonnet-4-6` | Override the Anthropic model. |
+
+Re-runs of the same `.feature` (after a code edit, retry, etc.) will hit the cache and make zero provider calls. A typical per-scaffold cost on first run: ~$0.005–0.02 USD with Sonnet, depending on how many steps need LLM fallback.
+
+### Cloud-jobs deployment recipe
+
+If you're running bdd2pw in an automation pipeline (cloud-jobs-template, GitHub Actions, etc.):
+
+```yaml
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}    # platform secrets store
+
+steps:
+  - name: Run scaffold with LLM fallback
+    run: |
+      bdd2pw scaffold "$FEATURE_FILE" \
+        --url "$TARGET_URL" \
+        --page "$PAGE_NAME" \
+        --repo /work \
+        --self-healing \
+        --llm anthropic \
+        --governance-url http://ai-governance:4900
+```
+
+Make sure the `ai-governance` sidecar is co-located (k8s sidecar pattern) or reachable on the platform service mesh.
+
 ## CLI surface — three commands
 
 ### `scaffold` — generate a fresh repo
