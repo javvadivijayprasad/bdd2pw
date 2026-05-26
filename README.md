@@ -1,5 +1,13 @@
 # bdd2pw — Gherkin `.feature` → Playwright TypeScript scaffold
 
+# @vijaypjavvadi/bdd2pw
+
+[![npm version](https://img.shields.io/npm/v/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+[![npm downloads](https://img.shields.io/npm/dm/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+[![license](https://img.shields.io/npm/l/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+
+Scaffold runnable Playwright TypeScript tests from Gherkin .feature files...
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen?logo=node.js)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)](./tests)
