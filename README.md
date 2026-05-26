@@ -4,9 +4,11 @@
 
 [![npm version](https://img.shields.io/npm/v/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
 [![npm downloads](https://img.shields.io/npm/dm/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
-[![license](https://img.shields.io/npm/l/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+[![npm total downloads](https://img.shields.io/npm/dt/@vijaypjavvadi/bdd2pw.svg)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+[![license](https://img.shields.io/npm/l/@vijaypjavvadi/bdd2pw.svg)](https://github.com/javvadivijayprasad/bdd2pw/blob/main/LICENSE)
+[![Listed in Awesome Playwright](https://awesome.re/mentioned-badge.svg)](https://github.com/mxschmitt/awesome-playwright)
 
-Scaffold runnable Playwright TypeScript tests from Gherkin .feature files...
+> Scaffold runnable Playwright TypeScript tests from Gherkin `.feature` files. Auto-detects existing Page Objects, scans live pages via Microsoft Playwright MCP, emits POMs and specs ready for execution. CLI + HTTP service.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen?logo=node.js)](https://nodejs.org/)
