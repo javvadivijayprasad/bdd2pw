@@ -7,6 +7,7 @@
 import { Command } from "commander";
 import * as path from "path";
 import { scaffold, analyze, updatePom } from "./index";
+import { proposeRules } from "./llm";
 import { logger } from "./utils/logger";
 
 const program = new Command();
@@ -45,6 +46,9 @@ program
   .option("--llm-max-calls <n>", "Max LLM provider calls per scaffold. Default 50. Cache hits don't count.", "50")
   .option("--llm-cache <path>", "SQLite cache path. Default <repo>/.bdd2pw/llm-cache.sqlite. Use ':memory:' for one-shot.")
   .option("--llm-skip-governance", "DO NOT USE in production — bypass the sidecar sanitisation step. Test-only escape hatch.", false)
+  .option("--llm-step-timeout-ms <n>", "v2.2.0 — per-step deadline (ms). On expiry the step lands as TODO and the scaffold proceeds. Default 60000.", "60000")
+  .option("--llm-provider-timeout-ms <n>", "v2.2.0 — Anthropic SDK per-call timeout (ms). Default 30000.", "30000")
+  .option("--llm-governance-timeout-ms <n>", "v2.2.0 — governance /sanitize timeout (ms). Default 15000.", "15000")
   .option("--templates <dir>", "Override default project template directory")
   .option("--dry-run", "Print plan, write nothing", false)
   .option("--no-validate", "Skip tsc --noEmit step")
@@ -71,6 +75,16 @@ program
                 : undefined,
               cachePath: opts.llmCache,
               skipGovernance: opts.llmSkipGovernance,
+              // v2.2.0 timeouts.
+              stepTimeoutMs: opts.llmStepTimeoutMs
+                ? Number(opts.llmStepTimeoutMs)
+                : undefined,
+              providerTimeoutMs: opts.llmProviderTimeoutMs
+                ? Number(opts.llmProviderTimeoutMs)
+                : undefined,
+              governanceTimeoutMs: opts.llmGovernanceTimeoutMs
+                ? Number(opts.llmGovernanceTimeoutMs)
+                : undefined,
             }
           : undefined;
       const result = await scaffold({
@@ -177,6 +191,54 @@ function exitCodeFor(err: unknown): number {
       return 1;
   }
 }
+
+/**
+ * v3.6.0 — propose-rules subcommand.
+ *
+ * Reads the candidate-rules.jsonl that the LLM fallback path writes on
+ * every successful binding, clusters similar step texts by structural
+ * fingerprint, and emits a Markdown file with draft regex rules
+ * suggested for promotion to the deterministic registry.
+ */
+program
+  .command("propose-rules")
+  .description(
+    "Cluster LLM-generated bindings in <repo>/artefacts/candidate-rules.jsonl and propose draft regex rules.",
+  )
+  .argument(
+    "<input>",
+    "Path to candidate-rules.jsonl OR the scaffold repo containing it",
+  )
+  .option(
+    "--out <path>",
+    "Where to write propose-rules.md. Defaults to next to the JSONL.",
+  )
+  .option(
+    "--min-cluster-size <n>",
+    "Minimum cluster size to emit a proposal. Default 2.",
+    "2",
+  )
+  .action(async (input: string, raw: { out?: string; minClusterSize?: string }) => {
+    const result = await proposeRules({
+      inputPath: input,
+      outputPath: raw.out,
+      minClusterSize: raw.minClusterSize
+        ? Number(raw.minClusterSize)
+        : undefined,
+    });
+    logger.info(
+      {
+        outputPath: result.outputPath,
+        proposalsWritten: result.proposalsWritten,
+        totalCandidates: result.totalCandidates,
+      },
+      "propose-rules: complete",
+    );
+    process.stdout.write(
+      `\n${result.proposalsWritten} proposal(s) written to ${result.outputPath} ` +
+        `(from ${result.totalCandidates} candidate entries).\n`,
+    );
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   logger.error({ err }, "fatal");

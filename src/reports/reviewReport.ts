@@ -76,6 +76,14 @@ function emitSection(
     if (item.suggestion) {
       lines.push(`  - Suggestion: ${item.suggestion}`);
     }
+    // v3.6.0 — render the optional diagnostics block as indented
+    // bullets so the rule-trace stays nested under its parent warning.
+    if (item.details && item.details.length > 0) {
+      lines.push(`  - Rule trace:`);
+      for (const d of item.details) {
+        lines.push(`    - ${d}`);
+      }
+    }
   }
   lines.push("");
 }

@@ -94,6 +94,19 @@ export interface StepBinding {
   customBody?: string;
   /** Populated when no clean mapping was found. */
   warning?: string;
+  /**
+   * v3.0.0 — flag set by API-pattern rules (page.request.*). When ANY
+   * binding in a scenario is API-flagged, the renderer:
+   *   1. Adds `type APIResponse` to the @playwright/test import.
+   *   2. Injects `let apiResponse: APIResponse | null = null;` and
+   *      `let baseUrl: string = process.env.CLOUD_JOB_APP_URL ?? "";`
+   *      inside the describe block.
+   *   3. Prepends `apiResponse = null;` to the test body (per-test reset).
+   *
+   * UI-only scenarios in the same feature don't get any of that — the
+   * flag is per-binding, the emitter aggregates per-scenario.
+   */
+  apiContext?: true;
 }
 
 // --- Reporting -------------------------------------------------------------
@@ -104,6 +117,14 @@ export interface ReviewItem {
   line?: number;
   message: string;
   suggestion?: string;
+  /**
+   * v3.6.0 — optional multi-line diagnostic block. When set, the review
+   * report renders each line as an indented bullet under the item.
+   * Used by the rule-trace diagnostics (`ScaffoldOptions.diagnostics`)
+   * to show, per unmatched step, which deterministic rules were checked
+   * and why they declined.
+   */
+  details?: string[];
 }
 
 // --- Top-level results -----------------------------------------------------
@@ -168,6 +189,21 @@ export interface ScaffoldOptions {
     maxCalls?: number;
     cachePath?: string;
     skipGovernance?: boolean;
+    /** v2.2.0 — per-step deadline (ms). Default 60_000. */
+    stepTimeoutMs?: number;
+    /** v2.2.0 — Anthropic SDK per-call timeout (ms). Default 30_000. */
+    providerTimeoutMs?: number;
+    /** v2.2.0 — governance /sanitize timeout (ms). Default 15_000. */
+    governanceTimeoutMs?: number;
+    /**
+     * v3.5.0 — disable per-scenario LLM batching. When false (default),
+     * a scenario with N unmatched steps fires ONE provider call
+     * (cache-misses only). When true, each unmatched step fires its
+     * own call (pre-v3.5 behavior). Flip this only if you've hit a
+     * provider per-prompt token limit on large batches or need
+     * strict 1:1 call accounting for audit reasons.
+     */
+    disableBatch?: boolean;
   };
   /**
    * Enable self-healing locator integration (v1.1+).
@@ -194,6 +230,79 @@ export interface ScaffoldOptions {
    * Default: false (purely additive minor bump).
    */
   selfHealing?: boolean;
+  /**
+   * v3.1.0 — opt-in instrumentation. See TestForge handoff Issue 4 and
+   * Issue 5.
+   *
+   * - `stepHooks`: every emitted `test.step` body calls
+   *   `(globalThis as any).__bdd2pwHooks?.beforeStep?.(testInfo, title)`
+   *   and `?.afterStep?.(...)`. Consumers wire the hook to do per-step
+   *   screenshots, custom reporters, artefact uploads, etc.
+   * - `stepMarkers`: each `test.step` is bracketed by stable
+   *   `// bdd2pw:step-open id="NNNN" title="..."` /
+   *   `// bdd2pw:step-close id="NNNN"` comments. Lets post-processors
+   *   slice the source without brace counting.
+   *
+   * Both default to false. Existing UI / API emission paths are
+   * byte-stable when these are off.
+   */
+  stepHooks?: boolean;
+  stepMarkers?: boolean;
+  /**
+   * v3.2.0 — TestForge handoff Issue 9. Pin emitted devDependency
+   * versions when set to `"exact"`. Default `"caret"` matches existing
+   * behavior (`^1.45.0` style ranges).
+   */
+  dependencyStrategy?: "caret" | "exact";
+  /**
+   * v3.2.0 — TestForge handoff Issue 10. When true, scaffold() writes
+   * `<spec-stem>.spec.meta.json` alongside each emitted spec, describing
+   * every scenario's steps as { id, text, intent, locator, assertion }.
+   * Lets downstream tools (visual regression, defect analysis,
+   * self-healing) consume bdd2pw's semantic understanding of each step
+   * without re-parsing the TS output. Off by default.
+   */
+  metaSidecar?: boolean;
+  /**
+   * v3.2.0 — TestForge handoff Issue 7. When true, scaffold() preserves
+   * `// bdd2pw:user-block id="..."` ... `// bdd2pw:end-user-block`
+   * sections from any existing target spec. Without merge: existing
+   * specs are overwritten unconditionally (existing behavior). With
+   * merge: user edits inside the named blocks survive regeneration.
+   * Useful for iterative locator refinement workflows.
+   */
+  merge?: boolean;
+  /**
+   * v3.4.0 — opt-in domain rule packs. When provided, additional
+   * regex rules covering domain-specific dialects are spliced into
+   * the matcher BEFORE the generic UI/URL rules. Domains are additive
+   * — `["banking", "healthcare"]` activates both. Each pack adds
+   * ~20 patterns. See `src/transformers/domains/*.ts`.
+   *
+   * Default empty array — byte-stable behavior for callers that don't
+   * opt in.
+   */
+  domains?: readonly (
+    | "banking"
+    | "healthcare"
+    | "insurance"
+    | "retail"
+    | "gov"
+    | "education"
+    | "telecom"
+  )[];
+  /**
+   * v3.6.0 — opt-in rule-trace diagnostics. When true, every step
+   * that ends up as a warning (no rule matched + LLM either declined
+   * or wasn't configured) gets a "Rule trace" block in BDD_REVIEW.md
+   * listing the top-3 nearest rules with their pattern source and
+   * whether each declined because it didn't match or because build()
+   * declined. Helps users figure out exactly what to add as a rule.
+   *
+   * Default false — diagnostics are O(rules × warnings) work and
+   * pollute BDD_REVIEW.md for users who don't need it.
+   */
+  diagnostics?: boolean;
 }
 
 export interface ScaffoldResult {

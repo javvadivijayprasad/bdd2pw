@@ -106,11 +106,14 @@ describe("cms-login end-to-end (third-person dialect + compound input)", () => {
       );
     });
 
-    it("preserves the original Gherkin text as a comment for each step", () => {
+    it("preserves the original Gherkin text as the test.step label", () => {
+      // v2.1.0 — bindings are wrapped in `await test.step("<keyword> <text>", ...)`
+      // instead of leading `// keyword text` comments. The Gherkin text still
+      // travels with the rendered code, just as the step label.
       expect(specContents).toContain(
-        '// When user enter email "admin@example.com" password "123456"',
+        'await test.step("When user enter email \\"admin@example.com\\" password \\"123456\\""',
       );
-      expect(specContents).toContain("// And click Login button");
+      expect(specContents).toContain('await test.step("And click Login button"');
     });
 
     it("emits exactly 1 test() block (1 scenario, no outline)", () => {

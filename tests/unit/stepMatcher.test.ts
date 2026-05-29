@@ -476,6 +476,74 @@ describe("stepMatcher rules", () => {
   // v1.1.5 — rule 2b SUBJ optional (subject-less compact form)
   // ──────────────────────────────────────────────────────────────────────
 
+  describe("v2.2.2 — URL contains 'a path segment X' dialect (production bug 3)", () => {
+    it("'the current URL contains a path segment \"logged-in-successfully\"' → toHaveURL", () => {
+      const b = matchStep(
+        step("Then", 'the current URL contains a path segment "logged-in-successfully"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("logged-in-successfully")');
+    });
+
+    it("'URL contains a fragment \"X\"' → toHaveURL (fragment variant)", () => {
+      const b = matchStep(
+        step("Then", 'URL contains a fragment "dashboard"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("dashboard")');
+    });
+
+    it("'Page URL contains the path \"/admin\"' → toHaveURL", () => {
+      const b = matchStep(
+        step("Then", 'Page URL contains the path "/admin"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("/admin")');
+    });
+
+    it("regression: plain 'URL contains \"X\"' still matches (no path/segment word)", () => {
+      const b = matchStep(
+        step("Then", 'URL contains "abc"'),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("abc")');
+    });
+  });
+
+  describe("v2.2.2 — prose-as-URL-slug guard (production bug 2)", () => {
+    it("'remains on login page without any redirect' → TODO (prose, not a URL slug)", () => {
+      const b = matchStep(
+        step("Then", "user remains on login page without any redirect"),
+        pom,
+        "loginPage",
+      );
+      // Without the prose guard this would emit toHaveURL with
+      // "login[-_/]?page[-_/]?without[-_/]?any[-_/]?redirect" which
+      // never matches a real URL.
+      expect(b.warning).toBeTruthy();
+      expect(b.warning).toContain("reads like prose");
+      expect(b.assertion).toBeUndefined();
+    });
+
+    it("regression: 'remains on the login page' (clean) still matches rule 10", () => {
+      const b = matchStep(
+        step("Then", "user remains on the login page"),
+        pom,
+        "loginPage",
+      );
+      expect(b.assertion?.matcher).toBe("toHaveURL");
+      expect(b.assertion?.expected).toBe('new RegExp("login")');
+    });
+  });
+
   describe("v1.1.5 — subject-less 'enters <field> \"V\"'", () => {
     it("'enters password \"Password123\"' → passwordInput.fill", () => {
       const b = matchStep(

@@ -9,6 +9,1369 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [3.8.0] — 2026-05-24
+
+### Added — four more opt-in domain rule packs
+
+bdd2pw now ships seven regulated-industry dialect packs total
+(banking, healthcare, insurance from v3.4.0 + the four new ones).
+Each pack is opt-in via the `domains` config and adds ~20 patterns
+to the matcher.
+
+`DomainName` is now the union of all seven; `ScaffoldOptions.domains`
+accepts any combination.
+
+#### Retail / e-commerce (`src/transformers/domains/retail.ts`)
+
+20 rules: cart operations (`add to cart`, item count, empty check,
+remove), pricing (`the price is "$X"`, subtotal / total / tax with
+quoted-currency support), checkout (`I complete the checkout`), SKU,
+inventory status (in stock / out of stock / low stock / backordered /
+sold out), shipping address, estimated delivery, promo codes,
+discounts, product name, ratings, review counts, wishlist, order
+status, order number, size/color/variant selection.
+
+#### Gov / civic (`src/transformers/domains/gov.ts`)
+
+20 rules: form submission, form ID, eligibility status, case number
+and case status, benefit amounts (monthly / annual), document type,
+file upload, FOIA request status, FOIA response (redacted / released /
+denied), residency status, agency assignment, program enrollment
+(SNAP, Medicaid, etc.), intake date, application status,
+WCAG conformance (A / AA / AAA), appeal status, deadlines, appointment
+scheduling, audit log entries.
+
+#### Education (`src/transformers/domains/education.ts`)
+
+20 rules: letter grades (with optional subject context), GPA,
+attendance rate and per-student status (present/absent/tardy/excused),
+course enrollment, assignment status (submitted/graded/late/missing),
+due dates, FERPA-protected records, transcripts (credit counts),
+instructor/teacher/professor, term/semester/quarter, student ID,
+class size, assignment submission, quiz/test/exam scores, course
+availability, school/district, parent/guardian contact, grade
+entry, classification (Freshman/Sophomore/Junior/Senior/Graduate).
+
+#### Telecom (`src/transformers/domains/telecom.ts`)
+
+20 rules: subscriber status (active/suspended/cancelled/churned),
+plan tier, monthly price/bill, MSISDN/phone number, port-in status,
+data usage (GB/MB/TB), data allowance, voice usage, SMS count,
+billing amount, service status, signal strength, device IMEI,
+SIM ICCID, call duration, SIM/device/line activation,
+service suspend/cancel/reactivate/resume, roaming on/off, account
+number, line addition.
+
+### Fixtures + tests
+
+- `tests/fixtures/v3.8.0/{retail,gov,education,telecom}/input.feature`
+  — one fixture per domain, 15-18 representative steps each.
+- `tests/unit/v380Fixtures.test.ts` — three assertions per domain
+  (activated, not activated, all-four-together cross-cutting).
+
+### Backward compatibility
+
+Default empty `domains` keeps the registry byte-stable. Anyone
+upgrading from 3.7.1 sees no behavior change unless they opt in.
+The existing 3.4.0 packs (banking/healthcare/insurance) are
+unchanged.
+
+## [3.7.1] — 2026-05-24
+
+### Fixed — TestForge regression report (2026-05-22)
+
+Two regressions surfaced after TestForge upgraded from 2.2.7 → 3.7.0.
+Both are emitter-side defects with the same one-line repro feature.
+Patch bump from 3.6.0 directly to 3.7.1 to skip past the broken 3.7.0
+version label TestForge already saw.
+
+#### #R1 (P0) — variable-name shadow in generated specs
+
+A caller passing `page: "repro"` (or any lowercase name) used to
+produce:
+
+    import { repro } from "../pages/repro.page";
+    const repro = new repro(page);   // ← TDZ: shadows the import
+
+Every test crashed at the first scenario line with
+`ReferenceError: Cannot access 'repro' before initialization` —
+the `const repro` declaration shadows the `import { repro }` binding
+inside the test's block scope, and the not-yet-initialised local
+binding wins.
+
+**Fix:** `scaffold()` now PascalCases `opts.page` up-front into a
+new `pageClassName` variable used everywhere the class identifier
+is emitted (POM file, spec import, `new` expression, POM-resolver
+decision message). `pageVar` is still camelCase, so PascalCase
+className + camelCase pageVar are guaranteed to differ — the
+shadow can never form.
+
+Idempotent: `pascalCase("repro")` → `"Repro"`, `pascalCase("LoginPage")`
+→ `"LoginPage"` (no change), `pascalCase("login_page")` →
+`"LoginPage"`, `pascalCase("login-page")` → `"LoginPage"`.
+
+#### #R2 (P0) — assertion that `test.step` wrapping survives
+
+The TestForge report flagged emitted specs without `test.step(...)`
+wrappers, which would silently break their v3.3.0 hook-API
+integration (no `afterStep` → no per-step screenshots, no Visual
+Regression manifest).
+
+The current `bindingsToBody` IS still wrapping every step in
+`test.step` (see `src/emitters/facade.ts:299`), so the regression
+either lived in a different code path or the report's reproduction
+was rendered with a different emitter version. Either way, the
+contract matters too much to leave un-asserted.
+
+**Defence:** new
+`tests/unit/v371Regressions.test.ts` includes a hard assertion:
+`#R2 — every Gherkin step is wrapped in 'await test.step(...)'`.
+Any future emitter change that drops the wrapper (or any single
+step that bypasses `bindingsToBody`) gets flagged immediately.
+The same file also asserts that `testInfo` is part of the test
+signature (the v3.1.0 contract TestForge worried might have
+regressed).
+
+### Tests
+
+`tests/unit/v371Regressions.test.ts`:
+- `pascalCase` normalises lowercase / snake / kebab / camel into
+  PascalCase (idempotent on already-PascalCase input).
+- Emitted spec uses PascalCase class for both import and
+  `new ClassName(page)`, never `new repro(page)`.
+- Every Gherkin step is wrapped in `await test.step(...)`.
+- The test() signature carries `testInfo` as the second arg.
+
+## [3.6.0] — 2026-05-22
+
+### Added — rule-trace diagnostics in BDD_REVIEW.md (opt-in)
+
+When `ScaffoldOptions.diagnostics: true`, every step that ended up
+as a warning gets a "Rule trace" sub-section listing the top-3
+nearest deterministic rules with their pattern source and whether
+each declined because the regex didn't match or because the
+build() callback returned null. Helps users see exactly what to
+add as a new rule.
+
+`diagnoseStep` and `RuleTraceEntry` are now exported from
+`src/transformers/stepMatcher.ts` so external tooling (test
+harnesses, the propose-rules pipeline, the VS Code extension) can
+consume the trace directly.
+
+`ReviewItem.details?: string[]` carries the rendered trace lines.
+Off by default — the diagnostic pass is O(rules × warnings) and
+the trace pollutes BDD_REVIEW.md for users who don't need it.
+
+### Added — `bdd2pw propose-rules` CLI subcommand
+
+Reads `<repo>/artefacts/candidate-rules.jsonl` (written on every
+successful LLM fallback) and proposes new deterministic regex
+rules by clustering similar step texts. Output goes to
+`<repo>/artefacts/propose-rules.md`.
+
+How it works:
+
+1. Every step text is reduced to a structural FINGERPRINT — quoted
+   literals collapse to `""`, currency to `<MONEY>`, dates to
+   `<DATE>`, numbers to `<NUM>`. Steps that share a fingerprint
+   share a shape.
+2. Clusters of size >= `--min-cluster-size` (default 2) emit a
+   proposal.
+3. Per proposal: cluster size, draft regex with capture groups,
+   representative binding (most-recent LLM output), sample step
+   texts for human audit.
+
+CLI:
+
+    npx bdd2pw propose-rules <repo>
+    npx bdd2pw propose-rules <repo> --out path/to/output.md
+    npx bdd2pw propose-rules <repo> --min-cluster-size 5
+
+Programmatic API (`src/llm/proposeRules.ts`):
+
+    import { proposeRules, fingerprint, synthesiseRegex } from "@vijaypjavvadi/bdd2pw";
+    const result = await proposeRules({ inputPath: "./my-repo" });
+    console.log(`${result.proposalsWritten} proposals → ${result.outputPath}`);
+
+Closes the loop on the long-standing TODO in
+`src/llm/candidateRules.ts` — the JSONL is finally consumable
+without a separate offline tool.
+
+### Tests
+
+- `tests/unit/v360Features.test.ts` — diagnoseStep returns the
+  expected shape; fingerprint/synthesiseRegex handle the common
+  variable shapes; proposeRules clusters multi-entry input,
+  skips singletons, emits a "no proposals" message when nothing
+  passes the minimum, and accepts either a JSONL file path or a
+  repo root.
+
+## [3.5.0] — 2026-05-22
+
+### Added — per-scenario LLM batching
+
+Each scenario with N unmatched steps used to fire N separate Anthropic
+calls. Each call paid full round-trip latency plus the system prompt
+and POM-context tokens. v3.5.0 folds all unmatched steps in a scenario
+into a SINGLE provider call. Cost reduction is roughly proportional
+to N when N > 1, and the round-trip latency drops from ~N×3s to ~3s
+for a typical scenario.
+
+**How it works.**
+
+`AnthropicLLMClient.generateBatchBindings(inputs[])` now exists as a
+peer to `generateBinding(input)`. Given N inputs:
+
+1. Per-step cache lookup runs FIRST. Already-cached inputs short-
+   circuit out of the prompt; only cache-misses are folded in.
+2. Cache misses go into one prompt via `buildBatchUserPrompt` —
+   the POM context block appears once, followed by N numbered
+   step blocks.
+3. The model returns a JSON array of N binding objects in the
+   same order.
+4. Per-slot `parseBindingJson` validation (the existing
+   hallucination / empty-locator / bare-context defences continue
+   to apply per binding).
+5. Each successful slot is written to cache with its individual
+   key.
+6. Results are returned in the original input order so callers
+   don't need to know batching happened.
+
+The batch counts as ONE call against the budget. If every input is
+a cache hit, no provider call is made at all.
+
+**New orchestrator: `matchScenarioWithLLM`.**
+
+`src/llm/llmStepMatcher.ts` gains a new function for the batched
+path. `scaffold()` calls it once per scenario (also once for the
+synthetic Background scenario, and once per Scenario Outline row).
+The per-step `matchStepWithLLM` is unchanged and still used by
+`analyze()` and anywhere a single-step path is more natural.
+
+Soft-fail semantics match the per-step path:
+- LLM client doesn't implement `generateBatchBindings`: falls back
+  to per-step.
+- Single-warning scenarios: routed through per-step (no benefit
+  to batching one).
+- Batch throws / sidecar unreachable / parse error: every warning
+  slot gets an annotated `(LLM batch threw: …)` or
+  `(LLM fallback also failed: …)` warning — same shape as the
+  per-step path.
+- One bad slot in an otherwise-good batch: only that slot
+  becomes a warning; the rest succeed.
+
+**Opt-out: `llmConfig.disableBatch: true`.**
+
+Flip back to the pre-v3.5 per-step path if you hit a provider
+per-prompt token limit on large batches or need strict 1:1 call
+accounting. Default false — batching is on.
+
+**Backwards compatibility.**
+
+- `generateBinding` is unchanged. The per-step path is preserved.
+- `LLMClient.generateBatchBindings` is OPTIONAL on the interface,
+  so existing custom clients (and the v2.x MockLLMClient if a
+  consumer is still using it directly) continue to work — the
+  orchestrator falls back to per-step when the method is missing.
+- Cache keys are identical to v3.4.x — running with v3.5 against a
+  cache populated by v3.4 hits the cache exactly as before.
+- `candidate-rules.jsonl` still gets one entry per LLM-generated
+  binding, so the offline review pipeline notices no change.
+
+## [3.4.0] — 2026-05-22
+
+### Added — three opt-in domain rule packs
+
+bdd2pw's deterministic rule registry now ships with three new
+regulated-industry dialect packs. Each pack is opt-in via the new
+`domains` config and adds ~20 patterns to the matcher. When
+activated, the pack's rules run BEFORE the generic UI/URL rules so
+domain-specific prose intercepts the ambiguous catch-alls first.
+
+#### `ScaffoldOptions.domains?: ("banking" | "healthcare" | "insurance")[]`
+
+Pass any combination — they're additive. Default empty array
+keeps the registry byte-stable with v3.3.0 for callers who don't
+opt in.
+
+    await scaffold({
+      feature: "features/login.feature",
+      domains: ["banking", "healthcare"],
+      // …
+    });
+
+#### Banking (`src/transformers/domains/banking.ts`)
+
+20 rules covering: account balance (`the account balance is
+"$1,234.56"`), comparators (`at least`, `at most`, `less than`,
+`greater than`, `exactly`), transfers (`I transfer "$X" from "Y" to
+"Z"`), transaction fees, statement transaction counts, daily
+withdrawal/deposit/transfer limits, account opening/closing,
+transaction dates, payment status, Reg E dispute filing windows,
+Reg D savings withdrawal counts, KYC and AML statuses, account
+number tails, routing numbers, deposits / withdrawals, available
+credit, wire transfer status.
+
+#### Healthcare (`src/transformers/domains/healthcare.ts`)
+
+20 rules covering: patient name and MRN, appointment scheduling,
+ICD-10 diagnosis codes, medications (prescribed / ordered /
+administered), HIPAA consent forms, HL7 v2 message types
+(`ADT^A01`), FHIR resource refs (`Patient/123`), encryption
+status, vital signs (blood pressure, heart rate), allergies,
+provider NPI and DEA, lab results, admit/discharge actions, audit
+log entries.
+
+#### Insurance (`src/transformers/domains/insurance.ts`)
+
+20 rules covering: policy numbers, premium amounts, claim status,
+deductibles (with comparators), policy effective and renewal
+dates, claim filing windows, loss reserves, line of business,
+NAIC codes, adjuster assignment, claim filing, coverage limits,
+policy status (active / lapsed / cancelled), policyholder name,
+cancel / renew actions, subrogation status, premium payment
+indicator, claim payout.
+
+### How the rules emit code
+
+Every domain rule emits `customBody` (not pomCall/assertion) so
+the spec doesn't depend on the user having a POM field for every
+domain concept. Bodies reference standard locator hints
+(`[data-testid='...']`, `[aria-label='...']`, `getByLabel(/...)`)
+that match most well-built apps. Field shape uncertainty is
+acknowledged with multiple selectors in the same `locator(...)`
+call (e.g. `"[data-testid='kyc-complete'], [aria-label='KYC verified']"`).
+
+### Fixtures + tests
+
+- `tests/fixtures/v3.4.0/{banking,healthcare,insurance}/input.feature`
+  — one fixture per domain, ~15-18 representative steps each.
+- `tests/unit/v340Fixtures.test.ts` — three assertions per domain:
+  1. Activated → every fixture step matches a rule.
+  2. Not activated → most fixture steps fall through (proves
+     opt-in is real).
+  3. Cross-cutting: all three activated together → all three
+     fixtures match cleanly.
+
+### New module organization
+
+`src/transformers/domains/` is the new home for domain rule packs.
+Future v3.x releases can drop in additional packs (retail, gov,
+education, etc.) without touching `stepMatcher.ts`.
+
+### Cross-cutting
+
+`stepMatcher` now exports `setActiveDomains(domains)` and a
+`DomainName` type for callers that need to drive the matcher
+directly (e.g. test harnesses). The active set is reset to empty
+when `scaffold()` is called without `domains`, so leftover state
+from a previous run can't pollute the next.
+
+## [3.3.0] — 2026-05-22
+
+### Changed — TestForge step-hook signature extension (follow-up to v3.1.0 Issue 4)
+
+TestForge follow-up request: the v3.1.0 step hook only received
+`(testInfo, title)` — enough for metadata-only consumers, but not
+for the most common use case (per-step screenshots, DOM capture,
+artefact attachment). All of those need access to `page` (or
+`request` / `context` / `browser`).
+
+When `stepHooks: true`, the emitted `test.step(...)` wrapper now
+looks like this:
+
+    await test.step("Given …", async () => {
+      await (globalThis as any).__bdd2pwHooks?.beforeStep?.(
+        testInfo,
+        "Given …",
+        { page },
+      );
+      let _bdd2pwStatus: "passed" | "failed" = "passed";
+      try {
+        // step body
+      } catch (_bdd2pwErr) {
+        _bdd2pwStatus = "failed";
+        throw _bdd2pwErr;
+      } finally {
+        await (globalThis as any).__bdd2pwHooks?.afterStep?.(
+          testInfo,
+          "Given …",
+          _bdd2pwStatus,
+          { page },
+        );
+      }
+    });
+
+Three changes from v3.1.0:
+
+1. **`fixtures` arg.** Both `beforeStep` and `afterStep` now receive
+   a `{ page, request?, context?, browser? }` object containing
+   whatever fixtures the surrounding `test()` callback
+   destructures. Currently always `{ page }` — when bdd2pw starts
+   threading multi-fixture signatures through `EmitTestFileInput`,
+   the same literal forwards automatically.
+
+2. **`status` arg on `afterStep`.** Reports `"passed"` or
+   `"failed"` so consumers can attach failure-only artefacts
+   (per-step screenshot only when the step failed, full DOM dump
+   only on failure, etc.).
+
+3. **try/catch/finally wrapping.** `afterStep` fires on the
+   failure path too — `_bdd2pwStatus` is set to `"failed"`, the
+   error is re-thrown, and `finally` runs the hook. Local
+   variable, no cross-step shadowing.
+
+### Backward compatibility
+
+Consumers whose hook signature is `(testInfo, title)` /
+`(testInfo, title, status)` continue to work — JavaScript silently
+drops the extra positional args. Optional chaining throughout
+means consumers who don't set `__bdd2pwHooks` see no behaviour
+change at all.
+
+### Tests
+
+`tests/unit/v310Fixtures.test.ts` — updated the existing
+"stepHooks: true emits …" assertion to also verify the v3.3.0
+shape: fixtures arg on both hooks, status arg on afterStep,
+try/catch/finally wrapping with `_bdd2pwStatus`. Same fixture file
+(`tests/fixtures/v3.1.0/04-step-hooks/input.feature`) — no new
+fixture needed; the contract change is in the rendered output, not
+the input.
+
+## [3.2.0] — 2026-05-22
+
+### Added — TestForge handoff P2 backlog (Issues 6-10)
+
+Five P2 items from the TestForge handoff. None are bug fixes;
+they're feature additions and extension points that close out the
+backlog. All five default to "off / existing behavior", so v3.2.0
+is byte-stable against v3.1.0 for callers who don't opt in.
+
+#### Issue 6 — `playwright.config.ts` collision marker
+
+The emitted `playwright.config.ts` now ends with a stable
+`// bdd2pw:config-end` marker line followed by guidance comments.
+Downstream tooling can splice additional code after that line
+without risking a duplicate `defineConfig(...)` import. Lives in
+`pw-emit@1.3.0`'s `playwright.config.ts.tmpl`.
+
+#### Issue 9 — pin emitted dependency versions
+
+New `dependencyStrategy?: "caret" | "exact"` on `ScaffoldOptions`
+(and on pw-emit's `EmitProjectOptions`). Default `"caret"` matches
+existing behavior. `"exact"` strips the leading `^` from every
+devDependency version in the emitted `package.json`, pinning the
+consuming project to exact versions of Playwright et al.
+
+#### Issue 10 — `*.spec.meta.json` sidecar
+
+New `metaSidecar?: boolean` on `ScaffoldOptions`. When true,
+`scaffold()` writes `<spec-stem>.spec.meta.json` alongside each
+emitted `.spec.ts` describing every step semantically:
+
+    {
+      "version": "3.2.0",
+      "source": "features/login.feature",
+      "scenarios": [{
+        "name": "...",
+        "tags": ["@positive"],
+        "steps": [
+          { "id": "0001", "keyword": "Given", "text": "...",
+            "intent": "navigation", "locator": "loginPage.goto",
+            "assertion": "goto" },
+          ...
+        ]
+      }]
+    }
+
+Intent ∈ { navigation | interaction | assertion | api | compound |
+todo }, classified from the binding shape. Lets downstream tools
+(visual regression, defect analysis, self-healing) consume bdd2pw's
+semantic understanding without re-parsing TS.
+
+New module `src/reports/metaSidecar.ts`. IDs match the optional
+step-boundary markers (v3.1.0 Issue 5) so post-processors can
+correlate the sidecar with in-source markers when both are on.
+
+#### Issue 8 — structured JSON scenarios as input
+
+`scaffold({ feature: "scenarios.json", ... })` now works. The
+JSON converter accepts either a single object or an array of
+objects with `{ name, kind, preconditions, actions, expected,
+data, tags }`. Synthesised Gherkin steps follow standard BDD
+convention (`Given` for preconditions, `When/And` for actions,
+`Then/And` for expected). `<placeholder>` tokens in step text are
+substituted from `data`. Tags can be set explicitly or derived
+from `kind` (`"api"` → `@api`, `"mixed"` → `@ui @api`).
+
+New module `src/parser/jsonScenarioParser.ts`. Detected by file
+extension; `.feature` continues through `gherkinParser` unchanged.
+
+#### Issue 7 — idempotent regen with user-block preservation
+
+New `merge?: boolean` on `ScaffoldOptions`. When true:
+
+- Each emitted spec gets a `// bdd2pw:generated v=<version>
+  source=<feature>` header so a future regen can detect it.
+- Users can wrap hand-edited code in
+  `// bdd2pw:user-block id="<id>"` ...
+  `// bdd2pw:end-user-block` markers anywhere in the spec.
+- During regeneration, blocks with matching ids are spliced back
+  into the new output. Orphaned blocks (id absent from the new
+  output) are appended under a clearly-labeled
+  `// ── bdd2pw:stale-user-blocks ──` footer so nothing is lost
+  silently.
+
+Without `merge`, the existing overwrite behavior is unchanged.
+
+New module `src/reports/specMerge.ts`.
+
+### pw-emit v1.3.0 (required peer)
+
+- `playwright.config.ts.tmpl` ends with the `// bdd2pw:config-end`
+  marker + guidance comments.
+- `EmitProjectOptions.dependencyStrategy?: "caret" | "exact"`.
+
+Both additions are additive and default-off. SemVer minor.
+
+## [3.1.0] — 2026-05-22
+
+### Fixed — TestForge handoff report
+
+Five issues from the TestForge AI integration team's handoff report
+(2026-05-22). The P0 set (Issues 1-3) unblocks the largest class of
+false-positive failures in their cloud-job pipeline; the P1 set
+(Issues 4-5) eliminates their fragile 200-line post-process patcher.
+
+#### Issue 1 (P0) — visibility steps no longer slugified into URL regex
+
+Prose like `"the user's name or profile indicator is visible in the UI"`
+was falling through every existing visibility rule and ending up in the
+URL-slug rules, where it was tokenised into a `toHaveURL(/.../)`
+assertion that never matched anything in the real app. Result: silent
+always-failing tests that looked like product bugs.
+
+**Fix:**
+- New `src/transformers/visibilityRules.ts` with 7 catch-all patterns
+  (`<noun> is visible / displayed / shown / appears`,
+  `<noun> should be visible / displayed / shown`,
+  negative `<noun> is hidden / not visible`,
+  enabled `<noun> is enabled / clickable`).
+- Wired into the matcher BEFORE all URL-slug rules.
+- When the captured noun phrase matches a POM field (fuzzy
+  case-insensitive substring), emits `toBeVisible()` against the
+  resolved locator. When it doesn't match, emits a clean `// TODO
+  bdd2pw: ambiguous visibility step` warning — **never** a URL regex.
+- `looksLikeProse` extended to flag any captured slug containing
+  `is/are visible/displayed/shown/hidden/appears` so URL-slug rules
+  decline these targets defensively even if visibility rules are
+  bypassed in a future change.
+
+#### Issue 2 (P0) — `:root` locator rejected
+
+`page.locator(':root')` is syntactically valid CSS but matches
+`<html>` — useless for every visibility / click / text assertion.
+The LLM occasionally emitted it when it couldn't synthesise a
+sensible selector.
+
+**Fix:** `detectHallucinatedLocators` in
+`src/llm/anthropicClient.ts` now also flags any
+`locator(':root')` / `locator(":root")` reference. Bindings carrying
+it are rejected at parse time and the step lands as a clean TODO.
+
+#### Issue 3 (P0) — `testInfo` in every test() callback
+
+Downstream tooling (visual-regression, custom reporters, artefact
+uploads) needs `testInfo.titlePath` / `testInfo.attach()` /
+`testInfo.testId`. The v3.0.0 generated signature
+`async ({ page }) => {...}` forced consumers to regex-rewrite every
+spec post-scaffold to inject `testInfo`.
+
+**Fix:** pw-emit v1.2.0's `testEmitter` always emits
+`async ({ page }, testInfo) => {...}`. Same for the `test.fixme`
+variant. TypeScript allows unused destructured params, so this is
+zero-impact for consumers who don't need testInfo.
+
+#### Issue 4 (P1) — opt-in step hook callouts
+
+TestForge maintains a 200-line `inject-vr.js` brace-counting state
+machine to wrap every `test.step` body in a VR-capture call.
+
+**Fix:** new `stepHooks?: boolean` on `ScaffoldOptions` and
+`EmitTestFileInput`. When true, every emitted `test.step` body opens
+with:
+
+    await (globalThis as any).__bdd2pwHooks?.beforeStep?.(testInfo, "<title>");
+
+and closes with:
+
+    await (globalThis as any).__bdd2pwHooks?.afterStep?.(testInfo, "<title>");
+
+Optional-chained throughout — consumers who don't set
+`(globalThis as any).__bdd2pwHooks = {...}` see no behaviour change.
+Off by default. The post-process patcher can be retired.
+
+#### Issue 5 (P1) — opt-in step boundary markers
+
+**Fix:** new `stepMarkers?: boolean`. When true, each emitted
+`test.step` is bracketed by stable comment markers:
+
+    // bdd2pw:step-open id="0001" title="Given I am on the login page"
+    await test.step("Given I am on the login page", async () => { ... });
+    // bdd2pw:step-close id="0001"
+
+IDs are zero-padded 4 digits, sequential per test in source order.
+Lets post-processors slice the source on stable strings instead of
+brace counting. Off by default.
+
+### pw-emit v1.2.0 (required peer)
+
+Same release ships pw-emit v1.2.0 — adds `testInfo` to the test
+signature in every generated spec. SemVer minor; the additional
+destructured argument is harmless for consumers who don't reference it.
+
+### Fixtures
+
+- `tests/fixtures/v3.1.0/01-visibility-prose/` — TestForge's
+  reproduction step. Asserts no `toHaveURL`, no `:root`, no URL regex.
+- `tests/fixtures/v3.1.0/02-no-root-locator/`
+- `tests/fixtures/v3.1.0/03-test-info/`
+- `tests/fixtures/v3.1.0/04-step-hooks/`
+- `tests/fixtures/v3.1.0/05-step-markers/`
+- `tests/unit/v310Fixtures.test.ts` — 9 assertions covering all five
+  issues plus `detectHallucinatedLocators` and `looksLikeProse`.
+
+## [3.0.0] — 2026-05-12
+
+### Added — native API testing step patterns (no LLM fallback)
+
+bdd2pw now recognises ~17 API-shaped Gherkin step patterns natively
+and emits Playwright `APIRequestContext` (`page.request.*`) code for
+them. API-shaped steps NEVER reach the LLM fallback —
+cache-effective, deterministic, no per-binding Anthropic cost for
+the common patterns.
+
+**Coverage (`src/transformers/apiRules.ts`):**
+
+Setup: `Given the API base URL is "<URL>"`,
+`Given the <X> API endpoint is reachable` (marker step).
+
+Requests (verb ∈ {GET, POST, PUT, DELETE, PATCH}):
+- `When I send a <VERB> request to "<path>"`
+- ` ... with body:` + JSON docstring → embeds as `data:` with
+  `content-type: application/json`.
+- ` ... with header "<H>" set to "<V>"`.
+- `When I send the previous request again with header "<H>" set to "<V>"` →
+  re-issues using the in-test `_lastApiReq` record.
+
+Status: `is <N>`, `is in [<list>]`, `is less than <N>`.
+
+Body: `has a non-empty "<field>" field`,
+`field "<f>" equals "<v>"` (string), `equals <N>` (numeric),
+`field "<f>" matches /<regex>/`, `body contains "<text>"`,
+`does NOT contain a "<field>" field`, `is JSON`.
+
+Headers: `equals "<V>"`, `contains "<V>"`, `is set`. Names lowercased.
+
+### Added — scenario-level API state injection
+
+When at least one scenario in the feature has an API-flagged binding,
+the emitter (`src/emitters/facade.ts`) automatically:
+
+1. Adds `type APIResponse` to the `@playwright/test` import.
+2. Declares describe-scoped state inside `test.describe(...)`:
+   ```typescript
+   let apiResponse: APIResponse | null = null;
+   let baseUrl: string = process.env.CLOUD_JOB_APP_URL ?? "";
+   let _lastApiReq: { method: string; path: string; data?: unknown;
+                     headers?: Record<string, string> } =
+       { method: "", path: "" };
+   ```
+3. Prepends `apiResponse = null;` to the body of every API-bearing
+   test so a leftover from a previous test never bleeds into the next.
+
+Pure-UI features in the same project remain entirely unchanged.
+
+### Added — pw-emit v1.1.0 (required peer)
+
+- `TestSpecIR.playwrightImports?: string[]` — extra named imports
+  merged into the `@playwright/test` line.
+- `TestSpecIR.describeBodyPrelude?: string` — pre-rendered TS lines
+  emitted inside `test.describe(...)` before any hooks.
+
+Both additions are optional and additive — pure-UI emission paths
+are byte-stable across the 1.0 → 1.1 upgrade.
+
+### Breaking — peer dependency bump + import line changes
+
+- `@vijaypjavvadi/pw-emit` requirement is now `^1.1.0` (was `^1.0.0`).
+- The `import { test, expect } from "@playwright/test";` line in
+  emitted specs may now also include `type APIResponse` when the
+  feature has any API step. Downstream tooling that grep-matches the
+  import line on exact bytes should be updated.
+
+Versioned 3.0.0 (semver-major) to flag the import-shape change,
+even though pure-UI runtime behavior is unchanged.
+
+### Tests
+
+- `tests/fixtures/api/` — 9 .feature fixtures (simple-get,
+  post-with-body, post-with-headers, chained-calls, status-list,
+  body-field-equals, body-regex-match, headers, mixed-ui-api).
+- `tests/unit/apiFixtures.test.ts` — drives each fixture through
+  parseFeature + matchStep + emitTestFile and asserts byte-equality
+  against `tests/expected-output/api/*.spec.ts`. Set
+  `BDD2PW_UPDATE_SNAPSHOTS=1` to regenerate after intentional
+  emitter changes.
+- Same test also asserts that NO API fixture step produces a
+  `warning` binding — every API step matches a deterministic rule,
+  zero LLM fallback.
+
+## [2.2.7-extension] — 2026-05-11
+
+### Added — VS Code extension subdirectory (separate version line, 0.1.0)
+
+`vscode-extension/` houses the new bdd2pw VS Code extension. Imports
+the bdd2pw library in-process, exposes four entry points (Explorer
+context menu, command palette, activity-bar sidebar, status bar),
+and is intended for publishing to the VS Code Marketplace under the
+`vijaypjavvadi` publisher.
+
+The extension tracks its own version + CHANGELOG —
+`vscode-extension/CHANGELOG.md` starts at 0.1.0. The bdd2pw library
+SemVer remains unaffected; users who only use the CLI / library
+should ignore the extension subdir entirely.
+
+Publishing runbook: `vscode-extension/PUBLISH_VSCODE.md`.
+
+## [2.2.7] — 2026-05-11
+
+### Changed — BUG-10 polish: stronger framework-class handling + cleaner fallback names
+
+Two follow-up improvements to the v2.2.6 BUG-10 fix. Each one
+addresses a residual rough edge surfaced by the
+`pickLocator({ tag: "input", cssSelector: ".ng-untouched.search-input" })`
+case.
+
+#### 1. Strip framework class tokens from mixed selectors
+
+v2.2.6 rejected framework-ONLY selectors but left mixed ones intact,
+so `.ng-untouched.search-input` still got rendered as
+`page.locator('.ng-untouched.search-input')`. Playwright requires
+BOTH classes to be present simultaneously, so when the user focuses
+the input and Angular flips `.ng-untouched` → `.ng-touched`, the
+locator stops matching and the test fails on a should-be-stable
+user-named element.
+
+**Fix:** new `stripFrameworkClasses(selector)` export in
+`src/transformers/locatorPicker.ts`. Wired into `pickLocator`
+step 6 so the emitted selector contains only user-named class
+tokens. `.ng-untouched.search-input` → `.search-input`.
+`input.ng-untouched[type="search"]` → `input[type="search"]`.
+`form.ng-untouched .search-input` → `form .search-input`. Only bare
+`.classname` tokens are stripped; element/attribute/id parts and
+combinators are preserved.
+
+If stripping leaves an empty / whitespace-only selector (e.g. the
+input had a `.ng-untouched.ng-pristine` selector that the
+isFrameworkOnlySelector gate happened to miss for some
+edge-case reason), the renderer falls through to xpath then to
+tag-only — same as the v2.2.6 framework-only path.
+
+#### 2. Skip role-suffix when the base came from the `<tag>Element` fallback
+
+After v2.2.6, an Angular input with `cssSelector: ".ng-untouched"`
+and no other handles produced the field name `inputElementInput` —
+clean of the framework class but ugly. The redundant suffix was
+because the existing `endsWith` check didn't catch `inputElement`
+(`"inputelement".endsWith("input")` is `false`).
+
+**Fix:** `synthFieldName` now tracks a `haveExplicitBase` flag —
+true when ANY explicit name source (name / label / placeholder /
+testId / text / idDerived) was available, false when we fell
+through to the `${role ?? tag}Element` last-resort base. The
+role-suffix step is skipped on the fallback path. So the same
+Angular input now produces `inputElement`. All other shapes
+unchanged.
+
+### Tests
+
+`tests/unit/locatorPicker.test.ts`:
+- New `stripFrameworkClasses` group — single-class, mixed, tag /
+  attribute / descendant preservation, no-op when no framework
+  class, and a documented edge-case (`:not(.ng-foo)` strips the
+  inner token to `:not()` — acceptable, rare in practice).
+- Updated the v2.2.6 BUG-10 tests to reflect v2.2.7 behaviour
+  (`expect(c.args).toBe('".search-input"')` not just `.toContain`,
+  field name `inputElement` not `inputElementInput`).
+
+## [2.2.6] — 2026-05-11
+
+### Fixed — BUG-10 (P2): locator extractor picks framework-internal CSS classes
+
+Cloud-job report 2026-05-11 20:08 against `https://preview.owasp-juice.shop`:
+Angular's runtime-managed form-state classes (`.ng-untouched`,
+`.ng-pristine`, `.ng-dirty`) were being picked as both the POM
+field-name source AND the locator CSS selector. The POM emitted
+`ngUntouchedInput = page.locator('.ng-untouched')` and the LLM then
+used `ngUntouchedInput` for "search field has not yet been
+interacted with" preconditions. The assertion failed because:
+
+1. `.ng-untouched` flips to `.ng-touched` the moment focus enters
+   the input — locators built on it are flaky by construction.
+2. Every Angular input shares the same state classes, so the
+   selector also fails strict-mode uniqueness.
+3. The field name itself is misleading — no test author would call
+   the search box "ng untouched input".
+
+Same class of bug applies to anything prefixed `mat-*` (Angular
+Material), `cdk-*` (CDK overlays / focus traps), `mdc-*` (Material
+Design Components), and `_ngcontent-*` / `_nghost-*` (Angular view
+encapsulation markers).
+
+**Fix (two layers in `src/transformers/locatorPicker.ts`):**
+
+1. **Field-name source.** `cssSelectorToName` now skips
+   framework-prefix classes when walking a multi-class selector and
+   returns the first user-named class instead. For
+   `.ng-untouched.search-input` it returns `"search input"`, not
+   `"ng untouched"`. If EVERY class on the element is framework-only,
+   it returns undefined and the caller falls through to
+   `<role|tag>Element` — for an Angular input with no other handles,
+   the synthesised field name becomes `inputElement` rather than
+   `ngUntouchedInput`.
+
+2. **CSS-fallback gate.** `pickLocator`'s step-6 CSS fallback now
+   refuses framework-only selectors via `isFrameworkOnlySelector`.
+   When the element has no role / label / placeholder / testId /
+   text / xpath and the only CSS handle is something like
+   `.ng-untouched.ng-pristine`, we emit a tag-only locator
+   (`page.locator("input")`) and flag it `confidence: "fallback"`.
+   Tag-only is non-ideal but at least matches a real DOM element
+   instead of a transient state class.
+
+New exports (both pure, easy to compose into future emitter rules):
+- `isFrameworkClass(cls: string): boolean`
+- `isFrameworkOnlySelector(selector: string | undefined): boolean`
+
+Detection covered: `ng-*`, `mat-*`, `cdk-*`, `mdc-*`,
+`_ngcontent-*`, `_nghost-*`. Hyphen-after-prefix is required so we
+don't accidentally flag user-named classes like `nginx-banner` or
+`ngo-button`.
+
+### Tests
+
+`tests/unit/locatorPicker.test.ts` — full coverage for BUG-10:
+- `isFrameworkClass` matches every prefix, leaves user classes
+  alone (including the deliberate near-misses `nginx-banner`,
+  `ngo-button`, `material-card`).
+- `isFrameworkOnlySelector` flags pure framework selectors,
+  declines mixed selectors, declines `#id`-bearing selectors, declines
+  non-class selectors.
+- `pickLocator` drops a framework-only CSS selector and falls back
+  to tag-only.
+- `pickLocator` preserves selectors that have at least one
+  user-named class.
+- `synthFieldName` skips framework classes and falls through to
+  `<role|tag>Element`.
+- `synthFieldName` picks the user-named class in a mixed selector.
+
+## [2.2.5] — 2026-05-11
+
+### Fixed — BUG-9 (P0): POM field name starting with a digit broke entire spec
+
+Cloud-job report 2026-05-11 19:46 against `https://preview.owasp-juice.shop`:
+every test in `tests/r-0-c934-ddf-001.spec.ts` failed with a
+**compile-time** `SyntaxError`, zero tests executed.
+
+Root cause: juice-shop renders pagination labels like `"0 of 0"` and
+`"1,500 of 0"` inside status regions. The locator-picker's field-name
+synthesiser routed those through `camelCase`, which produced
+`0Of0`, `1500Of0`, `0,0Of0`. JavaScript identifiers must start with
+a letter / `$` / `_`, never a digit, and cannot contain commas.
+
+The emitted POM and spec looked like:
+
+    this.0Of0 = page.getByText("0 of 0");
+    //   ^^^ SyntaxError
+    await expect(r0c934ddf001.0Of0).toBeVisible();
+    //                       ^^^ SyntaxError
+
+This is worse than a runtime failure: there's no triage signal,
+just a hard parse error, and the entire scenario set is skipped.
+
+**Fix (defence in depth — three layers):**
+
+1. **Identifier-safe naming helper.** New `toJsIdentifier(s)` in
+   `src/utils/naming.ts`. Strips any character not in `[A-Za-z0-9_$]`,
+   prefixes digit-leading identifiers with `_`, falls back to
+   `_field` for empty input. Pure function, fully unit-tested.
+
+2. **POM emitter.** `synthFieldName` in
+   `src/transformers/locatorPicker.ts` runs the post-camelCase result
+   through `toJsIdentifier`. Both the main path and the status-region
+   special case are covered. So `"0 of 0"` now becomes `_0Of0`,
+   `"1,500 of 0"` becomes `_1500Of0`. The POM declares
+   `this._0Of0 = page.getByText("0 of 0")` — valid TS.
+
+3. **Binding renderer safety net.** New `sanitizeLocatorReferences(s)`
+   in `src/emitters/facade.ts` rewrites `.<digit-leading>` member
+   access and `[<digit-leading>]` bracket access to be `_`-prefixed.
+   Applied to `assertion.locator`, `pomCall.method`, every
+   `pomCall.args` entry, and every line of `customBody`. This catches
+   cached LLM bindings from v2.2.4 or earlier that reference the old
+   unsanitized name shape, so users don't have to clear their cache
+   to benefit from the fix.
+
+### Tests
+
+- `tests/unit/naming.test.ts`: full coverage for `toJsIdentifier` —
+  pass-through of valid identifiers, digit-prefix path
+  (`0Of0`/`1500Of0`/`123`), comma stripping (`0,0Of0`,
+  `foo,bar`), arbitrary punctuation, empty-input fallback to
+  `_field`.
+- `tests/unit/locatorPicker.test.ts`: end-to-end reproduction of the
+  juice-shop pagination case — `{ text: "0 of 0" }` element produces
+  fieldName `_0Of0`; `{ text: "1,500 of 0" }` produces `_1500Of0`;
+  valid inputs unchanged.
+- `tests/unit/facade.test.ts`: helper coverage for
+  `sanitizeLocatorReferences` plus three end-to-end render tests
+  (assertion locator / pomCall args / customBody) confirming the
+  rewriter fires correctly through the public `emitTestFile` entry
+  point.
+
+## [2.2.4] — 2026-05-11
+
+### Fixed — BUG-7: empty `expect()` for URL assertions (regression from 2.2.3)
+
+The 2.2.3 SYSTEM_PROMPT told the LLM, when asserting a URL, to "leave
+`locator` as the page itself (omit it / use empty string)". The LLM
+took that literally and started emitting
+
+    { "assertion": { "locator": "", "matcher": "toHaveURL", ... } }
+
+which the renderer dutifully turned into
+
+    await expect().toHaveURL(new RegExp("..."));
+    //      ^^ TypeError: expected at least one argument
+
+at runtime. v2.2.2 worked because the prompt didn't have that
+guidance and the LLM emitted `locator: "page"` naturally. The
+regression hit 18+ scenarios in the cloud-jobs run.
+
+**Fix (three layers):**
+
+1. **Renderer (`src/emitters/facade.ts`).** `bindingsToBody` now
+   substitutes the literal `page` (always in scope inside spec test
+   bodies, because the Playwright fixture is `async ({ page }) =>`)
+   whenever `assertion.locator` is empty or whitespace-only. Belt
+   guarantee — even if a future cache entry or LLM response sneaks
+   through with `locator: ""`, the rendered spec is still valid TS.
+
+2. **Parser (`src/llm/anthropicClient.ts`).** `parseBindingJson`
+   normalises empty/missing `assertion.locator` to `"page"` at parse
+   time. Catches the bad shape upstream of the renderer (so unit
+   tests at the parser layer can assert the binding is well-formed
+   without needing to render).
+
+3. **Prompt (`src/llm/prompt.ts`).** The v2.2.3 line that said "use
+   empty string" is replaced with: "set `assertion.locator` to the
+   literal string `\"page\"` — not an empty string, not a getByURL
+   call". Includes an explicit example. Suspenders to the parser's
+   belt.
+
+### Tests
+
+`tests/unit/llm.test.ts`:
+- `parseBindingJson` normalises `locator: ""` to `"page"` for
+  toHaveURL, not.toHaveURL, toHaveTitle, not.toHaveTitle.
+- `parseBindingJson` normalises missing `locator` field (LLM
+  literally omitted it) to `"page"`.
+- `parseBindingJson` defaults any empty locator to `"page"` even for
+  non-page matchers (defence — `expect()` is never legal).
+- `parseBindingJson` leaves non-empty locators unchanged.
+
+`tests/unit/facade.test.ts` (or whichever module exercises
+`bindingsToBody`) — renderer substitutes `expect(page)` when an
+assertion arrives with empty/whitespace locator, regardless of
+matcher.
+
+## [2.2.3] — 2026-05-11
+
+### Fixed — BUG-6: hallucinated `page.getByURL` locators reach the spec
+
+Cloud-job report `BDD2PW_BUGS_2026-05-11.md` BUG-6: scenario 2TC-008
+crashed at the first assertion line with
+`Cannot read properties of undefined (reading 'context')`. Root cause:
+the LLM fallback emitted
+
+    expect(page.getByURL(/dashboard/)).toBeVisible();
+
+`page.getByURL` does not exist in the Playwright API. The Playwright
+`page` exposes only seven `getBy*` factories — `getByAltText`,
+`getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`,
+`getByText`, `getByTitle`. Anything else compiles (because TS doesn't
+type-check the LLM-generated string until render time) but evaluates
+to `undefined` at runtime, and the first method call against it
+throws the now-infamous "context" error.
+
+**Fix (defence in depth):**
+
+1. **Post-parse validator.** New `detectHallucinatedLocators(s)` helper
+   in `src/llm/anthropicClient.ts` scans for `page.getBy*` tokens and
+   returns any whose method name is not in the allowlist. `parseBindingJson`
+   now scans `assertion.locator`, `assertion.expected`, `customBody`,
+   `pomCall.method`, and `pomCall.args`. If ANY field contains a
+   hallucinated method, the entire binding is rejected (returns
+   `undefined`) — the step lands as a clean `// TODO` instead of as
+   broken-but-syntactically-valid TS.
+
+2. **Prompt allowlist.** `SYSTEM_PROMPT` in `src/llm/prompt.ts` now
+   explicitly enumerates the seven valid `page.getBy*` methods and
+   calls out `page.getByURL` by name with "DOES NOT EXIST — for URL
+   assertions use `toHaveURL` on the page". Also lists the two valid
+   page-level locator factories (`page.locator`, `page.frameLocator`).
+
+Rejecting + warning is strictly better than rendering broken code:
+under the old behaviour a single hallucinated step would fail an
+entire scenario at runtime with a misleading error. Under the new
+behaviour the step shows up as a TODO that the user (or a future LLM
+pass) can fix without touching the rest of the spec.
+
+### Tests
+
+`tests/unit/llm.test.ts`:
+- `detectHallucinatedLocators` flags `getByURL`, `getByPath`,
+  `getByHref`, `getByLink`; passes the seven valid methods unchanged;
+  picks up multiple hits in one string; ignores `loginPage.foo.getByURL`
+  (we only police `page.*`).
+- `parseBindingJson` rejects bindings whose `assertion.locator`,
+  `customBody`, or `pomCall.args` reference a hallucinated method.
+- `parseBindingJson` still accepts bindings that only use real
+  methods (regression-guard against an over-eager allowlist).
+
+## [2.2.2] — 2026-05-09
+
+### Fixed — four cloud-jobs production bugs
+
+Four distinct emitter / LLM-output defects surfaced across
+`r-4-f3-a50-d9-*.spec.ts` runs. None block the test suite from running;
+each one silently produces wrong-but-passing or wrong-and-crashing code.
+
+#### 1. Bare `context.clearCookies()` → `ReferenceError`
+
+LLM occasionally emits `await context.clearCookies()` (and similar
+`browser.*` calls) for "no session cookies" / "in a clean browser"
+steps. The Playwright test fixture only injects `page`, so bare
+`context`/`browser` is a `ReferenceError` at the first spec line.
+
+**Fix (defence in depth):**
+1. New `rewriteBareContext(s)` helper in `src/llm/anthropicClient.ts`
+   that maps `\bcontext.X` → `page.context().X` and
+   `\bbrowser.X` → `page.context().browser().X`. Applied to
+   `customBody` and `assertion.locator` during JSON parse.
+2. SYSTEM_PROMPT updated to instruct the LLM to use
+   `page.context()` directly. Belt + suspenders.
+
+Conservative rewriter — only matches word-boundary `context.` (so
+`pageContext`, `setupContext`, field names with "context" substring
+are left alone).
+
+#### 2. English prose slugified into URL regex
+
+Steps like `user remains on login page without any redirect`
+were producing `new RegExp("login[-_/]?page[-_/]?without[-_/]?
+any[-_/]?redirect")` which never matches a real URL, so the assertion
+silently passed (timeout = false-positive pass when running against
+the wrong URL).
+
+**Fix:** new `looksLikeProse(target)` heuristic in
+`src/transformers/stepNormalizer.ts`. Rules 10 / 11b / N4 / N5e now
+call it on the captured page-name target and emit a `// TODO:` with a
+clear warning instead of a wrong-but-silent regex when:
+- More than 5 whitespace-separated tokens.
+- Any of "without", "with", "any", "and", "or", "the", "after",
+  "before", "while", "where", "when", "via" appears twice or more.
+- Any "redirect" / "redirected" / "redirection" form appears
+  anywhere.
+
+The bias is intentionally conservative — when in doubt, abandon the
+slug and force the user to supply a real path fragment.
+
+#### 3. `URL contains a path segment 'X'` matched no rule
+
+The LLM dialect "the current URL contains a path segment 'X'"
+(verb form of `URL contains 'X'`) didn't match rule 11a's pattern,
+which required the quoted value immediately after `contains`. Step
+fell through to LLM, LLM then emitted
+`page.getByText("X").first().toContainText("X")` — testing the URL
+fragment against page TEXT content rather than the browser address
+bar. Half-meaningful, totally wrong matcher.
+
+**Fix:** rule 11a's regex extended to accept an optional
+`(?:(?:a|the)\s+)?(?:path\s+|url\s+)?(?:segment\s+|fragment\s+|part\s+)?`
+between `contains\s+` and the quoted value. All four forms now match:
+- `URL contains "X"` (original)
+- `Page URL contains the path "X"` (v2.2.2)
+- `the current URL contains a path segment "X"` (v2.2.2)
+- `URL contains a fragment "X"` (v2.2.2)
+
+All resolve to `expect(page).toHaveURL(new RegExp("X"))`.
+
+#### 4. LLM emitted assertion when the step described user input
+
+Steps like `I enter "MySecret123" as the password` were being emitted
+as `expect(...).toBeVisible(...)` instead of `passwordInput.fill(...)`.
+Resulting spec asserts the value is visible before any fill happened →
+test passes when the value happens to be a substring of any rendered
+text on the page.
+
+**Fix:** SYSTEM_PROMPT now explicitly instructs the LLM: when a step's
+verb is `enter`, `type`, `fill`, `paste`, `set`, `use`, `supply`,
+`provide`, or `login as`, emit a `pomCall` or `customBody` with a
+`.fill()`/`.click()` call. Never an assertion.
+
+#### Tests
+
+- `tests/unit/stepMatcher.test.ts` — 6 new tests under
+  `v2.2.2 — URL contains 'a path segment X' dialect` and
+  `v2.2.2 — prose-as-URL-slug guard`.
+- `tests/unit/llm.test.ts` — 2 new tests for `rewriteBareContext` and
+  the parser-level `customBody` rewrite.
+
+#### Known limitation (bug #5 from the report — deferred)
+
+`getByText("Congratulations").first()` matched a help-text list item
+on the LOGIN page mentioning "Congratulations" rather than the
+post-login success banner. This is a locator-scoping problem that's
+hard to solve at generation time without knowing the page-state at
+runtime. Documented in BDD_REVIEW.md for now; v1.3 roadmap item is
+locator scoping via container-aware picker (the locator picker would
+prefer a parent scope like `page.locator("main").getByText(...)`
+when the field is post-action).
+
+#### Files
+
+- Modified: `src/llm/prompt.ts` (SYSTEM_PROMPT additions),
+  `src/llm/anthropicClient.ts` (rewriteBareContext + parser call site),
+  `src/transformers/stepNormalizer.ts` (looksLikeProse),
+  `src/transformers/stepMatcher.ts` (rule 11a regex extension + prose
+  guard in rules 10/11b/N4/N5e),
+  `tests/unit/stepMatcher.test.ts` (+6 tests),
+  `tests/unit/llm.test.ts` (+2 tests).
+
+#### Migration from 2.2.1
+
+Pure bug fix — no API change. Bump the dep pin to `^2.2.2`.
+
+## [2.2.1] — 2026-05-09
+
+### Fixed — heal Proxy broke `expect(locator).toMatcher(...)` (HIGH, launch-blocker)
+
+bdd2pw 2.2.0's action-time healing wrapped every POM-field Locator in a
+`new Proxy(...)` for healable-method interception. Playwright's
+`expect(loc).toBeVisible()` (and every other `LocatorMatchers`) does a
+private-field probe (`#frame`, `Symbol.toStringTag`, etc.) that doesn't
+survive a generic Proxy — so every spec that asserted against a POM
+field died synchronously with:
+
+```
+Error: toBeVisible can be only used with Locator object
+```
+
+100 % test fail rate on any spec calling `expect()` on a POM field.
+
+**Fix:** replaced the Proxy with **direct instance mutation** in
+`templates/heal.ts.tmpl` (heal helper bumped to v1.2.1):
+
+```ts
+// Before (v1.2): wrap in Proxy → identity check fails
+const proxy = new Proxy(original, { get(target, prop) {...} });
+return proxy;
+
+// After (v1.2.1): mutate own properties → identity preserved
+for (const method of HEALABLE_METHODS) {
+  const origFn = (original as any)[method];
+  if (typeof origFn !== "function") continue;
+  (original as any)[method] = async function (...args) {
+    if (healedLocator) {
+      return await (healedLocator as any)[method].apply(healedLocator, args);
+    }
+    try { return await origFn.apply(original, args); }
+    catch (err) { /* heal-and-retry, identical to v1.2 */ }
+  };
+}
+return original;
+```
+
+The healing logic (POST `/api/v1/heal`, retry with candidate, log
+`heal_attempt` / `healed` / `heal_unavailable`) is byte-identical. Only
+the wrapping mechanism changed.
+
+#### What this preserves vs v1.2
+
+| Property | v1.2 (Proxy) | v1.2.1 (mutation) |
+|---|---|---|
+| Action-time healing on `.click`/`.fill`/etc. | ✓ | ✓ |
+| Once-cached candidate reused on subsequent calls | ✓ | ✓ |
+| `await loc.click()` works | ✓ | ✓ |
+| `await expect(loc).toBeVisible()` works | ❌ | ✓ |
+| `loc instanceof Locator` | partially | ✓ |
+| Private-field probes (`#frame`) | ❌ | ✓ |
+| Non-healable methods (`.locator()`, `.first()`) untouched | ✓ | ✓ (prototype delegation) |
+
+#### Files
+
+- Modified: `templates/heal.ts.tmpl` (the `wrapLocatorForHealing`
+  function + doc comments at top + version bump v1.2 → v1.2.1).
+
+#### Migration from 2.2.0
+
+Pure bug fix — no API change. Just bump the dep pin to `^2.2.1`.
+
+Cloud-jobs-template runs that were failing 100% on
+`expect.toBeVisible can be only used with Locator object` will now go
+green (or fail honestly on real test logic). Action-time healing
+continues to work the same way for failed `.click()` / `.fill()` /
+etc.
+
+## [2.2.0] — 2026-05-08
+
+### Fixed — LLM fallback hung 8+ minutes in cloud-job containers (HIGH, launch-blocker)
+
+A cloud-jobs run with `--llm anthropic` would emit one `scaffold start`
+log line and then hang silently until the 8-minute container timeout
+killed it. **No diagnostics, no governance hits, no Anthropic completions.**
+Disabling `--llm` restored function but reverted every unmatched step to
+silent `// TODO:` no-ops — defeating the entire 2.0+ feature.
+
+**Four root causes, all fixed in this release:**
+
+1. **Cache fallback was silent.** When `better-sqlite3`'s native binding
+   couldn't load and we degraded to in-memory cache (the v2.0.2 fix
+   path), the `error` log event was emitted but the LLM client's `log`
+   callback was hard-coded to `() => {}` no-op. Operators couldn't see
+   that the cache fell back. **Fix:** scaffold() now wires bdd2pw's
+   pino logger into the LLM client's `log` callback. New
+   `cache_fallback` LLMLogEvent kind fires once when the SQLite load
+   fails. Plus every other event (sanitise start/done, provider call
+   start/done, binding parsed, step deadline) now appears in the
+   structured scaffold log.
+
+2. **Governance `/sanitize` POST had no timeout.** A wedged sidecar
+   would block the entire scaffold indefinitely. **Fix:** undici
+   `bodyTimeout` + `headersTimeout` set to 15_000 ms (configurable via
+   `--llm-governance-timeout-ms`). On expiry, governance throws and
+   the LLM call is REFUSED (fail-closed); the step lands as TODO with
+   "(LLM fallback also failed: governance unreachable)".
+
+3. **Anthropic SDK call had no per-call timeout.** The SDK's default
+   timeout is 10 minutes — far too long for a scaffold loop with
+   dozens of steps. **Fix:** pass `{ timeout: 30_000 }` to
+   `anthropic.messages.create(...)` (configurable via
+   `--llm-provider-timeout-ms`).
+
+4. **No step-level watchdog around the whole LLM fallback path.** Even
+   with #2 and #3 in place, a hang anywhere else (cache lookup stalled
+   on disk, governance fetch stalled below the SDK, JSON parse
+   pathology) would still deadlock. **Fix:** `matchStepWithLLM` now
+   wraps `llm.generateBinding()` in `Promise.race` against a 60_000 ms
+   deadline (configurable via `--llm-step-timeout-ms`). On expiry, the
+   step lands as TODO with "(LLM fallback also failed: step deadline
+   exceeded after Nms)" and the scaffold proceeds to the next step.
+
+#### Acceptance test (production scenario)
+
+A scaffold of a 10-step feature where the governance sidecar deliberately
+returns 200 OK after 5 minutes (or never) now finishes in ≤90 seconds
+with all 10 steps marked TODO. No 8-minute hangs.
+
+#### New CLI flags
+
+| Flag | Default | Bug-report mapping |
+|---|---|---|
+| `--llm-step-timeout-ms <n>` | `60000` | Outer step-level watchdog (#4) |
+| `--llm-provider-timeout-ms <n>` | `30000` | Anthropic SDK per-call timeout (#3) |
+| `--llm-governance-timeout-ms <n>` | `15000` | Governance `/sanitize` timeout (#2) |
+
+### Added — action-time self-healing (Proxy-wrapped Locator) — heal.ts.tmpl v1.2
+
+`healOrThrow(page, opts)` now returns a `Proxy`-wrapped Playwright Locator
+instead of the bare `opts.preferred`. The Proxy intercepts every
+healable action method (click, fill, check, selectOption, hover, focus,
+waitFor, textContent, isVisible, …) and on the FIRST failure for a
+given Locator instance:
+
+  1. Logs `heal_attempt` to `artefacts/heal-events.jsonl`.
+  2. POSTs `/api/v1/heal` to the configured `SELF_HEALING_URL` with the
+     original selector + truncated error message.
+  3. If the service returns `{selector, confidence}`, retries the same
+     action on `page.locator(selector)`.
+  4. On success, logs `healed` and caches the candidate so subsequent
+     calls on the SAME Locator instance use it transparently.
+  5. On failure (no service, no candidate, or candidate fails too),
+     logs `heal_unavailable` and re-throws the ORIGINAL error so the
+     test fails honestly.
+
+The proxy adds zero overhead on the happy path — every method call
+forwards unchanged; the try/catch only fires when Playwright rejects.
+
+### Added — `scenario_name` on every heal-event JSONL line (P2 Issue 3)
+
+`healOrThrow` now records the current scenario via Playwright's
+`test.info().title` whenever it's available (best-effort — falls back
+to `null` outside the test lifecycle, e.g. fixture setup). Replaces
+the previous "<unknown scenario>" buckets in the TestForge AI
+Healings tab.
+
+## [2.1.0] — 2026-05-08
+
+### Changed — wrap every Gherkin step in `await test.step(...)`
+
+bdd2pw used to render each Gherkin step as a leading `// keyword text`
+comment followed by a single statement (POM call, assertion, or
+`// TODO:` for unmatched). Playwright's JSON reporter could only see the
+test as a whole, so the downstream Scenarios tab in TestForge AI showed
+a single PASS/FAIL pill per scenario — and cheerfully reported PASS for
+scenarios where 4 of 6 steps had silently degraded to TODO no-ops.
+
+Starting with 2.1.0 every binding is emitted as
+
+```ts
+await test.step("Given user is on login page", async () => {
+  await loginPage.goto();
+});
+```
+
+Playwright's JSON reporter now emits one entry per step inside
+`results[].steps[]`, with `error` populated on failure. This is the
+foundation of the **Scenarios tab honesty** feature: the platform UI
+can render an expandable per-step table with passed/failed/skipped
+pills, and customers see truthful per-step outcomes.
+
+### Added — `[SKIPPED]` prefix on unmatched steps
+
+When no rule, snapshot match, or LLM provider produces a binding for a
+Gherkin step (the classic `// TODO: no rule matched` case), the test.step
+name is now prefixed with `[SKIPPED] ` and the body remains a no-op
+`// TODO:` comment. Playwright sees the step run and pass (the body
+does nothing); `pw-to-cucumber.js` detects the `[SKIPPED] ` prefix and
+rewrites the cucumber.json status to `skipped` so the Scenarios tab
+shows the step in grey instead of green.
+
+### Migration notes
+
+- POM instantiation (`const loginPage = new LoginPage(page);`) stays
+  OUTSIDE any test.step wrapper — it's scaffolding, not part of the
+  Gherkin scenario.
+- Existing `// keyword text` comment lines are GONE. Tools/CI checks
+  that grep for `// When user enter ...` should look for
+  `await test.step("When user enter ..."` instead.
+- Test rendering is otherwise byte-identical post-dedent: each
+  binding's existing TS line(s) are now indented one extra level
+  inside the `async () => { ... }` arrow.
+
 ## [2.0.2] — 2026-05-08
 
 ### Fixed — cache-load failure aborted entire LLM fallback (HIGH, launch-blocker)

@@ -22,6 +22,64 @@ import type {
   StepIR,
 } from "../types";
 import { camelCase } from "../utils/naming";
+import { looksLikeProse } from "./stepNormalizer";
+import { normalizeStepText } from "./stepNormalizer";
+import { API_RULES } from "./apiRules";
+import { VISIBILITY_RULES } from "./visibilityRules";
+import { BANKING_RULES } from "./domains/banking";
+import { HEALTHCARE_RULES } from "./domains/healthcare";
+import { INSURANCE_RULES } from "./domains/insurance";
+import { RETAIL_RULES } from "./domains/retail";
+import { GOV_RULES } from "./domains/gov";
+import { EDUCATION_RULES } from "./domains/education";
+import { TELECOM_RULES } from "./domains/telecom";
+
+/**
+ * v3.4.0 — opt-in domain rule packs. ScaffoldOptions.domains is read
+ * once at the top of scaffold() and forwarded here via
+ * setActiveDomains(). Domain rules are spliced into the registry
+ * after the API + visibility rules but BEFORE the UI/URL-slug rules,
+ * so domain-specific patterns intercept ambiguous prose first.
+ *
+ * Domains are additive: passing ["banking", "healthcare"] activates
+ * both. Passing nothing keeps the registry byte-stable with v3.3.0.
+ */
+export type DomainName =
+  | "banking"
+  | "healthcare"
+  | "insurance"
+  | "retail"
+  | "gov"
+  | "education"
+  | "telecom";
+
+const DOMAIN_RULES: Record<DomainName, Rule[]> = {
+  banking: BANKING_RULES,
+  healthcare: HEALTHCARE_RULES,
+  insurance: INSURANCE_RULES,
+  retail: RETAIL_RULES,
+  gov: GOV_RULES,
+  education: EDUCATION_RULES,
+  telecom: TELECOM_RULES,
+};
+
+let activeDomainRules: Rule[] = [];
+
+export function setActiveDomains(domains: readonly DomainName[] | undefined): void {
+  if (!domains || domains.length === 0) {
+    activeDomainRules = [];
+    return;
+  }
+  const seen = new Set<DomainName>();
+  const out: Rule[] = [];
+  for (const d of domains) {
+    if (seen.has(d)) continue;
+    seen.add(d);
+    const pack = DOMAIN_RULES[d];
+    if (pack) out.push(...pack);
+  }
+  activeDomainRules = out;
+}
 
 export interface MatchStepsInput {
   scenarios: ScenarioIR[];
@@ -54,10 +112,30 @@ export function matchStep(
   pom: PageObjectIR,
   pageVar: string,
 ): StepBinding {
-  for (const rule of RULES) {
-    const m = step.text.match(rule.pattern);
+  // Belt-and-suspenders normalisation (Block 2 #7). Apply BEFORE the rule
+  // table runs so common LLM phrasing drift ("in the field" vs "into the
+  // field", smart curly quotes from copy-paste, trailing parentheticals,
+  // "user remains on login page" vs canonical "URL remains on the login
+  // page") all map back to the canonical forms the rule regexes expect.
+  // The `step` object itself is treated as immutable — we work off a
+  // local copy so the original Gherkin text is preserved for warnings,
+  // test.step labels, and downstream review reports.
+  const normalisedText = normalizeStepText(step.text);
+  const normalisedStep: StepIR = normalisedText === step.text
+    ? step
+    : { ...step, text: normalisedText };
+
+  // v3.4.0 — domain rule packs run after API + visibility but BEFORE
+  // the UI/URL-slug rules. Built as [domain, then registry] so the
+  // domain patterns intercept ambiguous prose first when active.
+  const effectiveRules =
+    activeDomainRules.length > 0
+      ? [...activeDomainRules, ...RULES]
+      : RULES;
+  for (const rule of effectiveRules) {
+    const m = normalisedStep.text.match(rule.pattern);
     if (m) {
-      const result = rule.build(m, step, pom, pageVar);
+      const result = rule.build(m, normalisedStep, pom, pageVar);
       if (result) return result;
     }
   }
@@ -65,6 +143,127 @@ export function matchStep(
     step,
     warning: `no rule matched: "${step.keyword} ${step.text}"`,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// v3.6.0 — rule-trace diagnostics.
+//
+// `diagnoseStep` runs every rule in the registry against a step (with
+// the same normalisation as matchStep) and reports, per rule:
+//
+//   - whether the regex matched at all,
+//   - if it matched, whether the build() callback returned a binding
+//     or declined (null/undefined),
+//   - the pattern source (so the review report can show the user
+//     exactly what failed and which captures, if any, fired).
+//
+// This is opt-in (ScaffoldOptions.diagnostics) because it's
+// O(rules × warnings) work. For a typical scaffold with <20 warnings
+// and ~60 rules, that's still <1ms total — but the convention is
+// "default off, surface explicitly".
+// ───────────────────────────────────────────────────────────────────
+
+export interface RuleTraceEntry {
+  /** Stable label for the rule (e.g. "rule-2a", "api-04", "visibility-V01"). */
+  ruleId: string;
+  /** Raw regex source, useful for the user reading the report. */
+  patternSource: string;
+  /** True if the regex matched but build() returned null/undefined. */
+  matchedButDeclined: boolean;
+  /** True if the regex didn't match at all. */
+  noMatch: boolean;
+  /** Captures from the match, when matched. */
+  captures?: string[];
+}
+
+/**
+ * Run every rule against the step and return a trace. Up to `topN`
+ * "nearest" entries are returned in priority order:
+ *   1. Rules whose regex matched but build declined (they got close).
+ *   2. Rules whose regex didn't match — sorted by token-overlap proxy
+ *      so the user sees the most-similar-shaped patterns first.
+ *
+ * Default `topN = 3`. The first bucket is rare in practice; usually
+ * the trace is dominated by no-match rules.
+ */
+export function diagnoseStep(
+  step: StepIR,
+  pom: PageObjectIR,
+  pageVar: string,
+  topN = 3,
+): RuleTraceEntry[] {
+  const normalised = normalizeStepText(step.text);
+  const normalisedStep: StepIR =
+    normalised === step.text ? step : { ...step, text: normalised };
+
+  const effectiveRules =
+    activeDomainRules.length > 0
+      ? [...activeDomainRules, ...RULES]
+      : RULES;
+
+  const stepTokens = new Set(
+    normalised.toLowerCase().split(/\s+/).filter(Boolean),
+  );
+
+  const declined: RuleTraceEntry[] = [];
+  const noMatchEntries: { entry: RuleTraceEntry; score: number }[] = [];
+
+  effectiveRules.forEach((rule, idx) => {
+    const id = ruleIdFor(rule, idx);
+    const patternSource = rule.pattern.source;
+    const m = normalisedStep.text.match(rule.pattern);
+    if (m) {
+      const built = rule.build(m, normalisedStep, pom, pageVar);
+      if (built) return; // hit; matchStep would have returned this — caller never sees diagnoseStep when a real binding exists
+      declined.push({
+        ruleId: id,
+        patternSource,
+        matchedButDeclined: true,
+        noMatch: false,
+        captures: m.slice(1).map((c) => (c == null ? "" : c)),
+      });
+      return;
+    }
+    // No match — score by how many step tokens appear in the pattern
+    // source (cheap proxy for "this rule was looking for something
+    // similar"). Higher = more relevant.
+    const patternLower = patternSource.toLowerCase();
+    let overlap = 0;
+    for (const t of stepTokens) {
+      if (patternLower.includes(t)) overlap += 1;
+    }
+    noMatchEntries.push({
+      entry: {
+        ruleId: id,
+        patternSource,
+        matchedButDeclined: false,
+        noMatch: true,
+      },
+      score: overlap,
+    });
+  });
+
+  noMatchEntries.sort((a, b) => b.score - a.score);
+  return [
+    ...declined,
+    ...noMatchEntries.slice(0, Math.max(0, topN - declined.length)).map(
+      (x) => x.entry,
+    ),
+  ].slice(0, topN);
+}
+
+/**
+ * Best-effort stable id for a rule in the registry. We don't carry
+ * an explicit id field on Rule (yet) — the position in the merged
+ * registry is the stable id. Domain rules get a `domain-NN` prefix
+ * for clarity; the rest are `rule-NN`.
+ */
+function ruleIdFor(_rule: Rule, idx: number): string {
+  const domainCount = activeDomainRules.length;
+  if (idx < domainCount) {
+    return `domain-${String(idx + 1).padStart(2, "0")}`;
+  }
+  return `rule-${String(idx - domainCount + 1).padStart(2, "0")}`;
 }
 
 // --- Rule registry ---------------------------------------------------------
@@ -94,6 +293,22 @@ interface Rule {
 }
 
 const RULES: Rule[] = [
+  // v3.0.0 — API rules go FIRST. API step text ("the response status is
+  // 200", "I send a POST request to ...") is shape-distinct from UI step
+  // text, so the API rules don't false-positive UI steps; but putting them
+  // at the top guarantees deterministic interception before any UI rule
+  // accidentally chews on an API-ish phrase. See src/transformers/apiRules.ts.
+  ...API_RULES,
+
+  // v3.1.0 — visibility rules go SECOND. TestForge handoff Issue 1:
+  // steps like "the user's name or profile indicator is visible in the
+  // UI" were falling through to the URL-slug rules and producing
+  // always-failing `toHaveURL(/.../)` assertions. These rules intercept
+  // anything matching "<noun> is visible/displayed/shown/appears" and
+  // either resolve a POM locator or land a clean TODO — never a URL
+  // regex. See src/transformers/visibilityRules.ts.
+  ...VISIBILITY_RULES,
+
   // 1. Navigation: "I am on the login page" / "I navigate to /foo"
   {
     pattern: new RegExp(`^(?:${SUBJ} )?(?:am on|navigate to|navigates? to|open|opens?|visit|visits?|go to|goes? to|am at|is at) (?:the )?(?:.+?\\s+)?["']?([^"']+?)["']?(?: page)?$`, "i"),
@@ -375,6 +590,14 @@ const RULES: Rule[] = [
       // so without cleanSlugTarget the slug includes the parenthetical and
       // never matches a real URL.
       const target = cleanSlugTarget(m[1]);
+      // v2.2.2: prose guard — see N5e for the rationale.
+      if (looksLikeProse(target)) {
+        return {
+          step,
+          warning:
+            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+        };
+      }
       return {
         step,
         assertion: {
@@ -387,15 +610,20 @@ const RULES: Rule[] = [
   },
 
   // 11a. URL contains: "<subj> redirected to <description> (URL contains 'X')"
-  //      / "URL contains 'X'" / "Page URL contains 'X'".
-  //      The parenthetical 'X' is the AUTHORITATIVE URL fragment — use it directly
+  //      / "URL contains 'X'" / "Page URL contains 'X'" /
+  //      "the current URL contains a path segment 'X'" (v2.2.2).
+  //      The quoted 'X' is the AUTHORITATIVE URL fragment — use it directly
   //      and ignore the descriptive prose. This must come before rule 11b which is
   //      greedy and would otherwise swallow the parenthetical.
   //      Prefix is `.*?\b` (any chars + word boundary) so `(URL contains "X")`,
   //      `URL contains "X"`, `Page URL contains "X"` all match — `(?:.+?\s)?` was
   //      too strict because it required whitespace immediately before URL.
+  //      v2.2.2: optional `(?:(?:a|the) )?(?:path |url )?(?:segment |fragment |part )?`
+  //      between "contains" and the quote handles the LLM dialect
+  //      "current URL contains a path segment 'X'" — production bug
+  //      where bdd2pw emitted toContainText on getByText instead of toHaveURL.
   {
-    pattern: /^.*?\b(?:URL|url)\s+contains\s+["']([^"']+)["']/i,
+    pattern: /^.*?\b(?:URL|url)\s+contains\s+(?:(?:a|the)\s+)?(?:path\s+|url\s+)?(?:segment\s+|fragment\s+|part\s+)?["']([^"']+)["']/i,
     build: (m, step, _pom, pageVar) => {
       const fragment = m[1];
       // Escape regex metacharacters so the URL fragment matches literally.
@@ -427,6 +655,14 @@ const RULES: Rule[] = [
       // one is descriptive prose and falls through to 11b. cleanSlugTarget
       // handles both the parenthetical and the lingering inner ` page`.
       const target = cleanSlugTarget(m[1]);
+      // v2.2.2: prose guard — see N5e for the rationale.
+      if (looksLikeProse(target)) {
+        return {
+          step,
+          warning:
+            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+        };
+      }
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -580,6 +816,17 @@ const RULES: Rule[] = [
     build: (m, step, _pom, pageVar) => {
       // v1.1.4: stripArticles. v1.1.6: also stripParentheticals via cleanSlugTarget.
       const target = cleanSlugTarget(m[1]);
+      // v2.2.2: refuse to slugify English prose — produces regexes that
+      // never match real URLs and silently pass for the wrong reason
+      // (e.g. "login page without any redirect" → /login[-_/]?page[-_/]?
+      // without[-_/]?any[-_/]?redirect/). Fall back to TODO warning.
+      if (looksLikeProse(target)) {
+        return {
+          step,
+          warning:
+            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+        };
+      }
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");
@@ -697,6 +944,14 @@ const RULES: Rule[] = [
       // for parity with rules 10/11b. Default "success" when the description is
       // omitted entirely.
       const target = cleanSlugTarget(m[1] ?? "success");
+      // v2.2.2: prose guard — see N5e for the rationale.
+      if (looksLikeProse(target)) {
+        return {
+          step,
+          warning:
+            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+        };
+      }
       const slug = target
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         .replace(/\s+/g, "[-_/]?");

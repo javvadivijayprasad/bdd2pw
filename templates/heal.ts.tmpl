@@ -1,64 +1,61 @@
 /**
- * Self-healing locator helper — v1.1 scaffold.
+ * Self-healing locator helper — v1.2.1 scaffold (bdd2pw 2.2.1+).
  *
  * GENERATED FILE. Do not edit directly; this file is rewritten on every
  * `bdd2pw scaffold --self-healing` invocation. To customise, fork it under
  * a different filename and update the `tsconfig.json` `paths` mapping.
  *
- * What this provides today (v1.1)
- * --------------------------------
- *   - `healOrThrow(page, { preferred, context })` — a passthrough that
- *     returns the `preferred` Playwright Locator unchanged, AND records
- *     the locator-creation event to `artefacts/heal-events.jsonl` for the
- *     offline self-heal pipeline to consume.
+ * v1.2 → v1.2.1: action-time healing is now applied via INSTANCE
+ * MUTATION instead of a Proxy wrapper. v1.2's Proxy broke Playwright
+ * `expect(loc).toBeVisible()` because the matcher does a private-field
+ * probe (`#frame`) that doesn't survive a generic Proxy — every spec
+ * that called expect() on a POM field died synchronously with
+ * `Error: toBeVisible can be only used with Locator object`. v1.2.1
+ * preserves Locator identity so expect() works normally while keeping
+ * the action-time heal-and-retry behaviour intact.
+ *
+ * What this provides today (v1.2.1)
+ * ----------------------------------
+ *   - `healOrThrow(page, { preferred, context })` — registers the locator
+ *     to `artefacts/heal-events.jsonl` AND mutates it in place so every
+ *     healable action method (.click, .fill, .check,
+ *     .selectOption, .hover, .focus, .textContent, .innerText,
+ *     .getAttribute, .isVisible, .waitFor, .press, .type, .setChecked,
+ *     .uncheck, .clear, .scrollIntoViewIfNeeded). On the FIRST action
+ *     failure for a given locator, the proxy:
+ *       1. Logs a `heal_attempt` event with the original error.
+ *       2. Asks the self-healing service (when SELF_HEALING_URL is set)
+ *          for a candidate replacement selector via POST /api/v1/heal.
+ *       3. Re-runs the original action against `page.locator(<candidate>)`.
+ *       4. On success, logs a `healed` event; subsequent actions on the
+ *          SAME locator instance use the candidate transparently.
+ *       5. On failure (no service, no candidate, or candidate also fails),
+ *          logs `heal_unavailable` and re-throws the original error so
+ *          the test still fails honestly.
  *   - Optional fire-and-forget heartbeat to `${SELF_HEALING_URL}/api/v1/register`
- *     so the service knows which locators a test references. The heartbeat is
- *     a best-effort POST — failures are silently swallowed so a missing
- *     service doesn't break tests.
+ *     so the service knows which locators a test references. Best-effort
+ *     POST — failures are silently swallowed.
  *
- * What this does NOT do yet (deferred to v1.2)
- * --------------------------------------------
- *   - **Action-time healing.** When `await locator.click()` fails because
- *     the locator changed, this helper will not catch the failure, call
- *     `/api/v1/heal`, and retry with a suggested locator. That requires a
- *     Locator-wrapping proxy that intercepts every action method (.click,
- *     .fill, .check, .selectOption, .hover, .focus, .textContent,
- *     .innerText, .getAttribute, .isVisible, .waitForSelector, ...). The
- *     existing self-healing SDK does this for *string-selector*-based test
- *     code (`page.fill('#username', ...)`); pw-emit's POMs use Locator
- *     objects (`this.usernameInput.fill(...)`), so the v1.2 wrapper has a
- *     different shape.
- *
- *   Until v1.2 ships, this file is a registration scaffold: the offline
- *   self-heal pipeline (`E:\EB1A_Research\self_healing_stage_services`)
- *   sees what locators each test references via the JSONL feed, but
- *   recovery still has to happen through that pipeline's batch processing
- *   rather than at action time.
+ * Action-time healing intentionally fires only on ACTION failures (click,
+ * fill, etc.), not on locator construction — `page.getByLabel("Username")`
+ * is just an object factory and never throws. The proxy adds zero overhead
+ * on the happy path: every method call passes through unmodified, the
+ * try/catch only kicks in when the underlying Playwright call rejects.
  *
  * Environment variables
  * ---------------------
- *   SELF_HEALING_URL    Base URL of the self-healing service (e.g.
- *                       http://localhost:8003). When set, every locator
- *                       creation triggers a fire-and-forget POST to
- *                       `${SELF_HEALING_URL}/api/v1/register`. When unset,
- *                       no network calls are made; events still land in
- *                       JSONL.
- *
- *   HEAL_EVENTS_PATH    Override the JSONL output path. Defaults to
- *                       `artefacts/heal-events.jsonl` relative to the
- *                       process cwd (typically the repo root when running
- *                       `npx playwright test`).
- *
- *   HEAL_DISABLE        Set to "1" or "true" to disable both JSONL writes
- *                       and heartbeats. Useful in CI when you don't want
- *                       the artefact noise.
+ *   SELF_HEALING_URL    Base URL of the self-healing service.
+ *   HEAL_EVENTS_PATH    Override the JSONL output path (default
+ *                       `artefacts/heal-events.jsonl`).
+ *   HEAL_DISABLE        "1"/"true" disables JSONL writes + heartbeats +
+ *                       heal-service calls. Useful in CI.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import * as https from "https";
-import type { Locator, Page } from "@playwright/test";
+import { test, type Locator, type Page } from "@playwright/test";
 
 export interface HealContext {
   /** PascalCase Page Object class name, e.g. "LoginPage". */
@@ -79,6 +76,27 @@ interface HealEvent {
   event: "register";
   page: string;
   name: string;
+  /** Scenario / test title at the time the locator was registered. */
+  scenario_name: string | null;
+  pid: number;
+  cwd: string;
+}
+
+interface HealAttemptEvent {
+  ts: string;
+  event: "heal_attempt" | "healed" | "heal_unavailable";
+  page: string;
+  name: string;
+  scenario_name: string | null;
+  method: string;
+  /** Original locator selector (best-effort serialisation). */
+  original: string | null;
+  /** Replacement selector when known. */
+  healed: string | null;
+  /** Confidence in the replacement, 0–1, when the service provided one. */
+  confidence: number | null;
+  /** Truncated error message that triggered the heal attempt. */
+  error: string | null;
   pid: number;
   cwd: string;
 }
@@ -103,13 +121,27 @@ function ensureArtefactsDir(): string {
   return fullPath;
 }
 
-function appendEvent(event: HealEvent): void {
+function appendEvent(event: HealEvent | HealAttemptEvent): void {
   if (DISABLED) return;
   const fullPath = ensureArtefactsDir();
   try {
     fs.appendFileSync(fullPath, JSON.stringify(event) + "\n", "utf8");
   } catch {
     /* best-effort — never break tests for logging */
+  }
+}
+
+/**
+ * Best-effort scenario-name capture. test.info() throws when called
+ * outside a running test (`Test info is not available outside the test
+ * lifecycle`), so we swallow and return null.
+ */
+function currentScenarioName(): string | null {
+  try {
+    const info = test.info();
+    return info?.title ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -151,28 +183,270 @@ function heartbeat(context: HealContext): void {
 }
 
 /**
- * Register a locator with the self-healing pipeline and return it unchanged.
- *
- * The emitted POM constructor calls this for every field:
- *
- *   this.usernameInput = healOrThrow(page, {
- *     preferred: page.getByLabel("Username"),
- *     context: { page: "LoginPage", name: "usernameInput" },
- *   });
- *
- * v1.1 returns `preferred` as-is — no wrapping, no proxy, no action-time
- * healing. The locator is registered to JSONL + heartbeat so the offline
- * self-heal pipeline sees it. v1.2 will wrap action methods.
+ * Register a locator with the self-healing pipeline and mutate it in
+ * place so action methods perform action-time healing on failure
+ * (v1.2.1). Returns the SAME Locator instance — identity is preserved,
+ * so `expect(returned).toBeVisible()` works normally.
  */
-export function healOrThrow(_page: Page, opts: HealOrThrowOptions): Locator {
+export function healOrThrow(page: Page, opts: HealOrThrowOptions): Locator {
   appendEvent({
     ts: new Date().toISOString(),
     event: "register",
     page: opts.context.page,
     name: opts.context.name,
+    scenario_name: currentScenarioName(),
     pid: process.pid,
     cwd: process.cwd(),
   });
   heartbeat(opts.context);
-  return opts.preferred;
+  return wrapLocatorForHealing(page, opts.preferred, opts.context);
+}
+
+/* ─── v1.2.1 action-time healing (instance mutation, no Proxy) ────── */
+
+/** Healable Locator action methods — i.e. ones that throw on element-not-
+ *  found / timeout. Read methods like .count() / .all() return 0 / [] and
+ *  don't need wrapping. */
+const HEALABLE_METHODS = new Set<string>([
+  "click", "dblclick", "fill", "type", "press", "check", "uncheck",
+  "setChecked", "selectOption", "hover", "focus", "blur", "tap",
+  "clear", "scrollIntoViewIfNeeded", "waitFor",
+  "textContent", "innerText", "innerHTML", "getAttribute", "inputValue",
+  "isVisible", "isHidden", "isEnabled", "isDisabled", "isChecked",
+  "isEditable",
+]);
+
+/** Pull a human-readable selector string out of a Locator. Playwright
+ *  doesn't expose this officially; read its private `_selector` field
+ *  when present and fall back to `String(locator)`. */
+function locatorSelector(loc: Locator): string | null {
+  try {
+    const internal = (loc as unknown as { _selector?: string })._selector;
+    if (typeof internal === "string" && internal.length > 0) return internal;
+    const str = String(loc);
+    return str === "[object Object]" ? null : str;
+  } catch {
+    return null;
+  }
+}
+
+interface HealCandidate {
+  selector: string;
+  confidence: number | null;
+}
+
+/** POST /api/v1/heal — returns a candidate replacement selector or null. */
+async function fetchHealCandidate(
+  context: HealContext,
+  originalSelector: string | null,
+  errorMessage: string,
+): Promise<HealCandidate | null> {
+  if (DISABLED || !SERVICE_URL) return null;
+  let url: URL;
+  try {
+    url = new URL("/api/v1/heal", SERVICE_URL);
+  } catch {
+    return null;
+  }
+  const payload = JSON.stringify({
+    page: context.page,
+    name: context.name,
+    original: originalSelector,
+    error: errorMessage.slice(0, 500),
+    scenario_name: currentScenarioName(),
+  });
+  const client = url.protocol === "https:" ? https : http;
+  return new Promise<HealCandidate | null>((resolve) => {
+    let resolved = false;
+    const settle = (v: HealCandidate | null) => {
+      if (!resolved) { resolved = true; resolve(v); }
+    };
+    try {
+      const req = client.request(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(payload),
+          },
+          timeout: 5000,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const body = Buffer.concat(chunks).toString("utf8");
+              const parsed = JSON.parse(body) as { selector?: string; confidence?: number };
+              if (parsed && typeof parsed.selector === "string") {
+                settle({ selector: parsed.selector, confidence: typeof parsed.confidence === "number" ? parsed.confidence : null });
+              } else {
+                settle(null);
+              }
+            } catch {
+              settle(null);
+            }
+          });
+          res.on("error", () => settle(null));
+        },
+      );
+      req.on("error", () => settle(null));
+      req.on("timeout", () => { req.destroy(); settle(null); });
+      req.write(payload);
+      req.end();
+    } catch {
+      settle(null);
+    }
+  });
+}
+
+/**
+ * Add action-time healing to a Locator by MUTATING IT IN PLACE.
+ *
+ * v1.2 used a `new Proxy(...)` wrapper here, which broke any spec that
+ * called `await expect(loc).toBeVisible()` — Playwright's matchers do
+ * a private-field probe (`#frame` and friends) that doesn't survive a
+ * generic Proxy. Result: 100% test fail rate on any spec that asserts
+ * against a POM field, with the unhelpful error
+ *   `Error: toBeVisible can be only used with Locator object`.
+ *
+ * v1.2.1 replaces the Proxy with direct method override:
+ *   - For every healable method (click, fill, …), capture the original
+ *     bound function via closure BEFORE mutation.
+ *   - Replace the property on the Locator INSTANCE with a wrapper that
+ *     try/catches and heals on failure.
+ *   - Return the original Locator unchanged in identity. `instanceof
+ *     Locator` still holds; private-field probes still work; `expect()`
+ *     accepts it normally; non-healable methods (.locator(), .first(),
+ *     etc.) keep their prototype's implementation untouched.
+ *
+ * After a successful heal, `healedLocator` is set in the closure and
+ * subsequent calls (on any healable method on this same instance) go
+ * through it transparently. Cross-method healing of one cached
+ * candidate, exactly as v1.2 promised — but without sacrificing
+ * matcher compatibility.
+ */
+function wrapLocatorForHealing(page: Page, original: Locator, context: HealContext): Locator {
+  let healedLocator: Locator | null = null;
+
+  for (const method of HEALABLE_METHODS) {
+    // Capture the original method BEFORE mutation — otherwise we'd
+    // recurse infinitely when our wrapper tries to call the "original".
+    const origFn = (original as unknown as Record<string, unknown>)[method];
+    if (typeof origFn !== "function") continue;
+
+    (original as unknown as Record<string, unknown>)[method] = async function (
+      ...args: unknown[]
+    ) {
+      // Once healed, route every healable call through the candidate.
+      if (healedLocator) {
+        const fn = (healedLocator as unknown as Record<string, Function>)[method];
+        return await fn.apply(healedLocator, args);
+      }
+
+      try {
+        return await (origFn as (...a: unknown[]) => Promise<unknown>).apply(
+          original,
+          args,
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const original_selector = locatorSelector(original);
+        appendEvent({
+          ts: new Date().toISOString(),
+          event: "heal_attempt",
+          page: context.page,
+          name: context.name,
+          scenario_name: currentScenarioName(),
+          method,
+          original: original_selector,
+          healed: null,
+          confidence: null,
+          error: errMsg.slice(0, 500),
+          pid: process.pid,
+          cwd: process.cwd(),
+        });
+
+        const candidate = await fetchHealCandidate(context, original_selector, errMsg);
+        if (!candidate) {
+          appendEvent({
+            ts: new Date().toISOString(),
+            event: "heal_unavailable",
+            page: context.page,
+            name: context.name,
+            scenario_name: currentScenarioName(),
+            method,
+            original: original_selector,
+            healed: null,
+            confidence: null,
+            error: errMsg.slice(0, 500),
+            pid: process.pid,
+            cwd: process.cwd(),
+          });
+          throw err;
+        }
+
+        let candidateLocator: Locator;
+        try {
+          candidateLocator = page.locator(candidate.selector);
+        } catch {
+          appendEvent({
+            ts: new Date().toISOString(),
+            event: "heal_unavailable",
+            page: context.page,
+            name: context.name,
+            scenario_name: currentScenarioName(),
+            method,
+            original: original_selector,
+            healed: candidate.selector,
+            confidence: candidate.confidence,
+            error: "candidate selector failed to construct",
+            pid: process.pid,
+            cwd: process.cwd(),
+          });
+          throw err;
+        }
+
+        try {
+          const retryFn = (candidateLocator as unknown as Record<string, Function>)[method];
+          const retryResult = await retryFn.apply(candidateLocator, args);
+          healedLocator = candidateLocator;
+          appendEvent({
+            ts: new Date().toISOString(),
+            event: "healed",
+            page: context.page,
+            name: context.name,
+            scenario_name: currentScenarioName(),
+            method,
+            original: original_selector,
+            healed: candidate.selector,
+            confidence: candidate.confidence,
+            error: errMsg.slice(0, 500),
+            pid: process.pid,
+            cwd: process.cwd(),
+          });
+          return retryResult;
+        } catch (retryErr) {
+          appendEvent({
+            ts: new Date().toISOString(),
+            event: "heal_unavailable",
+            page: context.page,
+            name: context.name,
+            scenario_name: currentScenarioName(),
+            method,
+            original: original_selector,
+            healed: candidate.selector,
+            confidence: candidate.confidence,
+            error: retryErr instanceof Error ? retryErr.message.slice(0, 500) : String(retryErr).slice(0, 500),
+            pid: process.pid,
+            cwd: process.cwd(),
+          });
+          throw err;
+        }
+      }
+    };
+  }
+
+  return original;
 }

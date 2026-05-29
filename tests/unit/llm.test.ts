@@ -21,7 +21,11 @@ import * as os from "os";
 import * as path from "path";
 import { matchStepWithLLM } from "../../src/llm/llmStepMatcher";
 import { CandidateRulesWriter } from "../../src/llm/candidateRules";
-import { parseBindingJson } from "../../src/llm/anthropicClient";
+import {
+  parseBindingJson,
+  rewriteBareContext,
+  detectHallucinatedLocators,
+} from "../../src/llm/anthropicClient";
 import type {
   GenerateBindingInput,
   GenerateBindingResult,
@@ -143,6 +147,257 @@ describe("parseBindingJson", () => {
     expect(
       parseBindingJson('{"step":{"keyword":"When","text":"x"}}', stub),
     ).toBeUndefined();
+  });
+
+  it("v2.2.2 — rewrites bare context.X to page.context().X in customBody", () => {
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Given", text: "no session cookies" },
+        customBody: "await context.clearCookies();",
+      }),
+      stub,
+    );
+    // The test fixture only injects `page`. Bare `context.` is a
+    // ReferenceError; rewrite to `page.context().`.
+    expect(out?.customBody).toBe("await page.context().clearCookies();");
+  });
+
+  it("v2.2.2 — rewriteBareContext handles common cases", () => {
+    expect(rewriteBareContext("await context.clearCookies();")).toBe(
+      "await page.context().clearCookies();",
+    );
+    expect(rewriteBareContext("await context.clearPermissions();")).toBe(
+      "await page.context().clearPermissions();",
+    );
+    // Doesn't rewrite word-internal matches (pageContext, someContext, etc.)
+    expect(rewriteBareContext("const pageContext = page.context();")).toBe(
+      "const pageContext = page.context();",
+    );
+    // Handles browser. too
+    expect(rewriteBareContext("await browser.close();")).toBe(
+      "await page.context().browser().close();",
+    );
+  });
+
+  it("v2.2.3 — detectHallucinatedLocators flags invented page.getBy* methods", () => {
+    // Real methods are clean.
+    expect(detectHallucinatedLocators("page.getByRole('button')")).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByLabel('Username')")).toEqual(
+      [],
+    );
+    expect(detectHallucinatedLocators("page.getByText('Hello').first()")).toEqual(
+      [],
+    );
+    expect(
+      detectHallucinatedLocators("page.getByTestId('login-btn')"),
+    ).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByAltText('logo')")).toEqual([]);
+    expect(
+      detectHallucinatedLocators("page.getByPlaceholder('Email')"),
+    ).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByTitle('Submit')")).toEqual([]);
+
+    // Hallucinated — the actual production bug from BUG-6.
+    expect(detectHallucinatedLocators("page.getByURL(/dashboard/)")).toEqual([
+      "getByURL",
+    ]);
+    // Other plausible-but-fake variants we've seen the LLM invent.
+    expect(detectHallucinatedLocators("page.getByPath('/login')")).toEqual([
+      "getByPath",
+    ]);
+    expect(detectHallucinatedLocators("page.getByHref('/about')")).toEqual([
+      "getByHref",
+    ]);
+    expect(detectHallucinatedLocators("page.getByLink('Home')")).toEqual([
+      "getByLink",
+    ]);
+
+    // Multiple hits in one string.
+    const hits = detectHallucinatedLocators(
+      "expect(page.getByURL(/x/)).toBeVisible(); expect(page.getByPath('/y')).toBeVisible();",
+    );
+    expect(hits.sort()).toEqual(["getByPath", "getByURL"]);
+
+    // Doesn't false-positive on non-page receivers (locator.getByXxx
+    // chaining is fine even if the inner method is unusual — Playwright
+    // exposes the same factory set on Locator, and we only police `page.*`).
+    expect(
+      detectHallucinatedLocators("loginPage.usernameInput.getByURL('x')"),
+    ).toEqual([]);
+  });
+
+  it("v2.2.3 — rejects bindings whose assertion.locator uses page.getByURL", () => {
+    // Exact reproduction of BUG-6: LLM emits an assertion with a
+    // hallucinated `page.getByURL(...)` locator. The binding must be
+    // refused entirely so the step lands as a TODO instead of breaking
+    // the spec at runtime with "Cannot read properties of undefined".
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "I see the dashboard URL" },
+        assertion: {
+          locator: "page.getByURL(/dashboard/)",
+          matcher: "toBeVisible",
+        },
+      }),
+      stub,
+    );
+    expect(out).toBeUndefined();
+  });
+
+  it("v2.2.3 — rejects bindings whose customBody contains a hallucinated locator", () => {
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "When", text: "I navigate to the dashboard" },
+        customBody:
+          "await expect(page.getByURL(/dashboard/)).toBeVisible();",
+      }),
+      stub,
+    );
+    expect(out).toBeUndefined();
+  });
+
+  it("v2.2.3 — rejects bindings whose pomCall arg references page.getByURL", () => {
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "When", text: "I click the dashboard URL" },
+        pomCall: {
+          page: "loginPage",
+          method: "page.click",
+          args: ["page.getByURL('/dashboard')"],
+        },
+      }),
+      stub,
+    );
+    expect(out).toBeUndefined();
+  });
+
+  it("v2.2.3 — accepts bindings with only real page.getBy* methods", () => {
+    // Defensive: the rejection logic must NOT trip on valid Playwright
+    // methods. Regression-guards that detectHallucinatedLocators's
+    // allowlist is wired correctly into parseBindingJson.
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "I see the heading" },
+        assertion: {
+          locator: "page.getByRole('heading')",
+          matcher: "toBeVisible",
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.matcher).toBe("toBeVisible");
+    expect(out?.assertion?.locator).toBe("page.getByRole('heading')");
+  });
+
+  it("v2.2.4 — normalises empty locator to 'page' for toHaveURL (BUG-7)", () => {
+    // Exact reproduction of BUG-7: LLM follows the v2.2.3 prompt and
+    // emits an empty-string locator. Without this normalisation the
+    // renderer produces `await expect().toHaveURL(...)` which throws
+    // TypeError on every URL-asserting spec.
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "I am on the dashboard" },
+        assertion: {
+          locator: "",
+          matcher: "toHaveURL",
+          expected: 'new RegExp("/dashboard")',
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.locator).toBe("page");
+    expect(out?.assertion?.matcher).toBe("toHaveURL");
+  });
+
+  it("v2.2.4 — normalises missing locator to 'page' for toHaveURL", () => {
+    // The LLM occasionally omits the locator field entirely.
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "I am on the dashboard" },
+        assertion: {
+          matcher: "toHaveURL",
+          expected: 'new RegExp("/dashboard")',
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.locator).toBe("page");
+  });
+
+  it("v2.2.4 — normalises whitespace-only locator to 'page'", () => {
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "title check" },
+        assertion: {
+          locator: "   ",
+          matcher: "toHaveTitle",
+          expected: '"Dashboard"',
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.locator).toBe("page");
+    expect(out?.assertion?.matcher).toBe("toHaveTitle");
+  });
+
+  it("v2.2.4 — handles not.toHaveURL and not.toHaveTitle", () => {
+    const a = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "no longer on login" },
+        assertion: {
+          locator: "",
+          matcher: "not.toHaveURL",
+          expected: 'new RegExp("/login")',
+        },
+      }),
+      stub,
+    );
+    expect(a?.assertion?.locator).toBe("page");
+
+    const b = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "title is not login" },
+        assertion: {
+          locator: "",
+          matcher: "not.toHaveTitle",
+          expected: '"Login"',
+        },
+      }),
+      stub,
+    );
+    expect(b?.assertion?.locator).toBe("page");
+  });
+
+  it("v2.2.4 — defaults empty locator to 'page' even for non-page matchers", () => {
+    // `expect()` is never a legal call. Better to render against page
+    // and have the matcher fail loudly than to emit broken TS.
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "some assertion" },
+        assertion: {
+          locator: "",
+          matcher: "toBeVisible",
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.locator).toBe("page");
+  });
+
+  it("v2.2.4 — leaves non-empty locators unchanged", () => {
+    // Regression guard for the normalisation: it must only touch empty/
+    // whitespace input. A real locator string passes through verbatim.
+    const out = parseBindingJson(
+      JSON.stringify({
+        step: { keyword: "Then", text: "see heading" },
+        assertion: {
+          locator: "loginPage.usernameInput",
+          matcher: "toBeVisible",
+        },
+      }),
+      stub,
+    );
+    expect(out?.assertion?.locator).toBe("loginPage.usernameInput");
   });
 
   it("preserves the input step text rather than the LLM's echo", () => {
@@ -301,6 +556,47 @@ describe("matchStepWithLLM", () => {
     expect(out.warning).toContain("LLM fallback threw");
     expect(out.warning).toContain("line1 of stack");
     expect(out.warning).toContain("line3 with backticks");
+  });
+
+  it("v2.2.0 — step deadline fires when LLM generateBinding hangs forever", async () => {
+    // Production bug: container hangs 8 minutes when governance sidecar
+    // or Anthropic SDK is wedged. The matchStepWithLLM watchdog
+    // (Promise.race against ctx.stepDeadlineMs) must abandon the call
+    // and let scaffold() proceed.
+    class HangingLLM implements LLMClient {
+      budgetExhausted() {
+        return false;
+      }
+      callsMade() {
+        return 0;
+      }
+      // Returns a promise that never resolves.
+      async generateBinding(): Promise<GenerateBindingResult> {
+        return new Promise(() => {
+          /* never resolve */
+        });
+      }
+    }
+    const start = Date.now();
+    const out = await matchStepWithLLM(
+      step("When", "an unmatched step"),
+      pom,
+      "loginPage",
+      {
+        llm: new HangingLLM(),
+        candidates: writer,
+        scaffoldId: "test",
+        // Aggressive deadline so the test runs fast.
+        stepDeadlineMs: 50,
+      },
+    );
+    const elapsed = Date.now() - start;
+    // The watchdog must fire within ~50ms (give ourselves a 500ms buffer
+    // for slow CI). Without it the await would hang indefinitely.
+    expect(elapsed).toBeLessThan(500);
+    expect(out.warning).toBeTruthy();
+    expect(out.warning).toContain("step deadline exceeded");
+    expect(out.pomCall).toBeUndefined();
   });
 
   it("appends one candidate-rules entry per LLM success", async () => {

@@ -14,10 +14,18 @@ import type { LLMClient, LLMClientOptions } from "./types";
 
 export { AnthropicLLMClient } from "./anthropicClient";
 export { CandidateRulesWriter } from "./candidateRules";
+export {
+  proposeRules,
+  fingerprint,
+  synthesiseRegex,
+  type ProposeRulesOptions,
+  type ProposeRulesResult,
+} from "./proposeRules";
 export { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
 export {
   matchStepWithLLM,
   matchStepsWithLLM,
+  matchScenarioWithLLM,
   type MatchStepWithLLMContext,
 } from "./llmStepMatcher";
 export type {

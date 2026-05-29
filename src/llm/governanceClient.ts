@@ -53,18 +53,27 @@ export class GovernanceError extends Error {
 
 export class GovernanceClient {
   private baseUrl: string;
-  constructor(baseUrl: string) {
+  private timeoutMs: number;
+  constructor(baseUrl: string, timeoutMs = 15_000) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.timeoutMs = timeoutMs;
   }
 
   async sanitiseCode(content: string): Promise<SanitiseResult> {
     const url = `${this.baseUrl}/sanitize`;
     let res;
     try {
+      // v2.2.0 — add explicit timeouts. Default undici behaviour is no
+      // timeout; a wedged sidecar would stall the entire scaffold for
+      // 8+ minutes (production cloud-jobs hang). bodyTimeout covers the
+      // POST upload + response stream; headersTimeout covers initial
+      // connection handshake.
       res = await request(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind: "code", content }),
+        bodyTimeout: this.timeoutMs,
+        headersTimeout: this.timeoutMs,
       });
     } catch (err) {
       throw new GovernanceUnreachableError(url, err);
@@ -88,7 +97,10 @@ export class GovernanceClient {
   /** Probe `/health` — used at startup to fail-fast before the first scaffold. */
   async health(): Promise<boolean> {
     try {
-      const res = await request(`${this.baseUrl}/health`);
+      const res = await request(`${this.baseUrl}/health`, {
+        bodyTimeout: this.timeoutMs,
+        headersTimeout: this.timeoutMs,
+      });
       return res.statusCode === 200;
     } catch {
       return false;
