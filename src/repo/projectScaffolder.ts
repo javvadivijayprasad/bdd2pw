@@ -31,6 +31,12 @@ export interface ScaffoldProjectOptions {
   projectName?: string;
   /** When true, also write lib/heal.ts and patch tsconfig paths. */
   selfHealing?: boolean;
+  /**
+   * v3.2.0 — pin emitted devDependency versions when set to `exact`.
+   * Default `caret` matches existing behavior. See TestForge handoff
+   * Issue 9 and pw-emit v1.3.0.
+   */
+  dependencyStrategy?: "caret" | "exact";
 }
 
 export interface ScaffoldProjectResult {
@@ -50,6 +56,7 @@ export async function scaffoldProject(
     templatesDir: opts.templatesDir,
     baseUrl: opts.baseUrl,
     projectName: opts.projectName,
+    dependencyStrategy: opts.dependencyStrategy,
   });
 
   const filesWritten = [...result.filesWritten];

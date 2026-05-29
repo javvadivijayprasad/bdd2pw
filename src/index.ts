@@ -7,6 +7,8 @@
 
 import * as fs from "fs-extra";
 import * as path from "path";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const PACKAGE_VERSION: string = (require("../package.json") as { version: string }).version;
 import type {
   AnalyzeOptions,
   AnalyzeResult,
@@ -19,22 +21,35 @@ import type {
   UpdatePomResult,
 } from "./types";
 import { parseFeature, substituteOutlinePlaceholders } from "./parser/gherkinParser";
+import { isJsonScenarioFile, parseJsonScenarios } from "./parser/jsonScenarioParser";
 import { scanRepo } from "./repo/repoScanner";
 import { scaffoldProject } from "./repo/projectScaffolder";
 import { scanPage } from "./discovery/mcpClient";
 import { parseSnapshot } from "./discovery/snapshotParser";
 import { dedupeLocators, pickLocator } from "./transformers/locatorPicker";
 import { resolvePom } from "./transformers/pomResolver";
-import { matchStep } from "./transformers/stepMatcher";
+import {
+  diagnoseStep,
+  matchStep,
+  setActiveDomains,
+} from "./transformers/stepMatcher";
 import { emitPageObject, emitTestFile } from "./emitters/facade";
 import { tscValidate } from "./validate/tscRunner";
 import { writeReviewReport } from "./reports/reviewReport";
-import { camelCase } from "./utils/naming";
+import { bindingsToMetaSteps, type MetaSidecar } from "./reports/metaSidecar";
+import {
+  extractUserBlocks,
+  isMergeAnnotated,
+  mergeUserBlocks,
+  prependGeneratedHeader,
+} from "./reports/specMerge";
+import { camelCase, pascalCase } from "./utils/naming";
 import { pageObjectFileName, renderLocatorExpr } from "@vijaypjavvadi/pw-emit";
 import { logger } from "./utils/logger";
 import {
   CandidateRulesWriter,
   createLLMClient,
+  matchScenarioWithLLM,
   matchStepWithLLM,
   type LLMClient,
 } from "./llm";
@@ -89,8 +104,35 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const reviewItems: ReviewItem[] = [];
   logger.info({ feature: opts.feature, page: opts.page, repo: opts.repo }, "scaffold start");
 
-  // 1) Parse Gherkin
-  const feature = await parseFeature(opts.feature);
+  // v3.7.1 — normalise the POM class name to PascalCase up-front.
+  // TestForge regression #1 from 2026-05-22: a caller passing
+  // `page: "repro"` (lowercase) produced a spec like
+  //   import { repro } from "../pages/repro.page";
+  //   const repro = new repro(page);  // ← TDZ: shadows the import
+  // The fix is to ALWAYS render the class name as PascalCase so the
+  // camelCase pageVar can never collide. `pascalCase("repro")`
+  // returns "Repro"; `pascalCase("LoginPage")` returns "LoginPage"
+  // (already PascalCase passes through). pageVar uses camelCase as
+  // before, so PascalCase + camelCase produce distinct identifiers.
+  const pageClassName = pascalCase(opts.page) || "Page";
+
+  // v3.4.0 — activate any requested domain rule packs. Set once per
+  // scaffold() call; cleared by passing an empty/undefined list. The
+  // matcher reads activeDomainRules on every matchStep call.
+  setActiveDomains(opts.domains);
+  if (opts.domains && opts.domains.length > 0) {
+    reviewItems.push({
+      severity: "info",
+      message: `Domain rule packs active: ${opts.domains.join(", ")}.`,
+    });
+  }
+
+  // 1) Parse Gherkin — or JSON scenarios (v3.2.0, TestForge Issue 8).
+  //    The converter produces a FeatureIR with identical shape so the
+  //    downstream pipeline is uniform.
+  const feature = isJsonScenarioFile(opts.feature)
+    ? await parseJsonScenarios(opts.feature)
+    : await parseFeature(opts.feature);
   reviewItems.push({
     severity: "info",
     message: `Parsed feature "${feature.name}" — ${feature.scenarios.length} scenario(s)${feature.background ? " + Background" : ""}`,
@@ -103,6 +145,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     baseUrl: opts.url,
     projectName: feature.name.toLowerCase().replace(/\s+/g, "-"),
     selfHealing: opts.selfHealing,
+    dependencyStrategy: opts.dependencyStrategy,
   });
   reviewItems.push(...scaffoldResult.warnings);
 
@@ -149,10 +192,15 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
 
   // 5) Resolve POM decision
   // Predict referenced fields by matching steps against a "POM with all candidates"
-  const pageVar = camelCase(opts.page);
-  const pomFileName = pageObjectFileName(opts.page); // "LoginPage" → "login.page.ts"
+  // v3.7.1 — derive pageVar + pomFileName from the normalised
+  // PascalCase className, not from raw opts.page. Otherwise an input
+  // of "repro" would produce className: "Repro" but pageVar: "repro"
+  // (correct), while inputs like "loginPage" (camelCase) used to
+  // produce className: "loginPage" and pageVar: "loginPage" — collision.
+  const pageVar = camelCase(pageClassName);
+  const pomFileName = pageObjectFileName(pageClassName);
   const candidatePom: PageObjectIR = {
-    className: opts.page,
+    className: pageClassName,
     filePath: path.join(opts.repo, "pages", pomFileName),
     fields: candidateChoices,
     methods: [],
@@ -181,7 +229,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     }
   }
   const decision = resolvePom({
-    requestedName: opts.page,
+    requestedName: pageClassName,
     existing: repoState.pageObjects,
     referencedFields: [...referencedFields],
   });
@@ -191,7 +239,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   });
 
   // 6) Build the final POM IR (existing fields + only the new ones we need)
-  const finalPom: PageObjectIR = buildFinalPom(decision, opts.page, candidatePom, candidateChoices);
+  const finalPom: PageObjectIR = buildFinalPom(decision, pageClassName, candidatePom, candidateChoices);
 
   // 6.5) Synthesise a `goto()` method so the spec's `await loginPage.goto()`
   //      actually navigates. Skipped if the POM already has one (e.g. on AUGMENT)
@@ -209,51 +257,105 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   //    v2.0: when --llm is set, each step that no rule matched is offered
   //    to the LLM (see src/llm/llmStepMatcher.ts). Every LLM-generated
   //    binding lands in artefacts/candidate-rules.jsonl for offline review.
+  // v2.2.0 — wire bdd2pw's pino logger into the LLM client so cache
+  // fallbacks, governance latencies, provider call timings, and step
+  // deadline expirations show up in the standard JSON-formatted scaffold
+  // log. Without this, the LLM module's diagnostics were a no-op stream
+  // and operators had to wait for review items at scaffold-end (or
+  // 8 minutes of silence on a hang).
   const llm: LLMClient | undefined = createLLMClient(
-    opts.llmConfig,
+    opts.llmConfig
+      ? {
+          ...opts.llmConfig,
+          log: (event) => {
+            // Map LLMLogEvent → pino log call. `error` events go to
+            // logger.warn so they surface above the default level threshold
+            // without breaking exit codes; everything else is `info`.
+            const level = event.kind === "error" ? "warn" : "info";
+            (logger as unknown as Record<string, (o: unknown, m: string) => void>)[level](
+              { llm: event },
+              `llm.${event.kind}`,
+            );
+          },
+        }
+      : undefined,
     opts.repo,
   );
   const candidates = llm
     ? new CandidateRulesWriter(opts.repo)
     : undefined;
   const scaffoldId = `scaffold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const llmCtx = { llm, candidates, scaffoldId, url: opts.url };
+  const llmCtx = {
+    llm,
+    candidates,
+    scaffoldId,
+    url: opts.url,
+    stepDeadlineMs: opts.llmConfig?.stepTimeoutMs,
+    // v3.5.0 — opt out of per-scenario batching when the consumer
+    // wants strict 1:1 call accounting or has hit a provider token
+    // limit on batches. Default false; per-scenario batching is on.
+    disableBatch: opts.llmConfig?.disableBatch ?? false,
+  };
 
+  // v3.5.0 — switch the per-step LLM fallback to per-scenario batching.
+  // When `llmConfig.disableBatch === true` (or no LLM client is set),
+  // matchScenarioWithLLM still walks the rule path and falls back to
+  // single-step matchStepWithLLM under the hood, so behavior is
+  // identical for those configurations.
   const finalBindingsByScenario: { name: string; bindings: StepBinding[] }[] = [];
   for (const scenario of feature.scenarios) {
-    const bindings: StepBinding[] = [];
-    for (const s of scenario.steps) {
-      bindings.push(await matchStepWithLLM(s, finalPom, pageVar, llmCtx));
-    }
+    const bindings = await matchScenarioWithLLM(
+      scenario.steps,
+      finalPom,
+      pageVar,
+      llmCtx,
+    );
     finalBindingsByScenario.push({ name: scenario.name, bindings });
   }
-  const beforeEachBindings: StepBinding[] = [];
-  for (const s of feature.background ?? []) {
-    beforeEachBindings.push(await matchStepWithLLM(s, finalPom, pageVar, llmCtx));
-  }
+  // Background steps are treated as a synthetic scenario for batching:
+  // they share the same POM context and run together in beforeEach.
+  const beforeEachBindings: StepBinding[] = feature.background?.length
+    ? await matchScenarioWithLLM(
+        feature.background,
+        finalPom,
+        pageVar,
+        llmCtx,
+      )
+    : [];
 
   // Outline scenarios — flatten Examples into one test per row.
-  const flattened: { name: string; bindings: StepBinding[] }[] = [];
+  // v3.0.0 — also carry scenario.tags through so the emitter can detect
+  // @api / @ui and inject the right scaffolding (APIResponse import,
+  // describe-scoped state, per-test reset).
+  const flattened: { name: string; bindings: StepBinding[]; tags?: string[] }[] = [];
   for (const scenario of feature.scenarios) {
     if (scenario.examples && scenario.examples.length > 0) {
       for (const row of scenario.examples) {
-        const expanded: StepBinding[] = [];
-        for (const step of scenario.steps) {
-          const text = substituteOutlinePlaceholders(step.text, row);
-          expanded.push(
-            await matchStepWithLLM(
-              { ...step, text },
-              finalPom,
-              pageVar,
-              llmCtx,
-            ),
-          );
-        }
+        // v3.5.0 — also batch the outline-expanded per-row steps. The
+        // POM context is identical across rows, but the step text
+        // differs after placeholder substitution — so the cache keys
+        // are independent and the batch contains genuinely new
+        // material per row.
+        const expandedSteps = scenario.steps.map((step) => ({
+          ...step,
+          text: substituteOutlinePlaceholders(step.text, row),
+        }));
+        const expanded = await matchScenarioWithLLM(
+          expandedSteps,
+          finalPom,
+          pageVar,
+          llmCtx,
+        );
         const labels = Object.entries(row).map(([k, v]) => `${k}=${v}`).join(", ");
-        flattened.push({ name: `${scenario.name} [${labels}]`, bindings: expanded });
+        flattened.push({
+          name: `${scenario.name} [${labels}]`,
+          bindings: expanded,
+          tags: scenario.tags,
+        });
       }
     } else {
-      flattened.push(finalBindingsByScenario.find((s) => s.name === scenario.name)!);
+      const found = finalBindingsByScenario.find((s) => s.name === scenario.name)!;
+      flattened.push({ ...found, tags: scenario.tags });
     }
   }
 
@@ -299,6 +401,24 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     }
   }
 
+  // v3.6.0 — render a per-warning rule trace when opts.diagnostics is on.
+  // Helper here keeps the inline loops below readable.
+  const buildDetails = (b: StepBinding): string[] | undefined => {
+    if (!opts.diagnostics) return undefined;
+    const trace = diagnoseStep(b.step, finalPom, pageVar);
+    if (trace.length === 0) return undefined;
+    return trace.map((t) => {
+      const status = t.matchedButDeclined
+        ? "matched-but-declined"
+        : "no-match";
+      const captureSuffix =
+        t.captures && t.captures.length > 0
+          ? ` · captures: ${t.captures.map((c) => JSON.stringify(c)).join(", ")}`
+          : "";
+      return `**${t.ruleId}** (${status}) — \`${t.patternSource}\`${captureSuffix}`;
+    });
+  };
+
   for (const sc of flattened) {
     for (const b of sc.bindings) {
       if (b.warning) {
@@ -306,6 +426,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
           severity: "warn",
           message: `[${sc.name}] ${b.warning}`,
           suggestion: "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
+          details: buildDetails(b),
         });
       }
     }
@@ -318,6 +439,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         severity: "warn",
         message: `[Background] ${b.warning}`,
         suggestion: "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
+        details: buildDetails(b),
       });
     }
   }
@@ -353,15 +475,65 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       scenarios: flattened,
       pomImports: [
         {
-          className: opts.page,
+          // v3.7.1 — use the normalised PascalCase className so the
+          // emitted `import { Repro } from ...` and `new Repro(page)`
+          // don't shadow the camelCase `const repro = ...` variable.
+          className: pageClassName,
           fromPath: `../pages/${pomStem}`,
         },
       ],
+      // v3.1.0 — pass through the instrumentation flags so cloud-jobs /
+      // TestForge can opt into per-step hooks + boundary markers.
+      stepHooks: opts.stepHooks === true,
+      stepMarkers: opts.stepMarkers === true,
     });
     reviewItems.push(...specEmit.warnings.map((w) => ({ ...w, file: specPath })));
     await fs.ensureDir(path.dirname(specPath));
-    await fs.writeFile(specPath, specEmit.contents, "utf8");
+    // v3.2.0 — TestForge Issue 7: merge mode. Preserve user-edited
+    // `// bdd2pw:user-block` sections from the existing spec, and
+    // prepend a `// bdd2pw:generated v=… source=…` header so future
+    // merges can recognise our own output.
+    let finalSpec = specEmit.contents;
+    if (opts.merge) {
+      finalSpec = prependGeneratedHeader(
+        finalSpec,
+        PACKAGE_VERSION,
+        path.relative(opts.repo, opts.feature),
+      );
+      if (await fs.pathExists(specPath)) {
+        const previous = await fs.readFile(specPath, "utf8");
+        if (isMergeAnnotated(previous)) {
+          const preserved = extractUserBlocks(previous);
+          if (preserved.size > 0) {
+            finalSpec = mergeUserBlocks(finalSpec, preserved);
+            reviewItems.push({
+              severity: "info",
+              message: `[merge] preserved ${preserved.size} user-block section(s) in ${path.basename(specPath)}.`,
+            });
+          }
+        }
+      }
+    }
+    await fs.writeFile(specPath, finalSpec, "utf8");
     filesWritten.push(specPath);
+
+    // v3.2.0 — TestForge Issue 10: emit a *.spec.meta.json sidecar
+    // describing every step's intent / locator / assertion. Off by
+    // default; consumers opt in via `opts.metaSidecar`.
+    if (opts.metaSidecar) {
+      const sidecar: MetaSidecar = {
+        version: PACKAGE_VERSION,
+        source: path.relative(opts.repo, opts.feature),
+        scenarios: flattened.map((s) => ({
+          name: s.name,
+          tags: s.tags,
+          steps: bindingsToMetaSteps(s.bindings),
+        })),
+      };
+      const metaPath = specPath.replace(/\.spec\.ts$/, ".spec.meta.json");
+      await fs.writeFile(metaPath, JSON.stringify(sidecar, null, 2), "utf8");
+      filesWritten.push(metaPath);
+    }
   }
 
   // 10) Validate

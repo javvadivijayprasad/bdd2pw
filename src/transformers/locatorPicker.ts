@@ -11,7 +11,7 @@
  */
 
 import type { ElementIR, LocatorChoice } from "../types";
-import { camelCase } from "../utils/naming";
+import { camelCase, toJsIdentifier } from "../utils/naming";
 
 /**
  * Pick the highest-priority unique locator for `element`. Uniqueness is
@@ -100,15 +100,28 @@ export function pickLocator(
     };
   }
 
-  // 6. CSS selector
-  if (element.cssSelector) {
-    return {
-      api: "locator",
-      args: JSON.stringify(element.cssSelector),
-      fieldName,
-      source: element,
-      confidence: "fallback",
-    };
+  // 6. CSS selector — but reject framework-only class selectors
+  //    (Angular's `.ng-untouched`, Material's `.mat-form-field`, etc.).
+  //    These are runtime state markers that change as the user
+  //    interacts with the page, so locators built on them are flaky.
+  //    See BUG-10 / v2.2.6.
+  //
+  //    v2.2.7 — for MIXED selectors like `.ng-untouched.search-input`,
+  //    strip the framework tokens so we emit `.search-input` rather
+  //    than the compound selector that requires the state class to
+  //    still match. If stripping leaves an empty / whitespace-only
+  //    string, fall through to xpath / tag-only.
+  if (element.cssSelector && !isFrameworkOnlySelector(element.cssSelector)) {
+    const stripped = stripFrameworkClasses(element.cssSelector);
+    if (stripped.length > 0) {
+      return {
+        api: "locator",
+        args: JSON.stringify(stripped),
+        fieldName,
+        source: element,
+        confidence: "fallback",
+      };
+    }
   }
 
   // 7. xpath — last resort
@@ -122,7 +135,12 @@ export function pickLocator(
     };
   }
 
-  // Nothing usable — emit a tag-only locator and flag as fallback
+  // Nothing usable — emit a tag-only locator and flag as fallback.
+  // v2.2.6 — if we got here because the only CSS selector was
+  // framework-internal (and there was no role / label / placeholder /
+  // testId / text / xpath), the tag-only fallback is the least-bad
+  // option. It at least matches a visible DOM element rather than a
+  // transient state class.
   return {
     api: "locator",
     args: JSON.stringify(element.tag),
@@ -145,6 +163,104 @@ export function pickLocator(
  * `notificationBanner`) is what a test author would write by hand.
  */
 const STATUS_REGION_RE = /(error|alert|message|warning|success|notification|status)/i;
+
+/**
+ * v2.2.6 — BUG-10. CSS class prefixes that frameworks generate at runtime
+ * for their own bookkeeping (form-state, view-encapsulation, theming,
+ * etc.). These classes:
+ *
+ *   - Change at runtime (`.ng-untouched` → `.ng-touched` the moment the
+ *     user types), so selecting by them gives flaky locators.
+ *   - Are not user-facing — no test author would write
+ *     `await expect(page.locator('.ng-untouched')).toBeVisible()` by hand.
+ *   - Mass-collide across the DOM (every Angular input has the same
+ *     state classes), so locator-by-class is non-unique anyway.
+ *
+ * Covered prefixes:
+ *   - `ng-*`         Angular core (ng-untouched, ng-pristine, ng-dirty, …)
+ *   - `mat-*`        Angular Material
+ *   - `cdk-*`        Angular CDK (overlay, focus-trap, etc.)
+ *   - `mdc-*`        Material Design Components (web)
+ *   - `_ngcontent-*` Angular view encapsulation attribute-like classes
+ *   - `_nghost-*`    Angular view encapsulation host markers
+ *
+ * Hyphen is required after the prefix so we don't accidentally exclude
+ * legitimate classes like `ngo-button` (user-named) or `cdkit` (rare but
+ * possible). The `_ngcontent-` / `_nghost-` patterns are handled with an
+ * explicit underscore prefix.
+ */
+const FRAMEWORK_CLASS_RE =
+  /^(?:ng-|mat-|cdk-|mdc-|_ngcontent-|_nghost-)/i;
+
+/** True when `cls` looks like a framework-internal class. */
+export function isFrameworkClass(cls: string): boolean {
+  return FRAMEWORK_CLASS_RE.test(cls);
+}
+
+/**
+ * Extract all bare class names from a CSS selector. Tolerant of compound
+ * selectors like `div.foo.bar#main` (returns `["foo", "bar"]`).
+ */
+function extractClasses(selector: string): string[] {
+  const out: string[] = [];
+  const re = /\.([a-zA-Z_][\w-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(selector)) !== null) out.push(m[1]);
+  return out;
+}
+
+/**
+ * True when `selector` reduces to *only* framework-internal classes
+ * (e.g. `.ng-untouched.ng-pristine`). Such selectors are unstable
+ * runtime markers and must not be used as Playwright locators.
+ *
+ * Selectors with at least one non-framework class
+ * (`.ng-untouched.search-input`) are NOT flagged — the non-framework
+ * class can still drive a useful locator.
+ */
+export function isFrameworkOnlySelector(selector: string | undefined): boolean {
+  if (!selector) return false;
+  // If there's an #id, we can't claim "framework only" — id is independent.
+  if (/#[a-zA-Z][\w-]*/.test(selector)) return false;
+  const classes = extractClasses(selector);
+  if (classes.length === 0) return false; // not a class-based selector
+  return classes.every(isFrameworkClass);
+}
+
+/**
+ * v2.2.7 — BUG-10 follow-up. Strip framework-internal `.classname`
+ * tokens from a CSS selector string, leaving everything else intact.
+ *
+ * The v2.2.6 fix prevented framework-ONLY selectors from being picked,
+ * but a mixed selector like `.ng-untouched.search-input` still made it
+ * through with the `.ng-untouched` token in place. Playwright's
+ * `page.locator('.ng-untouched.search-input')` requires BOTH classes
+ * simultaneously — so when the user types and Angular flips
+ * `.ng-untouched` → `.ng-touched`, the locator stops matching. The
+ * test fails on what should have been a stable user-named element.
+ *
+ * After stripping, callers should treat the result as the new selector
+ * to emit. If stripping leaves nothing useful (`""` or just whitespace
+ * combinators), the caller should fall through to the next priority
+ * (xpath / tag-only).
+ *
+ * Implementation notes:
+ *   - Only strips bare `.classname` tokens. `:not(.ng-foo)` and
+ *     attribute selectors are left alone — they're rare and risky to
+ *     rewrite.
+ *   - Trims redundant whitespace introduced by the strip.
+ */
+export function stripFrameworkClasses(selector: string): string {
+  // Replace `.ng-foo` (and the rest) with empty string. The class-token
+  // regex matches `.` followed by an identifier, terminated by anything
+  // that isn't a class-name char (so `.foo.bar` is two matches, not one).
+  const out = selector.replace(
+    /\.([a-zA-Z_][\w-]*)/g,
+    (full, cls) => (isFrameworkClass(cls) ? "" : full),
+  );
+  // Collapse any whitespace produced by stripping.
+  return out.replace(/\s+/g, " ").trim();
+}
 
 /**
  * Synthesise a camelCase TS field name for an element.
@@ -170,8 +286,22 @@ function synthFieldName(element: ElementIR): string {
   const idDerived = cssSelectorToName(element.cssSelector);
   if (idDerived && STATUS_REGION_RE.test(idDerived)) {
     const cleaned = idDerived.replace(/[^a-zA-Z0-9 ]/g, " ").trim();
-    return camelCase(cleaned) || "errorRegion";
+    return toJsIdentifier(camelCase(cleaned) || "errorRegion");
   }
+
+  // v2.2.7 — track whether we had to fall through to the
+  // `<role|tag>Element` last-resort base. If so, the base ALREADY
+  // carries `Element` and we don't want to also append the role-suffix
+  // ("inputElement" + "Input" = "inputElementInput" — ugly and
+  // redundant). The previous endsWith check missed this because
+  // `"inputelement".endsWith("input")` is false.
+  const haveExplicitBase =
+    element.name !== undefined ||
+    element.label !== undefined ||
+    element.placeholder !== undefined ||
+    element.testId !== undefined ||
+    element.text !== undefined ||
+    idDerived !== undefined;
 
   const baseName =
     element.name ??
@@ -185,19 +315,39 @@ function synthFieldName(element: ElementIR): string {
   const cleaned = baseName.replace(/[^a-zA-Z0-9 ]/g, " ").trim();
   let fieldName = camelCase(cleaned) || "element";
 
-  const suffix = roleToSuffix(element.role, element.tag);
-  if (suffix && !fieldName.toLowerCase().endsWith(suffix.toLowerCase())) {
-    fieldName += suffix;
+  if (haveExplicitBase) {
+    const suffix = roleToSuffix(element.role, element.tag);
+    if (suffix && !fieldName.toLowerCase().endsWith(suffix.toLowerCase())) {
+      fieldName += suffix;
+    }
   }
-  return fieldName;
+  // v2.2.5 — BUG-9 guard: ensure the name is a valid JS identifier.
+  // `camelCase("0 of 0")` returns "0Of0", which is not a legal
+  // identifier and breaks the .spec.ts parse. Prefix digit-leading
+  // names with `_` and strip any stray punctuation that survived
+  // upstream normalisation (commas, etc.).
+  return toJsIdentifier(fieldName);
 }
 
 /**
  * Best-effort name extraction from a CSS selector. Handles common shapes:
- *   #username       → "username"
- *   .foo-bar        → "foo bar"
- *   div#main        → "main"
- *   a.wp-block-btn  → "wp block btn"
+ *   #username                       → "username"
+ *   .foo-bar                        → "foo bar"
+ *   div#main                        → "main"
+ *   a.wp-block-btn                  → "wp block btn"
+ *   input.ng-untouched.search-input → "search input"   (v2.2.6)
+ *
+ * v2.2.6 — BUG-10. When the selector has multiple classes, skip
+ * framework-internal classes (`ng-*`, `mat-*`, `cdk-*`, `mdc-*`,
+ * `_ngcontent-*`, `_nghost-*`) and pick the first user-named class.
+ * Without this filter, juice-shop's `.ng-untouched.search-input` gets
+ * named "ng untouched" → `ngUntouchedInput`, which is a flaky state
+ * locator and a confusing field name.
+ *
+ * If EVERY class is framework-internal, returns undefined so the caller
+ * falls through to `<role|tag>Element` rather than naming the field
+ * after a transient state class.
+ *
  * Returns undefined for selectors with no usable id/class.
  */
 function cssSelectorToName(selector: string | undefined): string | undefined {
@@ -205,8 +355,13 @@ function cssSelectorToName(selector: string | undefined): string | undefined {
   // Prefer #id over .class
   const idMatch = selector.match(/#([a-zA-Z][\w-]*)/);
   if (idMatch) return idMatch[1].replace(/-/g, " ");
-  const classMatch = selector.match(/\.([a-zA-Z][\w-]*)/);
-  if (classMatch) return classMatch[1].replace(/-/g, " ");
+  // Walk all classes, return the first non-framework one.
+  const classes = extractClasses(selector);
+  for (const cls of classes) {
+    if (!isFrameworkClass(cls)) return cls.replace(/-/g, " ");
+  }
+  // All classes were framework-internal — fall through to the caller's
+  // next priority (typically `<role|tag>Element`).
   return undefined;
 }
 

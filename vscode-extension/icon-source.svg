@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="20" fill="#0f3d3e"/>
+  <g transform="translate(28 18)">
+    <!-- Feature file outline -->
+    <path
+      d="M0 8a8 8 0 0 1 8-8h40l24 24v68a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8V8z"
+      fill="#f3f7f4"
+    />
+    <!-- Fold -->
+    <path d="M48 0v24h24z" fill="#cfdbd2"/>
+    <!-- Play triangle (Gherkin in / Playwright out) -->
+    <path d="M22 44l28 18-28 18V44z" fill="#2dd4bf"/>
+  </g>
+</svg>

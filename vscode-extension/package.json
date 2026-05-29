@@ -1,0 +1,268 @@
+{
+  "name": "bdd2pw",
+  "displayName": "bdd2pw — Gherkin to Playwright",
+  "description": "Scaffold runnable Playwright TypeScript tests from your Gherkin .feature files. Right-click a feature, get POMs + specs ready to run.",
+  "version": "0.2.0",
+  "publisher": "vijaypjavvadi",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "playwright",
+    "gherkin",
+    "cucumber",
+    "bdd",
+    "scaffolder",
+    "page-object",
+    "test-automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/javvadivijayprasad/bdd2pw.git",
+    "directory": "vscode-extension"
+  },
+  "homepage": "https://github.com/javvadivijayprasad/bdd2pw#readme",
+  "bugs": {
+    "url": "https://github.com/javvadivijayprasad/bdd2pw/issues"
+  },
+  "activationEvents": [
+    "onLanguage:gherkin",
+    "onView:bdd2pwSidebar"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bdd2pw.scaffoldFile",
+        "title": "bdd2pw: Scaffold Playwright tests from this feature",
+        "category": "bdd2pw",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "bdd2pw.scaffoldFolder",
+        "title": "bdd2pw: Scaffold all .feature files in folder",
+        "category": "bdd2pw"
+      },
+      {
+        "command": "bdd2pw.openOutput",
+        "title": "bdd2pw: Show output channel",
+        "category": "bdd2pw"
+      },
+      {
+        "command": "bdd2pw.openSettings",
+        "title": "bdd2pw: Open settings",
+        "category": "bdd2pw",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "bdd2pw.refreshSidebar",
+        "title": "bdd2pw: Refresh",
+        "category": "bdd2pw",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bdd2pw.openLastReview",
+        "title": "bdd2pw: Open BDD_REVIEW.md from last run",
+        "category": "bdd2pw"
+      },
+      {
+        "command": "bdd2pw.proposeRules",
+        "title": "bdd2pw: Propose deterministic rules from LLM candidates",
+        "category": "bdd2pw",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "bdd2pw.toggleDomain",
+        "title": "bdd2pw: Toggle a domain rule pack",
+        "category": "bdd2pw"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "bdd2pw.scaffoldFile",
+          "when": "resourceExtname == .feature",
+          "group": "bdd2pw@1"
+        },
+        {
+          "command": "bdd2pw.scaffoldFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "bdd2pw@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "bdd2pw.scaffoldFile",
+          "when": "resourceExtname == .feature",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "bdd2pw.refreshSidebar",
+          "when": "view == bdd2pwSidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bdd2pw.proposeRules",
+          "when": "view == bdd2pwSidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "bdd2pw.openSettings",
+          "when": "view == bdd2pwSidebar",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bdd2pw",
+          "title": "bdd2pw",
+          "icon": "media/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bdd2pw": [
+        {
+          "id": "bdd2pwSidebar",
+          "name": "bdd2pw",
+          "icon": "media/sidebar-icon.svg",
+          "contextualTitle": "bdd2pw"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "bdd2pw",
+      "properties": {
+        "bdd2pw.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Anthropic API key for the LLM fallback. Leave empty to disable the fallback and run rule-only. **Keep this out of settings.json that gets committed — store it in your user settings instead.**",
+          "scope": "machine-overridable"
+        },
+        "bdd2pw.governanceUrl": {
+          "type": "string",
+          "default": "http://localhost:4900",
+          "description": "ai-governance sidecar URL. Used to sanitize LLM prompts before they leave your machine."
+        },
+        "bdd2pw.skipGovernance": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**For development only.** Skip the governance sidecar's `/sanitize` step. Production runs MUST leave this off."
+        },
+        "bdd2pw.maxLlmCalls": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum LLM fallback calls per scaffold. Steps beyond the budget land as TODOs."
+        },
+        "bdd2pw.outputRepo": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to write scaffolded Playwright project into. Leave empty to use a sibling directory next to the .feature file."
+        },
+        "bdd2pw.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Default base URL for page discovery. Can be overridden per-run from the sidebar."
+        },
+        "bdd2pw.pomClassName": {
+          "type": "string",
+          "default": "LoginPage",
+          "description": "Default POM class name to generate. Override per-run from the sidebar."
+        },
+        "bdd2pw.selfHealing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Wrap emitted locators in healOrThrow() for runtime self-healing (v1.1+ bdd2pw feature)."
+        },
+        "bdd2pw.noDiscovery": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip live page discovery. Useful when the target URL isn't reachable or you only want rule-based steps."
+        },
+        "bdd2pw.domains": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "enum": [
+              "banking",
+              "healthcare",
+              "insurance",
+              "retail",
+              "gov",
+              "education",
+              "telecom"
+            ]
+          },
+          "uniqueItems": true,
+          "markdownDescription": "Opt-in domain rule packs (v3.4.0 + v3.8.0). Each pack adds ~20 regex rules covering the named industry's common Gherkin dialects. Empty = no packs (byte-stable behaviour). Combine freely — e.g. `[\"banking\", \"retail\"]` activates both."
+        },
+        "bdd2pw.useBatching": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "v3.5.0 — per-scenario LLM batching. When **true**, a scenario with N unmatched steps fires one provider call instead of N (75%+ cost reduction). Flip to `false` only if a provider hits a per-prompt token limit on large batches or you need strict 1:1 call accounting."
+        },
+        "bdd2pw.diagnostics": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "v3.6.0 — rule-trace diagnostics in `BDD_REVIEW.md`. When **true**, every warning step gets a 'Rule trace' block listing the top-3 nearest rules with their patterns. Helps you see exactly what to add as a new rule. Off by default — the trace pollutes the report when you don't need it."
+        },
+        "bdd2pw.merge": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "v3.2.0 — idempotent regeneration with user-block preservation. When **true**, existing specs are scanned for `// bdd2pw:user-block id=\"...\"` sections and those blocks survive the regen. Off by default — existing behavior is overwrite."
+        },
+        "bdd2pw.dependencyStrategy": {
+          "type": "string",
+          "enum": ["caret", "exact"],
+          "default": "caret",
+          "markdownDescription": "v3.2.0 — how to render emitted devDependency versions. `caret` (default) emits `^1.45.0` style. `exact` strips the `^` so the consuming project pins to exact versions."
+        },
+        "bdd2pw.metaSidecar": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "v3.2.0 — write `<spec-stem>.spec.meta.json` alongside each spec describing every step's intent / locator / assertion. Useful for downstream tools (visual regression, defect analysis, self-healing) that want to consume bdd2pw's semantic understanding without re-parsing TS."
+        },
+        "bdd2pw.stepHooks": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "v3.1.0 + v3.3.0 — opt-in step hook callouts. When **true**, every `test.step` body calls `globalThis.__bdd2pwHooks?.beforeStep?.(testInfo, title, {page})` / `afterStep?.(...)` so consumers can take per-step screenshots, save DOM, attach evidence, etc. Optional-chained — consumers who don't set the hook see no behavior change."
+        },
+        "bdd2pw.stepMarkers": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "v3.1.0 — opt-in step boundary markers. When **true**, each `test.step` is bracketed by `// bdd2pw:step-open id=\"NNNN\" title=\"...\"` and `// bdd2pw:step-close id=\"NNNN\"` comments. Lets post-processors slice the source on stable strings instead of brace counting."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "compile-tests": "tsc -p . --outDir out",
+    "test": "vscode-test"
+  },
+  "dependencies": {
+    "@vijaypjavvadi/bdd2pw": "^3.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.30.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.5"
+  }
+}

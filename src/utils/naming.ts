@@ -17,6 +17,31 @@ export function camelCase(input: string): string {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
+/**
+ * v2.2.5 — coerce an arbitrary string into a valid TypeScript / JavaScript
+ * identifier. Used by the POM field-name synthesiser so we never emit
+ * code like `this.0Of0 = ...` (juice-shop pagination labels: "0 of 0",
+ * "1 - 50 of 0") which makes the .spec.ts file refuse to parse.
+ *
+ * Rules:
+ *   1. Strip any character that isn't `[A-Za-z0-9_$]`. Commas, hyphens,
+ *      backticks, quotes, whitespace etc. all go.
+ *   2. If what remains starts with a digit, prefix with a single `_`.
+ *      JS identifier production: `IdentifierStart` = letter | `$` | `_`.
+ *   3. If the result is empty, return a stable fallback "_field" so the
+ *      caller never has to handle empty-string corner cases.
+ *
+ * Reserved-word avoidance is intentionally NOT handled here: at the
+ * field-access site `obj.class` is fine (only top-level identifiers are
+ * reserved). If we later add free-standing identifier emission (e.g. let
+ * <name> = ...), revisit.
+ */
+export function toJsIdentifier(input: string): string {
+  let s = input.replace(/[^A-Za-z0-9_$]/g, "");
+  if (s.length > 0 && /^[0-9]/.test(s)) s = "_" + s;
+  return s || "_field";
+}
+
 /** Convert any case to kebab-case. */
 export function kebabCase(input: string): string {
   return splitWords(input).map((w) => w.toLowerCase()).join("-");

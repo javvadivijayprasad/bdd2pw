@@ -41,14 +41,48 @@ export interface LLMClientOptions {
   skipGovernance?: boolean;
   /**
    * Optional logger callback (defaults to no-op). Useful in tests to
-   * capture prompts/responses without polluting stdout.
+   * capture prompts/responses without polluting stdout. v2.2.0 — the
+   * scaffold orchestrator wires bdd2pw's pino logger here so cache
+   * fallbacks, governance latencies, and provider-call timings show up
+   * in the standard JSON-formatted scaffold log without operators
+   * having to parse review items.
    */
   log?: (event: LLMLogEvent) => void;
+  /**
+   * v2.2.0 — per-step deadline for the WHOLE LLM fallback path
+   * (cache lookup → governance sanitise → Anthropic call → parse).
+   * On expiry, generateBinding() returns `{ error: "deadline exceeded" }`
+   * so the step lands as `// TODO:` instead of hanging the scaffold.
+   * Default: 60_000 (60 s).
+   */
+  stepTimeoutMs?: number;
+  /**
+   * v2.2.0 — per-call timeout passed to the Anthropic SDK. Independent
+   * from `stepTimeoutMs` — a single Anthropic call must finish in
+   * `providerTimeoutMs`, while the entire step (including governance
+   * sanitisation, cache, parse) must finish in `stepTimeoutMs`.
+   * Default: 30_000 (30 s).
+   */
+  providerTimeoutMs?: number;
+  /**
+   * v2.2.0 — per-call timeout for governance sidecar `/sanitize`.
+   * Default: 15_000 (15 s).
+   */
+  governanceTimeoutMs?: number;
+  /**
+   * v3.5.0 — disable the batch fallback path. When true, every
+   * unmatched step fires its own provider call (the pre-v3.5 default).
+   * Use only if a customer hits a provider-side per-prompt token
+   * limit on large batches, or wants strict 1:1 call accounting for
+   * audit reasons.
+   */
+  disableBatch?: boolean;
 }
 
 export type LLMLogEvent =
   | { kind: "cache_hit"; key: string }
   | { kind: "cache_miss"; key: string }
+  | { kind: "cache_fallback"; reason: string }
   | { kind: "sanitise_start"; bytes: number }
   | { kind: "sanitise_done"; bytes: number; findings: number }
   | { kind: "provider_call_start"; model: string; promptBytes: number }
@@ -60,6 +94,7 @@ export type LLMLogEvent =
       outputTokens: number;
     }
   | { kind: "binding_parsed"; binding: StepBinding }
+  | { kind: "step_deadline_exceeded"; stepText: string; deadlineMs: number }
   | { kind: "error"; phase: string; message: string };
 
 /** Input to the step-binding generator. */
@@ -97,6 +132,22 @@ export interface GenerateBindingResult {
 export interface LLMClient {
   /** Generate a StepBinding for an unmatched step. */
   generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult>;
+  /**
+   * v3.5.0 — generate bindings for MULTIPLE unmatched steps in one
+   * provider call. The implementation must:
+   *   1. Honour cache per-step (skip steps already cached, return their
+   *      cached results in order, fold the rest into a batch prompt).
+   *   2. Count the batch as ONE call against `budgetExhausted`.
+   *   3. Return results in the same order as `inputs`.
+   *   4. Soft-fail per-step on parse error (one bad slot doesn't kill
+   *      the whole batch).
+   *
+   * Optional — older clients (or test stubs) that don't implement it
+   * make `matchScenarioWithLLM` fall back to per-step `generateBinding`.
+   */
+  generateBatchBindings?(
+    inputs: GenerateBindingInput[],
+  ): Promise<GenerateBindingResult[]>;
   /** Have we hit the max-calls budget for this scaffold? */
   budgetExhausted(): boolean;
   /** Successful provider responses (parsed bindings). */
