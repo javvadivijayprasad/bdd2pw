@@ -1,3 +1,6 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20450278.svg)](https://doi.org/10.5281/zenodo.20450278)
+
+
 # bdd2pw — Gherkin `.feature` → Playwright TypeScript scaffold
 
 # @vijaypjavvadi/bdd2pw
@@ -336,6 +339,13 @@ output/
 
 - [`examples/practice-test-login/`](./examples/practice-test-login/) — first-person dialect, `Scenario Outline + Examples`, security scenarios. Validated 7/7 green against a live public site.
 - [`examples/cms-login/`](./examples/cms-login/) — third-person dialect, compound input, `is redirected`. From a real OSS Selenium codebase.
+## Citation
+
+If you use `@vijaypjavvadi/bdd2pw` in academic work, please cite:
+
+> Javvadi, V. P. (2026). *@vijaypjavvadi/bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP* (Version 3.8.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20450278
+
+A machine-readable [`CITATION.cff`](CITATION.cff) file is included in the repository root.
 
 ## License
 
