@@ -15,23 +15,42 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen?logo=node.js)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)](./tests)
-[![Real-world fixtures](https://img.shields.io/badge/real--world%20fixtures-2-brightgreen)](./examples)
+[![npm](https://img.shields.io/npm/v/@vijaypjavvadi/bdd2pw.svg?label=npm)](https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw)
+[![Tests](https://img.shields.io/badge/tests-290%2B%20passing-brightgreen)](./tests)
+[![Rules](https://img.shields.io/badge/rules-200%2B%20deterministic-brightgreen)](./src/transformers)
+[![Domain packs](https://img.shields.io/badge/domain%20packs-7-blue)](./src/transformers/domains)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/vijaypjavvadi.bdd2pw?label=vscode-extension)](https://marketplace.visualstudio.com/items?itemName=vijaypjavvadi.bdd2pw)
 
 Most teams writing BDD test cases (via Cucumber `.feature` files, possibly authored by an LLM) face the same gap: the `.feature` describes the test, but **someone still has to write the Page Objects and the Playwright spec by hand**. That's the work `bdd2pw` does for you.
 
 Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live page with Chromium, picks the most stable locator for every interactive element, matches each step to a POM method call, and emits a runnable Playwright TypeScript repo — including `playwright.config.ts`, `pages/login.page.ts`, `tests/login.spec.ts`, and a `BDD_REVIEW.md` listing anything a human still needs to look at.
 
-## What `bdd2pw` is and isn't
+## What `bdd2pw` is and isn't (as of v3.8.1)
 
-`bdd2pw` is a **scaffolder**, not an oracle. The output is honest about its limits:
+`bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback**. The output is honest about its limits:
 
-- **Specific `.feature` files** — quoted credentials, concrete assertion targets, standard verb forms — convert to **runnable specs with zero hand-edits**. Validated end-to-end against a real public site (`https://practicetestautomation.com/practice-test-login/`): 7/7 scenarios green.
-- **Vague `.feature` files** — "Enter valid username and password and click login button" with no quoted values — get partial coverage. Steps that can't be unambiguously mapped land as `// TODO` comments in the spec, and warnings in `BDD_REVIEW.md`. The user finishes the 1-3 ambiguous steps; the locators, POM scaffold, project config, and Background `goto()` are already done.
-- **No LLM in the v1.0 hot path.** The 30-rule matcher (14 in v1.0, +1 URL-contains in v1.0.1, +7 LLM-narrative in v1.1.1, +4 in v1.1.2, +2 in v1.1.3 with cross-role synthesis + strict-mode-safe fallbacks) covers three Cucumber dialects (first-person, third-person, no-subject) plus compound input steps. Genuinely vague steps are inherently ambiguous and get `// TODO` — better than an LLM guessing.
-- **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical. Never deletes, never renames, never modifies.
+- **Specific `.feature` files** — quoted credentials, concrete assertion targets, standard verb forms — convert to **runnable specs with zero hand-edits**. Validated end-to-end against real public sites (`practicetestautomation.com`, `owasp-juice-shop`): every scenario green.
+- **Vague `.feature` files** — "Enter valid username and password and click login button" with no quoted values — get partial coverage. Unmatched steps either route to the LLM fallback (when an Anthropic / OpenAI key is configured) or land as `// TODO` comments + warnings in `BDD_REVIEW.md`.
+- **200+ deterministic rules**, organised across three layers:
+  - **API rules** (v3.0+) — `page.request.*` patterns for GET / POST / PUT / DELETE / PATCH, body / header / status assertions.
+  - **Visibility rules** (v3.1+) — `<noun> is visible / displayed / shown / appears` intercepts before URL-slug heuristics, so prose like "the user's name or profile indicator is visible in the UI" never gets slugified into a URL regex.
+  - **UI + URL rules** (v1.x lineage, refined through v3.7.1) — 30+ rules covering first-person, third-person, no-subject Cucumber dialects + compound input steps.
+- **7 opt-in domain rule packs** (v3.4 + v3.8) — banking, healthcare, insurance, retail, gov, education, telecom. Each adds ~20 industry-specific patterns. Activated via `domains: ["banking"]`; empty by default for byte-stable existing behaviour.
+- **LLM fallback is batched per scenario** (v3.5) — one Anthropic / OpenAI / Gemini call per scenario instead of one per unmatched step. ~75% cost reduction on unmatched-heavy scaffolds. Every prompt goes through the `ai-governance` sidecar's `/sanitize` endpoint (fail-closed).
+- **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical.
+- **`--merge` mode** (v3.2) preserves `// bdd2pw:user-block id="..."` sections across regenerations so iterative locator tuning doesn't lose work.
 
-> **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest.
+> **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest — or you let the governed LLM finish them.
+
+## What's new in v3.8.1
+
+- Seven domain rule packs (banking, healthcare, insurance, retail, gov, education, telecom) — ~140 industry-specific patterns total.
+- Per-scenario LLM batching cuts Anthropic spend by ~75% on unmatched-heavy scaffolds.
+- `bdd2pw propose-rules` CLI clusters past LLM bindings into draft regex proposals — turning the offline-review pipeline into one command.
+- `diagnostics: true` adds a "Rule trace" block to `BDD_REVIEW.md` showing exactly which rules declined a step and why.
+- `merge: true` preserves user-edited blocks across regenerations.
+- `metaSidecar: true` writes `<spec>.spec.meta.json` describing every step's semantic intent for downstream tools.
+- VS Code extension (`vijaypjavvadi.bdd2pw`) v0.2.0 surfaces all the above as settings + commands.
 
 ## Where this fits in the platform
 
@@ -311,18 +330,42 @@ output/
 
 ## Roadmap
 
-| Phase | Status | Headline |
+### Shipped (Aug 2025 → May 2026)
+
+| Version | Theme | Highlight |
 |---|---|---|
-| Phase 0 | ✅ Shipped | `@vijaypjavvadi/pw-emit` extracted; sibling package consumed by both `bdd2pw` and (planned) `sel2pw v1.2` |
-| Phase 1a | ✅ Shipped | Gherkin parser, step matcher rules, locator picker, POM resolver, repo scanner, file-snapshot discovery, scaffold orchestration |
-| Phase 1b | ✅ Shipped | Real Chromium-based page discovery via `playwright`, dialect-agnostic rules |
-| Phase 1c | ✅ Shipped | Third-person + compound-input dialect coverage; second real-world fixture pinned |
-| Phase 2 | ✅ Shipped | `update-pom` with append-only AST surgery — preserves hand-edits byte-identical |
-| Phase 3 | ✅ Shipped | HTTP service `:4300` with three real workers + zip artifact download |
-| **v1.0 (this release)** | **Ready to tag** | All of the above |
-| v1.1 | Roadmap | LLM fallback for genuinely-vague steps, governance-routed |
-| v1.2 | Roadmap | sel2pw migration onto `pw-emit`; multi-page scenario discovery |
-| v1.3 | Roadmap | Optional `playwright-bdd` runtime mode |
+| v1.0 | Foundation | Gherkin → Playwright TS scaffolding, POM resolver, file-snapshot discovery, HTTP worker service on `:4300`, `update-pom` AST surgery |
+| v1.1 | Self-healing | `--self-healing` flag, `lib/heal.ts` template, JSONL event logging |
+| v2.0 | LLM fallback | Anthropic SDK integration, governance sidecar `/sanitize`, SQLite step-binding cache, opt-in via `--llm anthropic` |
+| v2.2 | Reliability | Promise.race watchdogs, ai-governance fail-closed, structured pino logging end-to-end |
+| v3.0 | API testing | Native `page.request.*` patterns (~17 rules), tag-driven `@api` / `@ui` scenario state injection |
+| v3.1 | TestForge P0+P1 | Visibility-prose intercept, `:root` locator rejection, `testInfo` in test signature, opt-in step hooks + boundary markers |
+| v3.2 | Iteration UX | `playwright.config.ts` end-marker, exact-dep pinning, `*.spec.meta.json` sidecar, JSON scenarios input, `--merge` mode preserving `// bdd2pw:user-block` sections |
+| v3.3 | Hook signature | `fixtures` arg + `status` + try/catch/finally wrapping for `beforeStep` / `afterStep` |
+| v3.4 | Domain packs | Banking / healthcare / insurance opt-in rule packs (~60 new patterns) |
+| v3.5 | LLM batching | One Anthropic call per scenario instead of N — ~75% cost reduction on unmatched-heavy scaffolds |
+| v3.6 | Diagnostics + auto-rules | Rule-trace block in `BDD_REVIEW.md`; new `bdd2pw propose-rules` CLI clustering candidate-rules.jsonl into draft regex |
+| v3.7.1 | Regression fixes | PascalCase className shadow fix; `test.step` wrapping regression-asserted |
+| **v3.8.1 (current)** | More domain packs | Retail / gov / education / telecom packs added — seven total (~140 industry-specific rules) |
+
+### Next 6 months (Jun 2026 → Nov 2026, ~2 releases/month)
+
+| Target | Version | Theme | Headline |
+|---|---|---|---|
+| Jun 2026 | **v3.9.0** | Telemetry | `artefacts/llm-stats.json` sidecar — batch sizes, cache hit rate, token usage, latency p50/p95, estimated cost. Makes v3.5 batching ROI measurable per scaffold. |
+| Jun 2026 | **v3.10.0** | OpenAI provider | `LLMClientOptions.provider: "openai"` lands; multi-provider client factory; same governance + cache pipeline. |
+| Jul 2026 | **v3.11.0** | Gemini provider | `LLMClientOptions.provider: "gemini"` lands; full three-provider parity (Anthropic / OpenAI / Gemini). |
+| Jul 2026 | **v3.12.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
+| Aug 2026 | **v4.0.0** | Modern defaults | Semver-major reset: bump Anthropic default model, retire v2.x deprecated APIs, switch test-signature defaults to current best practice. Migration guide ships alongside. |
+| Aug 2026 | **v4.1.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future v3.x emitter improvements automatically flow to Selenium users. |
+| Sep 2026 | **v4.2.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
+| Sep 2026 | **v4.3.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
+| Oct 2026 | **v4.4.0** | Coverage analyzer | `bdd2pw coverage` CLI: which deterministic rules fired on which features across a fleet, per-pack hit rate, dead-rule report, suggestion to retire unused rules. |
+| Oct 2026 | **v4.5.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
+| Nov 2026 | **v4.6.0** | Mobile dialect | Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the same emitter pipeline; opt-in via `domains: ["mobile"]`. |
+| Nov 2026 | **v4.7.0** | i18n Gherkin | Accept Cucumber-compatible non-English keywords (Spanish, German, French, Portuguese, Japanese, …). Lets bdd2pw scaffold from `.feature` files written in any of the ~70 languages Cucumber supports. |
+
+Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains: []` byte-stable for existing users so the upgrade path stays painless.
 
 ## Documents
 
