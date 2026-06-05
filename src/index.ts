@@ -48,6 +48,7 @@ import { pageObjectFileName, renderLocatorExpr } from "@vijaypjavvadi/pw-emit";
 import { logger } from "./utils/logger";
 import {
   CandidateRulesWriter,
+  LLMTelemetry,
   createLLMClient,
   matchScenarioWithLLM,
   matchStepWithLLM,
@@ -263,6 +264,18 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // log. Without this, the LLM module's diagnostics were a no-op stream
   // and operators had to wait for review items at scaffold-end (or
   // 8 minutes of silence on a hang).
+  // v3.9.0 — generate scaffoldId BEFORE the LLM client so the
+  // telemetry collector can stamp it into the sidecar.
+  const scaffoldId = `scaffold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // v3.9.0 — opt-in telemetry collector. Subscribes to the same
+  // LLMLogEvent stream pino consumes; aggregates per-call latency +
+  // token counts + cache state + cost into a single sidecar JSON
+  // written after scaffold completes.
+  const telemetry = opts.llmStats
+    ? new LLMTelemetry(scaffoldId, PACKAGE_VERSION)
+    : undefined;
+
   const llm: LLMClient | undefined = createLLMClient(
     opts.llmConfig
       ? {
@@ -276,6 +289,8 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
               { llm: event },
               `llm.${event.kind}`,
             );
+            // v3.9.0 — fan the same event into telemetry when on.
+            telemetry?.handleEvent(event);
           },
         }
       : undefined,
@@ -284,7 +299,6 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const candidates = llm
     ? new CandidateRulesWriter(opts.repo)
     : undefined;
-  const scaffoldId = `scaffold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const llmCtx = {
     llm,
     candidates,
@@ -552,6 +566,27 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     url: opts.url,
   });
   filesWritten.push(reviewReportPath);
+
+  // v3.9.0 — write the LLM telemetry sidecar when opted in. Captures
+  // batch sizes, cache hit rate, token usage, latency p50/p95, and
+  // estimated cost so operators can measure the v3.5 batching ROI per
+  // scaffold. JSON; safe to consume in CI dashboards.
+  if (telemetry) {
+    const summary = telemetry.toSummary();
+    const sidecarPath = path.join(opts.repo, "artefacts", "llm-stats.json");
+    await fs.ensureDir(path.dirname(sidecarPath));
+    await fs.writeFile(sidecarPath, JSON.stringify(summary, null, 2), "utf8");
+    filesWritten.push(sidecarPath);
+    logger.info(
+      {
+        sidecarPath,
+        callsAttempted: summary.totals.callsAttempted,
+        cacheHitRate: summary.totals.cacheHitRate,
+        estimatedCostUsd: summary.totals.estimatedCostUsd,
+      },
+      "llm telemetry sidecar written",
+    );
+  }
 
   logger.info(
     { filesWritten: filesWritten.length, reviewItems: reviewItems.length, tscErrorCount },

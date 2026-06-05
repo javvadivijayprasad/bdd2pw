@@ -9,6 +9,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [3.9.0] — 2026-06-05
+
+### Added — opt-in LLM telemetry sidecar
+
+`scaffold({ llmStats: true })` now writes
+`<repo>/artefacts/llm-stats.json` capturing per-scaffold LLM activity:
+
+    {
+      "version": "3.9.0",
+      "scaffoldId": "scaffold-...",
+      "generatedAt": "2026-06-05T...",
+      "totals": {
+        "callsAttempted": 5,
+        "callsSuccessful": 5,
+        "bindingsGenerated": 23,
+        "cacheHits": 12,
+        "cacheMisses": 11,
+        "cacheHitRate": 0.522,
+        "inputTokens": 24500,
+        "outputTokens": 8200,
+        "estimatedCostUsd": 0.0735
+      },
+      "calls": [
+        { "index": 1, "model": "...", "inputTokens": 4900,
+          "outputTokens": 1820, "latencyMs": 2310,
+          "fromCache": false, "batchSize": 5 },
+        ...
+      ],
+      "latencyMs": { "p50": 2100, "p95": 3450, "min": 1200, "max": 3450 },
+      "pricing": { "model": "claude-sonnet-4-6",
+                   "inputUsdPerMillion": 3, "outputUsdPerMillion": 15 }
+    }
+
+**Why it exists.** v3.5.0 introduced per-scenario LLM batching with
+the promise of ~75% cost reduction on unmatched-heavy scaffolds.
+Until now, the savings were invisible — operators had no per-scaffold
+record of cache hit rate, batch size distribution, token counts, or
+estimated cost. This sidecar makes the ROI measurable per run.
+
+**How it works.** New `src/llm/telemetry.ts` ships an `LLMTelemetry`
+class that subscribes to the existing `LLMLogEvent` stream
+(`cache_hit` / `cache_miss` / `provider_call_start` /
+`provider_call_done` / `binding_parsed` events that
+`AnthropicLLMClient` already emits). The scaffold orchestrator fans
+the log callback to BOTH the existing pino logger AND the telemetry
+collector. Zero overhead when disabled — no telemetry instance is
+constructed and the fan-out is a single `?.` null check.
+
+**Pricing.** Cost is an ESTIMATE — provider prices change. The
+sidecar records the per-million rates used (default snapshot for
+Claude Sonnet 4.6: $3/M input, $15/M output) so a reviewer can
+re-derive the number against current pricing. Override via
+`new LLMTelemetry(scaffoldId, version, pricingOverride)` if you
+have negotiated rates or a different model.
+
+**New exports** from `@vijaypjavvadi/bdd2pw`:
+- `LLMTelemetry` — the collector class.
+- `DEFAULT_PRICING` — per-million USD pricing snapshot. Pre-seeded
+  for `claude-sonnet-4-6`, `claude-3-7-sonnet-latest`,
+  `claude-opus-4-6`, `claude-haiku-4-5-20251001`.
+- Types: `TelemetryCall`, `TelemetrySummary`.
+
+### Default behavior
+
+`llmStats` is **off** by default — pure-UI scaffolds and existing
+LLM-enabled scaffolds emit the same files as v3.8.x. Operators opt
+in when they want to track spend or debug latency.
+
+### Tests
+
+`tests/unit/v390Telemetry.test.ts`:
+- Single-batch aggregates correctly (cache misses incremented,
+  tokens captured, latency recorded, bindings counted).
+- Cache hit rate computed across mixed cached + uncached calls.
+- p50 / p95 latency from a 10-element sample.
+- Cost estimation against the known Sonnet pricing snapshot.
+- Scaffold context (id, version, generated timestamp) stamped
+  into the summary.
+- Zero-event scaffold produces a clean empty summary (no crash,
+  no NaN).
+
 ## [3.8.0] — 2026-05-24
 
 ### Added — four more opt-in domain rule packs

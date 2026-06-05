@@ -42,8 +42,9 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 
 > **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest — or you let the governed LLM finish them.
 
-## What's new in v3.8.1
+## What's new in v3.9.0
 
+- **NEW** `llmStats: true` writes `<repo>/artefacts/llm-stats.json` with per-call latency, token counts, cache hit rate, and an estimated cost in USD. Finally makes the v3.5 batching ROI measurable per run.
 - Seven domain rule packs (banking, healthcare, insurance, retail, gov, education, telecom) — ~140 industry-specific patterns total.
 - Per-scenario LLM batching cuts Anthropic spend by ~75% on unmatched-heavy scaffolds.
 - `bdd2pw propose-rules` CLI clusters past LLM bindings into draft regex proposals — turning the offline-review pipeline into one command.
@@ -346,13 +347,13 @@ output/
 | v3.5 | LLM batching | One Anthropic call per scenario instead of N — ~75% cost reduction on unmatched-heavy scaffolds |
 | v3.6 | Diagnostics + auto-rules | Rule-trace block in `BDD_REVIEW.md`; new `bdd2pw propose-rules` CLI clustering candidate-rules.jsonl into draft regex |
 | v3.7.1 | Regression fixes | PascalCase className shadow fix; `test.step` wrapping regression-asserted |
-| **v3.8.1 (current)** | More domain packs | Retail / gov / education / telecom packs added — seven total (~140 industry-specific rules) |
+| v3.8.1 | More domain packs | Retail / gov / education / telecom packs added — seven total (~140 industry-specific rules) |
+| **v3.9.0 (current)** | Telemetry | `artefacts/llm-stats.json` sidecar — per-call latency + tokens + cache hit rate + estimated cost. Makes v3.5 batching ROI measurable per scaffold. |
 
 ### Next 6 months (Jun 2026 → Nov 2026, ~2 releases/month)
 
 | Target | Version | Theme | Headline |
 |---|---|---|---|
-| Jun 2026 | **v3.9.0** | Telemetry | `artefacts/llm-stats.json` sidecar — batch sizes, cache hit rate, token usage, latency p50/p95, estimated cost. Makes v3.5 batching ROI measurable per scaffold. |
 | Jun 2026 | **v3.10.0** | OpenAI provider | `LLMClientOptions.provider: "openai"` lands; multi-provider client factory; same governance + cache pipeline. |
 | Jul 2026 | **v3.11.0** | Gemini provider | `LLMClientOptions.provider: "gemini"` lands; full three-provider parity (Anthropic / OpenAI / Gemini). |
 | Jul 2026 | **v3.12.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |

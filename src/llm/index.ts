@@ -21,6 +21,12 @@ export {
   type ProposeRulesOptions,
   type ProposeRulesResult,
 } from "./proposeRules";
+export {
+  LLMTelemetry,
+  DEFAULT_PRICING,
+  type TelemetryCall,
+  type TelemetrySummary,
+} from "./telemetry";
 export { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
 export {
   matchStepWithLLM,

@@ -303,6 +303,17 @@ export interface ScaffoldOptions {
    * pollute BDD_REVIEW.md for users who don't need it.
    */
   diagnostics?: boolean;
+  /**
+   * v3.9.0 — opt-in LLM telemetry sidecar. When true, scaffold()
+   * writes `<repo>/artefacts/llm-stats.json` with per-call detail
+   * (batch size, latency, token counts, cache state) and aggregates
+   * (cache hit rate, latency p50/p95, estimated cost). Makes the
+   * v3.5 batching ROI measurable per scaffold.
+   *
+   * Off by default — operators opt in when they want to track spend
+   * or debug latency issues.
+   */
+  llmStats?: boolean;
 }
 
 export interface ScaffoldResult {
