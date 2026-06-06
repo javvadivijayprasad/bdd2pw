@@ -42,9 +42,10 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 
 > **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest — or you let the governed LLM finish them.
 
-## What's new in v3.9.0
+## What's new in v3.10.0
 
-- **NEW** `llmStats: true` writes `<repo>/artefacts/llm-stats.json` with per-call latency, token counts, cache hit rate, and an estimated cost in USD. Finally makes the v3.5 batching ROI measurable per run.
+- **NEW** `bdd2pw heal-stats <repo>` CLI reads `<repo>/artefacts/heal-events.jsonl` (emitted by the runtime `healOrThrow` helper) and writes `<repo>/artefacts/heal-stats.json` summarising heal attempts, success rate, top failing fields, top error patterns, retry latency, and the candidate selectors that got promoted. Same flavor as v3.9.0's `llm-stats.json` but for the self-healing pipeline. Drop it into your CI right after `npx playwright test` to track self-healing ROI per run.
+- `llmStats: true` writes `<repo>/artefacts/llm-stats.json` with per-call latency, token counts, cache hit rate, and an estimated cost in USD (v3.9.0).
 - Seven domain rule packs (banking, healthcare, insurance, retail, gov, education, telecom) — ~140 industry-specific patterns total.
 - Per-scenario LLM batching cuts Anthropic spend by ~75% on unmatched-heavy scaffolds.
 - `bdd2pw propose-rules` CLI clusters past LLM bindings into draft regex proposals — turning the offline-review pipeline into one command.
@@ -348,23 +349,23 @@ output/
 | v3.6 | Diagnostics + auto-rules | Rule-trace block in `BDD_REVIEW.md`; new `bdd2pw propose-rules` CLI clustering candidate-rules.jsonl into draft regex |
 | v3.7.1 | Regression fixes | PascalCase className shadow fix; `test.step` wrapping regression-asserted |
 | v3.8.1 | More domain packs | Retail / gov / education / telecom packs added — seven total (~140 industry-specific rules) |
-| **v3.9.0 (current)** | Telemetry | `artefacts/llm-stats.json` sidecar — per-call latency + tokens + cache hit rate + estimated cost. Makes v3.5 batching ROI measurable per scaffold. |
+| v3.9.0 | Telemetry | `artefacts/llm-stats.json` sidecar — per-call latency + tokens + cache hit rate + estimated cost. Makes v3.5 batching ROI measurable per scaffold. |
+| **v3.10.0 (current)** | Heal stats | `bdd2pw heal-stats <repo>` CLI consumes `artefacts/heal-events.jsonl` and writes `heal-stats.json` with heal rate, top failing fields, top error patterns, retry latency, candidate-selector promotions. Self-healing ROI per test run. |
 
 ### Next 6 months (Jun 2026 → Nov 2026, ~2 releases/month)
 
 | Target | Version | Theme | Headline |
 |---|---|---|---|
-| Jun 2026 | **v3.10.0** | OpenAI provider | `LLMClientOptions.provider: "openai"` lands; multi-provider client factory; same governance + cache pipeline. |
-| Jul 2026 | **v3.11.0** | Gemini provider | `LLMClientOptions.provider: "gemini"` lands; full three-provider parity (Anthropic / OpenAI / Gemini). |
-| Jul 2026 | **v3.12.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
+| Jul 2026 | **v3.11.0** | OpenAI provider | `LLMClientOptions.provider: "openai"` lands; multi-provider client factory; same governance + cache pipeline. |
+| Jul 2026 | **v3.12.0** | Gemini provider | `LLMClientOptions.provider: "gemini"` lands; full three-provider parity (Anthropic / OpenAI / Gemini). |
+| Aug 2026 | **v3.13.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
 | Aug 2026 | **v4.0.0** | Modern defaults | Semver-major reset: bump Anthropic default model, retire v2.x deprecated APIs, switch test-signature defaults to current best practice. Migration guide ships alongside. |
-| Aug 2026 | **v4.1.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future v3.x emitter improvements automatically flow to Selenium users. |
+| Sep 2026 | **v4.1.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future v3.x emitter improvements automatically flow to Selenium users. |
 | Sep 2026 | **v4.2.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
-| Sep 2026 | **v4.3.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
+| Oct 2026 | **v4.3.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
 | Oct 2026 | **v4.4.0** | Coverage analyzer | `bdd2pw coverage` CLI: which deterministic rules fired on which features across a fleet, per-pack hit rate, dead-rule report, suggestion to retire unused rules. |
-| Oct 2026 | **v4.5.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
+| Nov 2026 | **v4.5.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
 | Nov 2026 | **v4.6.0** | Mobile dialect | Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the same emitter pipeline; opt-in via `domains: ["mobile"]`. |
-| Nov 2026 | **v4.7.0** | i18n Gherkin | Accept Cucumber-compatible non-English keywords (Spanish, German, French, Portuguese, Japanese, …). Lets bdd2pw scaffold from `.feature` files written in any of the ~70 languages Cucumber supports. |
 
 Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains: []` byte-stable for existing users so the upgrade path stays painless.
 
