@@ -9,6 +9,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [3.10.0] — 2026-06-06
+
+### Added — self-healing stats sidecar + `bdd2pw heal-stats` CLI
+
+v1.1+ has shipped a runtime `healOrThrow` helper that emits
+`register` / `heal_attempt` / `healed` / `heal_unavailable` events
+to `<repo>/artefacts/heal-events.jsonl`. Until now those events
+sat in a JSONL file with no offline analyzer — operators had to
+grep the file themselves to see if healing was working.
+
+v3.10.0 adds:
+
+**1. `bdd2pw heal-stats <repo>` CLI** — reads
+`<repo>/artefacts/heal-events.jsonl` and writes
+`<repo>/artefacts/heal-stats.json` with:
+
+    {
+      "version": "3.10.0",
+      "generatedAt": "2026-06-06T...",
+      "source": "<events file>",
+      "totals": {
+        "registrations": 47,
+        "healAttempts": 6,
+        "healed": 4,
+        "healUnavailable": 2,
+        "healRate": 0.6667,
+        "uniqueFields": 23,
+        "uniquePages": 3
+      },
+      "topFailingFields": [
+        { "page": "LoginPage", "name": "submitButton",
+          "attempts": 3, "healed": 2 },
+        ...
+      ],
+      "topErrors": [
+        { "error": "timeout <n>ms exceeded", "count": 4 },
+        ...
+      ],
+      "topCandidates": [
+        { "selector": "[data-testid='submit']", "promotions": 2,
+          "averageConfidence": 0.87 },
+        ...
+      ],
+      "retryLatencyMs": { "p50": 1240, "p95": 3010,
+                          "min": 880, "max": 3010 },
+      "perScenario": [
+        { "scenario": "User can log in", "attempts": 1, "healed": 1 },
+        ...
+      ]
+    }
+
+Where v3.9.0's `llm-stats.json` measures the LLM batching ROI per
+scaffold, v3.10.0's `heal-stats.json` measures the self-healing
+ROI per TEST RUN.
+
+**2. New module `src/reports/healStats.ts`** — pure
+`aggregate(events, source, topN)` function plus the wrapper
+`analyseHealStats(opts)` that resolves the input path
+(file / repo-dir / artefacts-subdir) and writes the sidecar.
+
+**3. Error normalisation.** The aggregator collapses error messages
+into stable buckets (lowercase, strip "Error:"/"TimeoutError:"
+prefixes, replace runs of 3+ digits with `<n>`) so transient
+timestamps / IDs don't fragment the histogram.
+
+**4. Retry latency derivation.** Pairs each `heal_attempt` with its
+matching `healed` (by `page+name+method`) and reports the timestamp
+delta as the retry latency. Computes p50 / p95 / min / max across
+the run.
+
+**5. Graceful empty-input behaviour.** Pointing the CLI at a repo
+with no heal-events.jsonl writes a zero-event summary instead of
+failing — `bdd2pw heal-stats` is now safe to run unconditionally
+in CI after `npx playwright test`.
+
+### Tests
+
+`tests/unit/v3100HealStats.test.ts`:
+- Empty input → all-zero summary.
+- Mixed register / heal_attempt / healed / heal_unavailable sequence
+  aggregates correctly (counts, healRate, topFailingFields,
+  topErrors, topCandidates, p50/p95 latency, per-scenario rollup).
+- `topN` honored — top-3 returns 3 entries from 5 distinct fields.
+- End-to-end: write JSONL → `analyseHealStats(file)` → read JSON
+  back and verify shape + version stamp.
+- Missing-file safety: pointing at a directory with no
+  heal-events.jsonl returns total=0 and writes an empty summary.
+- Repo-path resolution: passing a directory finds
+  `artefacts/heal-events.jsonl` automatically.
+
 ## [3.9.0] — 2026-06-05
 
 ### Added — opt-in LLM telemetry sidecar

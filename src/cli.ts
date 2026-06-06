@@ -8,6 +8,7 @@ import { Command } from "commander";
 import * as path from "path";
 import { scaffold, analyze, updatePom } from "./index";
 import { proposeRules } from "./llm";
+import { analyseHealStats } from "./reports/healStats";
 import { logger } from "./utils/logger";
 
 const program = new Command();
@@ -59,6 +60,11 @@ program
     "Wrap emitted locators in healOrThrow() and generate lib/heal.ts + tsconfig path alias. Locator events are logged to artefacts/heal-events.jsonl for the offline self-heal pipeline. Action-time healing is v1.2.",
     false,
   )
+  .option(
+    "--llm-stats",
+    "v3.9.0 — write <repo>/artefacts/llm-stats.json with per-call latency, token counts, cache hit rate, and estimated cost.",
+    false,
+  )
   .action(async (feature: string, opts) => {
     try {
       // v2.0 — wire the actual LLM config when --llm is passed. The legacy
@@ -107,6 +113,8 @@ program
         // Commander negates --no-discovery into opts.discovery=false
         noDiscovery: opts.discovery === false,
         selfHealing: opts.selfHealing,
+        // v3.9.0 — telemetry sidecar
+        llmStats: opts.llmStats === true,
       });
       logger.info({ result }, "scaffold complete");
     } catch (err) {
@@ -237,6 +245,50 @@ program
     process.stdout.write(
       `\n${result.proposalsWritten} proposal(s) written to ${result.outputPath} ` +
         `(from ${result.totalCandidates} candidate entries).\n`,
+    );
+  });
+
+/**
+ * v3.10.0 — heal-stats subcommand. Reads `<repo>/artefacts/heal-events.jsonl`
+ * (produced by the runtime `healOrThrow` helper) and writes
+ * `<repo>/artefacts/heal-stats.json` summarising heal attempts,
+ * success rate, top failing fields, top error patterns, retry latency,
+ * and the candidate selectors that got promoted. Run after
+ * `npx playwright test` in CI to track self-healing ROI per test run.
+ */
+program
+  .command("heal-stats")
+  .description(
+    "Aggregate <repo>/artefacts/heal-events.jsonl into a heal-stats.json sidecar.",
+  )
+  .argument(
+    "<input>",
+    "Path to heal-events.jsonl OR the test repo containing artefacts/heal-events.jsonl",
+  )
+  .option(
+    "--out <path>",
+    "Where to write heal-stats.json. Defaults to next to the events file.",
+  )
+  .option(
+    "--top <n>",
+    "How many entries to keep in each ranked list (failing fields, errors, candidates, scenarios). Default 10.",
+    "10",
+  )
+  .action(async (input: string, raw: { out?: string; top?: string }) => {
+    const result = await analyseHealStats({
+      inputPath: input,
+      outputPath: raw.out,
+      topN: raw.top ? Number(raw.top) : undefined,
+    });
+    logger.info(
+      {
+        outputPath: result.outputPath,
+        totalEvents: result.totalEvents,
+      },
+      "heal-stats: complete",
+    );
+    process.stdout.write(
+      `\nheal-stats: wrote ${result.outputPath} (parsed ${result.totalEvents} event(s)).\n`,
     );
   });
 
