@@ -9,6 +9,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [3.11.0] — 2026-06-08
+
+### Added — OpenAI provider parity
+
+`LLMClientOptions.provider` now accepts `"openai"` alongside
+`"anthropic"`. The factory wires up `OpenAILLMClient` which matches
+the Anthropic client's surface area completely:
+
+- Single-step `generateBinding(input)`
+- Batched `generateBatchBindings(inputs[])` — same per-step cache
+  lookup + one batched prompt as v3.5.0 batching
+- Cache hit accounting (`callsMade`, `callsAttempted`,
+  `cacheBackendPersistent`, `cacheBackendFallbackReason`)
+- Budget enforcement via `maxCalls`
+- Governance sanitisation through the same sidecar
+- Step deadlines + provider timeouts
+- LLMLogEvent stream that feeds the v3.9.0 telemetry sidecar
+
+What differs is purely the SDK call shape — OpenAI's
+`chat.completions.create()` instead of Anthropic's `messages.create()`,
+and the response unpacking (`choices[0].message.content` vs
+`content[0].text`, `usage.prompt_tokens` vs `usage.input_tokens`).
+
+### Default model: `gpt-4o-mini`
+
+bdd2pw's task is structured JSON output over regex-shaped
+deterministic patterns. Mini handles it reliably and runs ~17x
+cheaper than gpt-4o ($0.15 vs $2.50 per million input tokens).
+Override via `LLMClientOptions.model` or `--llm-model`.
+
+### Pricing rows added to `DEFAULT_PRICING`
+
+`telemetry.ts` now includes pricing snapshots for: `gpt-4o`,
+`gpt-4o-mini`, `gpt-4-turbo`, `o1`, `o1-mini`, `o1-preview`. v3.9.0
+`llm-stats.json` cost estimates work end-to-end for OpenAI runs.
+Prices are Q4 2025 published rates; override via
+`new LLMTelemetry(scaffoldId, version, pricingOverride)` if you
+have negotiated rates.
+
+### CLI
+
+`bdd2pw scaffold ... --llm openai` now works. The `--llm-model`
+help text updated to reflect both providers' defaults.
+
+### `optionalDependencies`
+
+`openai ^4.77.0` added alongside `@anthropic-ai/sdk`. Like the
+Anthropic SDK, it's loaded defensively via `require()` so users who
+only want Anthropic don't need to install the OpenAI SDK and vice
+versa. Missing-package error message points to `npm install openai`.
+
+### Cache compat
+
+Cache keys include the model name (since v2.0), so a scaffold
+cached under `claude-sonnet-4-6` will NOT hit the cache when run
+under `gpt-4o-mini` — you get a fresh provider call. Within the
+same model, cache hits work identically regardless of how many
+times you switch providers across scaffold runs.
+
+### Tests
+
+`tests/unit/v3110OpenAI.test.ts`:
+- Default model + DEFAULT_PRICING lookup.
+- generateBinding succeeds with a well-formed JSON response.
+- generateBatchBindings produces N bindings from ONE provider
+  call (cache misses → single batched prompt → JSON array → N
+  bindings).
+- Budget exhaustion returns an error without making a provider call.
+- Missing API key short-circuits before the SDK loads.
+- Malformed JSON response surfaces a parse error.
+
 ## [3.10.0] — 2026-06-06
 
 ### Added — self-healing stats sidecar + `bdd2pw heal-stats` CLI

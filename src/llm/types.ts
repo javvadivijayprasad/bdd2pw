@@ -16,8 +16,12 @@
 import type { PageObjectIR, StepIR, StepBinding } from "../types";
 
 export interface LLMClientOptions {
-  /** Provider identifier — "anthropic" in v2.0; OpenAI/Gemini in v2.1+. */
-  provider: "anthropic";
+  /**
+   * Provider identifier. "anthropic" is the original (v2.0+);
+   * "openai" lands in v3.11.0 with full parity (cache, governance,
+   * batching, telemetry). "gemini" comes in v3.12.
+   */
+  provider: "anthropic" | "openai";
   /** Anthropic model. Default: claude-sonnet-4-6. */
   model?: string;
   /** API key. Resolved from env var (ANTHROPIC_API_KEY) when omitted. */

@@ -182,7 +182,8 @@ export interface ScaffoldOptions {
    *   sidecar. Production runs MUST keep this off.
    */
   llmConfig?: {
-    provider: "anthropic";
+    /** v3.11.0 — accepts "openai" alongside "anthropic". Gemini lands in v3.12. */
+    provider: "anthropic" | "openai";
     model?: string;
     apiKey?: string;
     governanceUrl?: string;

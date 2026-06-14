@@ -112,6 +112,13 @@ export const DEFAULT_PRICING: Record<
     inputUsdPerMillion: 0.8,
     outputUsdPerMillion: 4,
   },
+  // OpenAI — v3.11.0 provider parity. Q4 2025 published pricing.
+  "gpt-4o": { inputUsdPerMillion: 2.5, outputUsdPerMillion: 10 },
+  "gpt-4o-mini": { inputUsdPerMillion: 0.15, outputUsdPerMillion: 0.6 },
+  "gpt-4-turbo": { inputUsdPerMillion: 10, outputUsdPerMillion: 30 },
+  o1: { inputUsdPerMillion: 15, outputUsdPerMillion: 60 },
+  "o1-mini": { inputUsdPerMillion: 3, outputUsdPerMillion: 12 },
+  "o1-preview": { inputUsdPerMillion: 15, outputUsdPerMillion: 60 },
 };
 
 /**

@@ -10,9 +10,11 @@
 
 import * as path from "path";
 import { AnthropicLLMClient } from "./anthropicClient";
+import { OpenAILLMClient } from "./openaiClient";
 import type { LLMClient, LLMClientOptions } from "./types";
 
 export { AnthropicLLMClient } from "./anthropicClient";
+export { OpenAILLMClient } from "./openaiClient";
 export { CandidateRulesWriter } from "./candidateRules";
 export {
   proposeRules,
@@ -68,8 +70,11 @@ export function createLLMClient(
   switch (opts.provider) {
     case "anthropic":
       return new AnthropicLLMClient(opts, cachePathDefault);
+    case "openai":
+      // v3.11.0 — full parity (cache, governance, batching, telemetry).
+      return new OpenAILLMClient(opts, cachePathDefault);
     default:
-      // v2.1 will add openai / gemini.
+      // v3.12 will add gemini.
       return undefined;
   }
 }

@@ -37,13 +37,13 @@ program
     "--no-discovery",
     "Skip page discovery entirely (rule-only probing). Field-referencing rules will fall to TODO.",
   )
-  .option("--llm <provider>", "Enable LLM fallback for unmatched steps. v2.0: only 'anthropic' wired; openai/gemini land in v2.1.")
+  .option("--llm <provider>", "Enable LLM fallback for unmatched steps. v3.11.0: 'anthropic' or 'openai'. Gemini lands in v3.12.")
   .option(
     "--governance-url <url>",
     "ai-governance sidecar URL — every prompt is sanitised here before leaving the perimeter (fail-closed).",
     "http://localhost:4900",
   )
-  .option("--llm-model <model>", "Override the LLM model (default: claude-sonnet-4-6 for anthropic).")
+  .option("--llm-model <model>", "Override the LLM model. Defaults: anthropic→claude-sonnet-4-6, openai→gpt-4o-mini.")
   .option("--llm-max-calls <n>", "Max LLM provider calls per scaffold. Default 50. Cache hits don't count.", "50")
   .option("--llm-cache <path>", "SQLite cache path. Default <repo>/.bdd2pw/llm-cache.sqlite. Use ':memory:' for one-shot.")
   .option("--llm-skip-governance", "DO NOT USE in production — bypass the sidecar sanitisation step. Test-only escape hatch.", false)
@@ -69,11 +69,12 @@ program
     try {
       // v2.0 — wire the actual LLM config when --llm is passed. The legacy
       // top-level `llm` field stays for backwards compat; `llmConfig` is the
-      // real one used by scaffold().
-      const llmConfig =
-        opts.llm === "anthropic"
-          ? {
-              provider: "anthropic" as const,
+      // real one used by scaffold(). v3.11.0 — accept openai too.
+      const llmProvider =
+        opts.llm === "anthropic" || opts.llm === "openai" ? opts.llm : null;
+      const llmConfig = llmProvider
+        ? ({
+              provider: llmProvider as "anthropic" | "openai",
               model: opts.llmModel,
               governanceUrl: opts.governanceUrl,
               maxCalls: opts.llmMaxCalls
@@ -91,8 +92,8 @@ program
               governanceTimeoutMs: opts.llmGovernanceTimeoutMs
                 ? Number(opts.llmGovernanceTimeoutMs)
                 : undefined,
-            }
-          : undefined;
+            })
+        : undefined;
       const result = await scaffold({
         feature: path.resolve(feature),
         url: opts.url,
