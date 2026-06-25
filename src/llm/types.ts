@@ -19,9 +19,12 @@ export interface LLMClientOptions {
   /**
    * Provider identifier. "anthropic" is the original (v2.0+);
    * "openai" lands in v3.11.0 with full parity (cache, governance,
-   * batching, telemetry). "gemini" comes in v3.12.
+   * batching, telemetry); "gemini" lands in v3.12.0 with the same parity.
+   * All three providers share the prompt machinery, governance pipeline,
+   * cache backend, and telemetry event stream — only the SDK call shape
+   * differs per client.
    */
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "gemini";
   /** Anthropic model. Default: claude-sonnet-4-6. */
   model?: string;
   /** API key. Resolved from env var (ANTHROPIC_API_KEY) when omitted. */

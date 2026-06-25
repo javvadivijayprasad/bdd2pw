@@ -119,6 +119,13 @@ export const DEFAULT_PRICING: Record<
   o1: { inputUsdPerMillion: 15, outputUsdPerMillion: 60 },
   "o1-mini": { inputUsdPerMillion: 3, outputUsdPerMillion: 12 },
   "o1-preview": { inputUsdPerMillion: 15, outputUsdPerMillion: 60 },
+  // Google Gemini — v3.12.0 provider parity. Q4 2025 published pricing.
+  // Flash is the price/perf sweet spot for structured-JSON tasks.
+  "gemini-2.5-flash": { inputUsdPerMillion: 0.1, outputUsdPerMillion: 0.4 },
+  "gemini-2.5-pro": { inputUsdPerMillion: 1.25, outputUsdPerMillion: 5 },
+  "gemini-2.0-flash": { inputUsdPerMillion: 0.1, outputUsdPerMillion: 0.4 },
+  "gemini-1.5-flash": { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.3 },
+  "gemini-1.5-pro": { inputUsdPerMillion: 1.25, outputUsdPerMillion: 5 },
 };
 
 /**

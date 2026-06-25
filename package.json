@@ -1,6 +1,6 @@
 {
   "name": "@vijaypjavvadi/bdd2pw",
-  "version": "3.11.0",
+  "version": "3.12.0",
   "description": "Scaffold runnable Playwright TypeScript tests from Gherkin .feature files. Detects existing Page Objects, scans live pages via Microsoft Playwright MCP, emits POMs + specs, ready for execution. CLI + HTTP service. Optional governed LLM fallback (Anthropic / OpenAI / Gemini).",
   "bin": {
     "bdd2pw": "dist/cli.js"
@@ -82,6 +82,7 @@
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
     "openai": "^4.77.0",
+    "@google/generative-ai": "^0.21.0",
     "better-sqlite3": "^11.0.0",
     "pino-pretty": "^11.0.0",
     "playwright": "^1.45.0"

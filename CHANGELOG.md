@@ -9,6 +9,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [3.12.0] — 2026-06-19
+
+> Note: v3.11.0 was tagged in git but never published to npm. v3.12.0
+> on npm is the first release that includes BOTH the v3.11.0 OpenAI
+> provider AND the v3.12.0 Gemini provider. Anyone who installs
+> `@vijaypjavvadi/bdd2pw@latest` after this release gets all three
+> providers (Anthropic, OpenAI, Gemini) with full parity in one go.
+
+### Added — Gemini provider, three-provider parity is complete
+
+`LLMClientOptions.provider` now accepts `"gemini"` alongside
+`"anthropic"` and `"openai"`. `createLLMClient` factory routes
+`"gemini"` to a new `GeminiLLMClient` that matches the surface
+area of the other two:
+
+- Single-step `generateBinding(input)`
+- Batched `generateBatchBindings(inputs[])` — same per-step cache
+  lookup + one batched prompt as the v3.5.0 Anthropic batching
+- Cache hit accounting (`callsMade`, `callsAttempted`,
+  `cacheBackendPersistent`, `cacheBackendFallbackReason`)
+- Budget enforcement via `maxCalls`
+- Governance sanitisation through the same sidecar (fail-closed
+  if the sidecar is unreachable — identical to Anthropic/OpenAI)
+- Provider timeout enforcement — Gemini's SDK has no native
+  timeout option, so we wrap the call in a `Promise.race` against
+  `setTimeout`; surfaces a clear `Gemini call exceeded Xms timeout`
+  error in logs and the result `error` field
+- LLMLogEvent stream that feeds the v3.9.0 telemetry sidecar
+
+### Default model: `gemini-2.5-flash`
+
+For bdd2pw's structured-JSON task, Flash is the price/perf sweet
+spot. Pricing snapshot: $0.10 per million input tokens, $0.40 per
+million output. That is the cheapest model across all three
+providers — cheaper than `gpt-4o-mini` ($0.15) and dramatically
+cheaper than `claude-sonnet-4-6` ($3.00). Override via
+`LLMClientOptions.model` or `--llm-model`.
+
+### Pricing rows added to `DEFAULT_PRICING`
+
+`telemetry.ts` now includes pricing snapshots for: `gemini-2.5-flash`,
+`gemini-2.5-pro`, `gemini-2.0-flash`, `gemini-1.5-flash`,
+`gemini-1.5-pro`. v3.9.0 `llm-stats.json` cost estimates work
+end-to-end for Gemini runs.
+
+### CLI
+
+`bdd2pw scaffold ... --llm gemini` now works. `--llm-model` help
+text updated to list all three provider defaults.
+
+### Auth env vars
+
+Reads `GEMINI_API_KEY` first, then falls back to `GOOGLE_API_KEY`
+(both are widely used in the Google AI Studio + Vertex ecosystem).
+
+### `optionalDependencies`
+
+`@google/generative-ai ^0.21.0` added alongside `@anthropic-ai/sdk`
+and `openai`. Same defensive `require()` loading pattern — teams
+that only use Anthropic do not need to install the Gemini SDK,
+and vice versa. Missing-package error message points to
+`npm install @google/generative-ai`.
+
+### Cache compat
+
+Cache keys include the model name (since v2.0), so a scaffold
+cached under `claude-sonnet-4-6` does NOT hit the cache when re-run
+under `gemini-2.5-flash` — you get a fresh provider call. Within
+the same model, cache hits work identically regardless of how many
+times you switch providers across scaffold runs.
+
+### Tests
+
+`tests/unit/v3120Gemini.test.ts`:
+- Default model + DEFAULT_PRICING lookup.
+- generateBinding succeeds with a well-formed JSON response.
+- generateBatchBindings produces N bindings from ONE provider call
+  (cache misses → single batched prompt → JSON array → N bindings).
+- Budget exhaustion returns an error without making a provider call.
+- Missing API key short-circuits before the SDK loads.
+- Malformed JSON response surfaces a parse error.
+- Provider timeout aborts a hung call (Promise.race against
+  setTimeout works as designed).
+
 ## [3.11.0] — 2026-06-08
 
 ### Added — OpenAI provider parity

@@ -11,10 +11,12 @@
 import * as path from "path";
 import { AnthropicLLMClient } from "./anthropicClient";
 import { OpenAILLMClient } from "./openaiClient";
+import { GeminiLLMClient } from "./geminiClient";
 import type { LLMClient, LLMClientOptions } from "./types";
 
 export { AnthropicLLMClient } from "./anthropicClient";
 export { OpenAILLMClient } from "./openaiClient";
+export { GeminiLLMClient } from "./geminiClient";
 export { CandidateRulesWriter } from "./candidateRules";
 export {
   proposeRules,
@@ -73,8 +75,10 @@ export function createLLMClient(
     case "openai":
       // v3.11.0 — full parity (cache, governance, batching, telemetry).
       return new OpenAILLMClient(opts, cachePathDefault);
+    case "gemini":
+      // v3.12.0 — full parity. Default model gemini-2.5-flash.
+      return new GeminiLLMClient(opts, cachePathDefault);
     default:
-      // v3.12 will add gemini.
       return undefined;
   }
 }
