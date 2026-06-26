@@ -65,6 +65,30 @@ program
     "v3.9.0 — write <repo>/artefacts/llm-stats.json with per-call latency, token counts, cache hit rate, and estimated cost.",
     false,
   )
+  // v4.0.0 — data-driven Examples injection.
+  .option(
+    "--data <path>",
+    "v4.0.0 — load CSV / JSON / XLSX file and inject rows into every Scenario Outline's Examples table. Inline Examples are overridden when this is set. Failures fall back to inline Examples + warn in BDD_REVIEW.md.",
+  )
+  .option(
+    "--gen-data",
+    "v4.0.0 — generate synthetic Examples rows via Faker + LLM. Requires --schema. Combine with --rows to set row count.",
+    false,
+  )
+  .option(
+    "--schema <path>",
+    "v4.0.0 — JSON schema for --gen-data. Object of {column: source} where source is 'faker.X.Y', 'llm:<prompt>', or a literal string.",
+  )
+  .option(
+    "--rows <n>",
+    "v4.0.0 — row count for --gen-data. Default 20.",
+    "20",
+  )
+  .option(
+    "--seed <n>",
+    "v4.0.0 — Faker RNG seed for --gen-data reproducibility. Default 42.",
+    "42",
+  )
   .action(async (feature: string, opts) => {
     try {
       // v2.0 — wire the actual LLM config when --llm is passed. The legacy
@@ -96,6 +120,18 @@ program
                 : undefined,
             })
         : undefined;
+      // v4.0.0 — warn if user passed both data sources. --data wins.
+      if (opts.data && opts.genData) {
+        console.warn(
+          "[bdd2pw] both --data and --gen-data passed; --data wins. --gen-data ignored.",
+        );
+      }
+      // v4.0.0 — warn if --gen-data without --schema.
+      if (opts.genData && !opts.schema) {
+        console.warn(
+          "[bdd2pw] --gen-data requires --schema <path>. Ignoring --gen-data.",
+        );
+      }
       const result = await scaffold({
         feature: path.resolve(feature),
         url: opts.url,
@@ -118,6 +154,21 @@ program
         selfHealing: opts.selfHealing,
         // v3.9.0 — telemetry sidecar
         llmStats: opts.llmStats === true,
+        // v4.0.0 — data-driven Examples injection. --data wins over
+        // --gen-data when both are passed (and we warn in stderr so the
+        // user sees what happened).
+        dataSource: opts.data
+          ? { type: "file" as const, path: path.resolve(opts.data) }
+          : opts.genData
+            ? {
+                type: "synthetic" as const,
+                schemaPath: opts.schema
+                  ? path.resolve(opts.schema)
+                  : undefined,
+                rows: opts.rows ? Number(opts.rows) : undefined,
+                seed: opts.seed ? Number(opts.seed) : undefined,
+              }
+            : undefined,
       });
       logger.info({ result }, "scaffold complete");
     } catch (err) {

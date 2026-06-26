@@ -1,0 +1,83 @@
+{
+  "version": "4.0.0",
+  "scaffoldId": "scaffold-1782516903505-7mnucm",
+  "generatedAt": "2026-06-26T23:35:22.170Z",
+  "totals": {
+    "callsAttempted": 6,
+    "callsSuccessful": 6,
+    "bindingsGenerated": 6,
+    "cacheHits": 0,
+    "cacheMisses": 6,
+    "cacheHitRate": 0,
+    "inputTokens": 7224,
+    "outputTokens": 856,
+    "estimatedCostUsd": 0.034512
+  },
+  "calls": [
+    {
+      "index": 1,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1189,
+      "outputTokens": 152,
+      "latencyMs": 3671,
+      "fromCache": false,
+      "batchSize": 1
+    },
+    {
+      "index": 2,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1208,
+      "outputTokens": 141,
+      "latencyMs": 2554,
+      "fromCache": false,
+      "batchSize": 1
+    },
+    {
+      "index": 3,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1203,
+      "outputTokens": 131,
+      "latencyMs": 3206,
+      "fromCache": false,
+      "batchSize": 1
+    },
+    {
+      "index": 4,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1209,
+      "outputTokens": 143,
+      "latencyMs": 2761,
+      "fromCache": false,
+      "batchSize": 1
+    },
+    {
+      "index": 5,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1205,
+      "outputTokens": 135,
+      "latencyMs": 3424,
+      "fromCache": false,
+      "batchSize": 1
+    },
+    {
+      "index": 6,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1210,
+      "outputTokens": 154,
+      "latencyMs": 2642,
+      "fromCache": false,
+      "batchSize": 1
+    }
+  ],
+  "latencyMs": {
+    "p50": 2761,
+    "p95": 3671,
+    "min": 2554,
+    "max": 3671
+  },
+  "pricing": {
+    "model": "claude-sonnet-4-6",
+    "inputUsdPerMillion": 3,
+    "outputUsdPerMillion": 15
+  }
+}

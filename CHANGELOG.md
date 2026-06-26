@@ -9,6 +9,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.0.0] — 2026-06-25
+
+### Theme: Data-driven scaffolds — bring your own data or generate it
+
+v4.0 is a **major version with no breaking changes**. The number bump
+reflects the size of the feature bundle, not the risk to existing users.
+Scaffolds that don't use the new `--data` / `--gen-data` flags behave
+identically to v3.12.
+
+### Added — `--data <path>` external data file injection
+
+Pass a CSV, JSON, or XLSX file. Every Scenario Outline in the .feature
+file gets its Examples table swapped with rows from the data file.
+Inline Examples in the .feature become the no-data fallback.
+
+```
+bdd2pw scaffold login.feature --data data/users.csv --url ... --page LoginPage --repo .
+```
+
+- CSV parser is dependency-free (RFC 4180 quoted fields, embedded
+  newlines, escaped quotes, mixed CRLF/LF).
+- JSON accepts either array of objects or `{rows: [...]}` envelope.
+- XLSX lazy-loads via the optional `xlsx` dep; clear `npm install xlsx`
+  hint if missing.
+- Per-scenario column filtering — extra data columns are dropped per
+  scenario, so a single 50-column data file can feed many narrow
+  scenarios without each one pulling in noise.
+- Scenarios whose placeholders reference columns NOT present in the
+  data are skipped with a warning in BDD_REVIEW.md (inline Examples
+  preserved).
+
+### Added — `--gen-data` synthetic data generator
+
+For when you need plausible test data but don't have a real dataset.
+Pass a schema JSON listing each column's source:
+
+```json
+{
+  "email": "faker.internet.email",
+  "password": "faker.internet.password",
+  "url_fragment": "inventory.html",
+  "description": "llm:auto insurance claim, one sentence"
+}
+```
+
+```
+bdd2pw scaffold login.feature --gen-data --schema users.schema.json --rows 50 --url ... --page LoginPage --repo .
+```
+
+- `faker.X.Y` paths resolve via `@faker-js/faker` (optional dep).
+- `llm:<prompt>` routes through the configured LLM provider (Anthropic,
+  OpenAI, or Gemini) for context-aware domain-specific data.
+- Literal strings repeat the same value in every row.
+- Seeded by default (seed=42) so output is reproducible across runs.
+  Override with `--seed N`.
+- Per-column LLM batching — one provider call per LLM-driven column
+  regardless of row count. 3 LLM fields × 50 rows = 3 calls.
+
+### Added — `LLMClient.generateText()` API
+
+Generic single-prompt text generation method on all three providers
+(Anthropic, OpenAI, Gemini). Routes through the same governance
+sanitisation, budget enforcement, timeout, and telemetry pipeline as
+binding generation. Used by the synth data generator; available for
+any custom downstream tooling that needs a clean LLM call.
+
+### CLI
+
+- `--data <path>` — load external data file
+- `--gen-data` — enable synthetic generation
+- `--schema <path>` — schema JSON for `--gen-data`
+- `--rows <n>` — row count for `--gen-data` (default 20)
+- `--seed <n>` — Faker seed (default 42)
+
+Precedence: `--data` wins if both are passed; warning printed to stderr.
+
+### Programmatic API
+
+`ScaffoldOptions.dataSource: {type: "file"|"synthetic", path?, schemaPath?, rows?, seed?}`
+- Failures fall back to inline Examples and surface as ReviewItems.
+- Same graceful-degradation pattern as the v2.0 LLM fallback failure mode.
+
+### New `optionalDependencies`
+
+- `@faker-js/faker ^9.3.0` — synthetic data generation
+- `xlsx ^0.18.5` — XLSX data file loading
+
+Same defensive `require()` loading pattern as existing optional deps.
+Users who only use Anthropic + CSV need neither.
+
+### Tests
+
+`tests/unit/v400Data.test.ts` — 28 cases across DataLoader (CSV/JSON
+parsing, file routing, validation), SynthGenerator (literal/Faker/LLM
+fields, error cases), and ExamplesInjector (extract placeholders,
+swap, skip vanilla, missing-column warning, per-scenario filtering,
+zero-row graceful handling).
+
 ## [3.12.0] — 2026-06-19
 
 > Note: v3.11.0 was tagged in git but never published to npm. v3.12.0

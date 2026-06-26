@@ -22,6 +22,10 @@ import type {
 } from "./types";
 import { parseFeature, substituteOutlinePlaceholders } from "./parser/gherkinParser";
 import { isJsonScenarioFile, parseJsonScenarios } from "./parser/jsonScenarioParser";
+// v4.0.0 — data-driven scaffolds.
+import { loadDataFile, DataLoaderError, type DataRow } from "./data/dataLoader";
+import { generateSyntheticRows, loadSchema, SynthGeneratorError } from "./data/synthGenerator";
+import { injectExamples, reportToReviewItems } from "./data/examplesInjector";
 import { scanRepo } from "./repo/repoScanner";
 import { scaffoldProject } from "./repo/projectScaffolder";
 import { scanPage } from "./discovery/mcpClient";
@@ -134,6 +138,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const feature = isJsonScenarioFile(opts.feature)
     ? await parseJsonScenarios(opts.feature)
     : await parseFeature(opts.feature);
+
   reviewItems.push({
     severity: "info",
     message: `Parsed feature "${feature.name}" — ${feature.scenarios.length} scenario(s)${feature.background ? " + Background" : ""}`,
@@ -299,6 +304,53 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const candidates = llm
     ? new CandidateRulesWriter(opts.repo)
     : undefined;
+
+  // v4.0.0 — data-driven Examples injection. If --data or --gen-data was
+  // passed, swap every Scenario Outline's examples with externally-sourced
+  // rows BEFORE step matching or emit runs. Failures fall back to inline
+  // Examples and surface as ReviewItems (graceful degradation, same as
+  // the LLM fallback failure mode).
+  if (opts.dataSource) {
+    const ds = opts.dataSource;
+    let rows: DataRow[] = [];
+    let sourceLabel = "";
+    let dataLoadFailed = false;
+    try {
+      if (ds.type === "file" && ds.path) {
+        rows = loadDataFile(ds.path);
+        sourceLabel = ds.path;
+      } else if (ds.type === "synthetic" && ds.schemaPath) {
+        const schema = loadSchema(ds.schemaPath);
+        rows = await generateSyntheticRows(schema, {
+          rows: ds.rows ?? 20,
+          seed: ds.seed ?? 42,
+          llm: llm ?? undefined,
+        });
+        sourceLabel = `synthetic(${ds.schemaPath}, ${rows.length} rows)`;
+      } else {
+        throw new Error(
+          `Invalid dataSource: type=${ds.type}, path=${ds.path}, schemaPath=${ds.schemaPath}`,
+        );
+      }
+    } catch (err) {
+      dataLoadFailed = true;
+      const msg = err instanceof Error ? err.message : String(err);
+      const kind =
+        err instanceof DataLoaderError
+          ? "Data file load"
+          : err instanceof SynthGeneratorError
+            ? "Synthetic data generation"
+            : "Data source";
+      reviewItems.push({
+        severity: "warn",
+        message: `${kind} failed; falling back to inline Examples. Reason: ${msg}`,
+      });
+    }
+    if (!dataLoadFailed && rows.length > 0) {
+      const report = injectExamples(feature, rows);
+      reviewItems.push(...reportToReviewItems(report, sourceLabel));
+    }
+  }
   const llmCtx = {
     llm,
     candidates,

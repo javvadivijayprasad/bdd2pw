@@ -527,6 +527,108 @@ export class GeminiLLMClient implements LLMClient {
     }
   }
 
+  /**
+   * v4.0.0 — generic single-prompt text generation. Mirrors
+   * AnthropicLLMClient/OpenAILLMClient generateText. Cache skipped.
+   * Wraps in withTimeout since Gemini SDK has no native timeout option.
+   */
+  async generateText(prompt: string): Promise<import("./types").GenerateTextResult> {
+    const start = Date.now();
+
+    if (this.budgetExhausted()) {
+      return {
+        error: `LLM budget exhausted (${this.callsCounter}/${this.maxCalls} calls). Increase via --llm-max-calls.`,
+      };
+    }
+
+    let sanitisedPrompt = prompt;
+    if (!this.skipGovernance) {
+      try {
+        this.log({ kind: "sanitise_start", bytes: prompt.length });
+        const result = await this.governance.sanitiseCode(prompt);
+        sanitisedPrompt = result.sanitised;
+        this.log({
+          kind: "sanitise_done",
+          bytes: sanitisedPrompt.length,
+          findings: result.findings.length,
+        });
+      } catch (err) {
+        const isUnreachable = err instanceof GovernanceUnreachableError;
+        const message = err instanceof Error ? err.message : String(err);
+        this.log({ kind: "error", phase: "governance", message });
+        return {
+          error: isUnreachable
+            ? `Governance sidecar unreachable; refusing to call LLM (fail-closed). ${message}`
+            : `Governance sanitise failed: ${message}`,
+        };
+      }
+    }
+
+    if (!this.apiKey) {
+      return {
+        error: "GEMINI_API_KEY (or GOOGLE_API_KEY) is not set; pass apiKey or set the env var.",
+      };
+    }
+    const model = await this.lazyModel();
+    if (!model) {
+      return {
+        error: "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
+      };
+    }
+
+    this.attemptsCounter += 1;
+    try {
+      this.log({
+        kind: "provider_call_start",
+        model: this.model,
+        promptBytes: sanitisedPrompt.length,
+      });
+      const callStart = Date.now();
+      const result = (await this.withTimeout(
+        model.generateContent({
+          contents: [{ role: "user", parts: [{ text: sanitisedPrompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+        }),
+        this.providerTimeoutMs,
+      )) as {
+        response?: {
+          text?: () => string;
+          usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+          };
+        };
+      };
+      this.callsCounter += 1;
+      const callLatency = Date.now() - callStart;
+      const text =
+        typeof result?.response?.text === "function"
+          ? result.response.text()
+          : "";
+      const usage = result?.response?.usageMetadata ?? {};
+      const inputTokens = usage.promptTokenCount ?? 0;
+      const outputTokens = usage.candidatesTokenCount ?? 0;
+      this.log({
+        kind: "provider_call_done",
+        model: this.model,
+        latencyMs: callLatency,
+        inputTokens,
+        outputTokens,
+      });
+      return {
+        text,
+        model: this.model,
+        latencyMs: Date.now() - start,
+        inputTokens,
+        outputTokens,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log({ kind: "error", phase: "gemini", message });
+      return { error: `Gemini API call failed: ${message}` };
+    }
+  }
+
   async close(): Promise<void> {
     if (this.cache) {
       await this.cache.close().catch(() => undefined);

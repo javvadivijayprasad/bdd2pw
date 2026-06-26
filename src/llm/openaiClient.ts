@@ -481,6 +481,94 @@ export class OpenAILLMClient implements LLMClient {
     }
   }
 
+  /**
+   * v4.0.0 — generic single-prompt text generation. Mirrors
+   * AnthropicLLMClient.generateText. Cache intentionally skipped;
+   * see that method for rationale.
+   */
+  async generateText(prompt: string): Promise<import("./types").GenerateTextResult> {
+    const start = Date.now();
+
+    if (this.budgetExhausted()) {
+      return {
+        error: `LLM budget exhausted (${this.callsCounter}/${this.maxCalls} calls). Increase via --llm-max-calls.`,
+      };
+    }
+
+    let sanitisedPrompt = prompt;
+    if (!this.skipGovernance) {
+      try {
+        this.log({ kind: "sanitise_start", bytes: prompt.length });
+        const result = await this.governance.sanitiseCode(prompt);
+        sanitisedPrompt = result.sanitised;
+        this.log({
+          kind: "sanitise_done",
+          bytes: sanitisedPrompt.length,
+          findings: result.findings.length,
+        });
+      } catch (err) {
+        const isUnreachable = err instanceof GovernanceUnreachableError;
+        const message = err instanceof Error ? err.message : String(err);
+        this.log({ kind: "error", phase: "governance", message });
+        return {
+          error: isUnreachable
+            ? `Governance sidecar unreachable; refusing to call LLM (fail-closed). ${message}`
+            : `Governance sanitise failed: ${message}`,
+        };
+      }
+    }
+
+    if (!this.apiKey) {
+      return { error: "OPENAI_API_KEY is not set; pass apiKey or set the env var." };
+    }
+    const openai = await this.lazyClient();
+    if (!openai) {
+      return { error: "openai SDK not installed. Run: npm install openai" };
+    }
+
+    this.attemptsCounter += 1;
+    try {
+      this.log({
+        kind: "provider_call_start",
+        model: this.model,
+        promptBytes: sanitisedPrompt.length,
+      });
+      const callStart = Date.now();
+      const resp = await openai.chat.completions.create(
+        {
+          model: this.model,
+          max_tokens: 2048,
+          temperature: 0,
+          messages: [{ role: "user", content: sanitisedPrompt }],
+        },
+        { timeout: this.providerTimeoutMs },
+      );
+      this.callsCounter += 1;
+      const callLatency = Date.now() - callStart;
+      const text = resp.choices?.[0]?.message?.content ?? "";
+      const inputTokens = resp.usage?.prompt_tokens ?? 0;
+      const outputTokens = resp.usage?.completion_tokens ?? 0;
+      this.log({
+        kind: "provider_call_done",
+        model: this.model,
+        latencyMs: callLatency,
+        inputTokens,
+        outputTokens,
+      });
+      return {
+        text,
+        model: this.model,
+        latencyMs: Date.now() - start,
+        inputTokens,
+        outputTokens,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log({ kind: "error", phase: "openai", message });
+      return { error: `OpenAI API call failed: ${message}` };
+    }
+  }
+
   async close(): Promise<void> {
     if (this.cache) {
       await this.cache.close().catch(() => undefined);

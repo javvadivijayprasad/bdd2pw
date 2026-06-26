@@ -1,54 +1,61 @@
+# YAML 1.2
+# Citation File Format 1.2.0
+# https://citation-file-format.github.io/
 cff-version: 1.2.0
-message: "If you use this software, please cite the SSRN preprint (preferred) or the Zenodo software archive."
+message: "If you use this software, please cite it using these metadata."
+title: "bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
+abstract: >
+  bdd2pw is an open-source Node.js test-generation tool that produces
+  compiling Playwright TypeScript test suites from Gherkin behaviour
+  specifications via live-DOM page object scaffolding using the
+  Microsoft Playwright MCP. Validated on 7 domain packs with API rule
+  enforcement, JSON scenarios, merge-mode authoring, hook fixtures,
+  and LLM batching diagnostics.
 type: software
-title: "@vijaypjavvadi/bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
+license: MIT
+version: 3.8.1
+date-released: 2026-05-29
 authors:
-  - family-names: Javvadi
-    given-names: Vijay Prasad
+  - family-names: "Javvadi"
+    given-names: "Vijay Prasad"
     orcid: "https://orcid.org/0009-0004-1192-6906"
     affiliation: "Independent Researcher, Plainsboro, NJ, USA"
-version: 3.8.1
-doi: 10.5281/zenodo.20452068
-date-released: 2026-05-29
-url: "https://github.com/javvadivijayprasad/bdd2pw"
+    email: "vijay@vijayjavvadiresearch.ai"
+identifiers:
+  - description: "Archived release on Zenodo"
+    type: doi
+    value: "10.5281/zenodo.20452068"
+  - description: "Companion preprint on SSRN"
+    type: doi
+    value: "10.2139/ssrn.6905717"
+  - description: "npm package"
+    type: url
+    value: "https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw"
 repository-code: "https://github.com/javvadivijayprasad/bdd2pw"
-repository-artifact: "https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw"
-license: MIT
+url: "https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw"
 keywords:
   - test automation
-  - Playwright
-  - Behavior-Driven Development
   - Gherkin
+  - BDD
+  - Playwright
+  - page object
   - Microsoft Playwright MCP
-  - Page Object Model
-  - software testing
   - TypeScript
   - npm
-abstract: >-
-  bdd2pw is an open-source Node.js package that automates the transformation
-  of Behavior-Driven Development (BDD) specifications written in Gherkin
-  .feature files into executable Playwright TypeScript test suites. It is the
-  first npm package to integrate the Microsoft Playwright Model Context Protocol
-  (MCP) server for live-DOM Page Object Model scaffolding. A governed
-  large-language-model fallback (Anthropic Claude, OpenAI GPT, Google Gemini)
-  handles ambiguous mappings.
-
 preferred-citation:
-  type: article
+  type: software
   title: "bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
   authors:
-    - family-names: Javvadi
-      given-names: Vijay Prasad
+    - family-names: "Javvadi"
+      given-names: "Vijay Prasad"
       orcid: "https://orcid.org/0009-0004-1192-6906"
       affiliation: "Independent Researcher, Plainsboro, NJ, USA"
   year: 2026
-  month: 6
-  doi: 10.2139/ssrn.6905717
-  url: "https://dx.doi.org/10.2139/ssrn.6905717"
-  abstract: >-
-    Preprint of the bdd2pw original software publication, posted to SSRN
-    (Elsevier preprint platform) on 9 June 2026. Manuscript also under peer
-    review at Elsevier SoftwareX (Manuscript ID SOFTX-S-26-00858).
-  notes: >-
-    SSRN preprint hosting (not peer-reviewed acceptance). The peer-reviewed
-    journal version is under active review at Elsevier SoftwareX.
+  version: "3.8.1"
+  doi: "10.5281/zenodo.20452068"
+  url: "https://doi.org/10.5281/zenodo.20452068"
+  notes: >
+    A companion peer-reviewed manuscript on bdd2pw is currently under
+    review at Elsevier SoftwareX (manuscript ID SOFTX-S-26-00858); the
+    open-access preprint is available on SSRN at
+    https://doi.org/10.2139/ssrn.6905717.

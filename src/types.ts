@@ -315,6 +315,46 @@ export interface ScaffoldOptions {
    * or debug latency issues.
    */
   llmStats?: boolean;
+
+  /**
+   * v4.0.0 — data-driven Examples injection.
+   *
+   * When set, every Scenario Outline in the .feature gets its Examples
+   * table SWAPPED with externally-sourced rows. Inline Examples become
+   * a fallback for runs without this option set.
+   *
+   * Two source modes:
+   *
+   *   - `{type: "file", path: "data/users.csv"}`
+   *       Loads a CSV / JSON / XLSX file via DataLoader.
+   *
+   *   - `{type: "synthetic", schemaPath: "data/users.schema.json",
+   *       rows: 50, seed: 42}`
+   *       Generates `rows` rows from a schema describing each column's
+   *       source (Faker path, "llm:..." prompt, or literal). The LLM
+   *       client (if configured via llmConfig) handles "llm:..." fields.
+   *
+   * Failures (file missing, schema invalid, LLM down, Faker not
+   * installed) fall back to inline Examples and surface as `ReviewItem`s
+   * in BDD_REVIEW.md. Same graceful-degradation pattern as the v2.0
+   * LLM fallback failure mode.
+   *
+   * Scenarios without `<placeholder>` syntax are skipped (vanilla
+   * Scenario doesn't need data). Scenarios whose placeholders reference
+   * columns NOT in the data file are left with their inline Examples
+   * and a warning ReviewItem is emitted.
+   */
+  dataSource?: {
+    type: "file" | "synthetic";
+    /** Required when type === "file". CSV / JSON / XLSX. */
+    path?: string;
+    /** Required when type === "synthetic". JSON file with {column: source}. */
+    schemaPath?: string;
+    /** type === "synthetic" only. Default 20. */
+    rows?: number;
+    /** type === "synthetic" only. Faker seed for reproducibility. Default 42. */
+    seed?: number;
+  };
 }
 
 export interface ScaffoldResult {

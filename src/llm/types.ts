@@ -133,6 +133,28 @@ export interface GenerateBindingResult {
 }
 
 /**
+ * v4.0.0 — result shape for `LLMClient.generateText()`.
+ *
+ * `text` is the raw model response. The caller is responsible for
+ * parsing whatever shape they asked the model for (JSON array,
+ * markdown, prose). No binding-specific fields here — this is the
+ * generic-prompt API.
+ */
+export interface GenerateTextResult {
+  /** When generation succeeds. */
+  text?: string;
+  /** When generation fails — caller decides whether to soft-fail. */
+  error?: string;
+  /** Provider model name (for audit). */
+  model?: string;
+  /** Total latency including governance + provider, ms. */
+  latencyMs?: number;
+  /** Tokens consumed (for telemetry). */
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+/**
  * Pluggable LLM client. v2.0 ships AnthropicLLMClient (provider=anthropic)
  * and MockLLMClient (for tests). v2.1 adds OpenAI/Gemini.
  */
@@ -155,6 +177,21 @@ export interface LLMClient {
   generateBatchBindings?(
     inputs: GenerateBindingInput[],
   ): Promise<GenerateBindingResult[]>;
+  /**
+   * v4.0.0 — generic single-prompt text generation. Used by the
+   * synthetic data generator (synth schema fields like `"llm:auto
+   * insurance claim, one sentence"`) and by anything else that needs
+   * a one-shot LLM call without the binding-shaped prompt scaffolding.
+   *
+   * Implementations MUST go through the same governance sanitisation,
+   * timeout, and budget pipeline as `generateBinding` — i.e. NO direct
+   * SDK calls outside the perimeter. Each call counts against
+   * `budgetExhausted()` the same way a single-step binding does.
+   *
+   * Optional for backwards compat — older clients return undefined
+   * and synth-data callers fall through to a literal fallback.
+   */
+  generateText?(prompt: string): Promise<GenerateTextResult>;
   /** Have we hit the max-calls budget for this scaffold? */
   budgetExhausted(): boolean;
   /** Successful provider responses (parsed bindings). */
