@@ -713,6 +713,50 @@ export function detectHallucinatedLocators(s: string): string[] {
 }
 
 /**
+ * v4.0.1 — reject hallucinated POM methods.
+ *
+ * The LLM occasionally emits patterns like:
+ *
+ *   await loginPage.fill(page.getByLabel("Email"), "x");
+ *   await loginPage.click(page.getByRole("button"));
+ *
+ * inventing `fill(locator, value)` / `click(locator)` as if they were
+ * generic helpers on every Page Object. They are not. `fill` and
+ * `click` live on `Locator`, not on POM instances. Without this check,
+ * the spec compiles only when the LLM happens to remember bdd2pw's POM
+ * shape — `loginPage.usernameInput.fill("x")` works; `loginPage.fill(...)`
+ * does not. The pattern broke 2/8 apps in the v4.0 bench (Conduit and
+ * AutomationPractice).
+ *
+ * Validation rule: every `<pomVar>.<token>` access in the emitted text
+ * must reference either a known POM identifier (`goto`, `page`, or a
+ * field discovered by the locator picker) or NOT be followed by `(` —
+ * if it's a field access being chained further (`loginPage.usernameInput.fill`),
+ * the next `.fill` lives on the Locator type which is fine.
+ *
+ * Returns the list of unrecognised accesses; empty list = clean binding.
+ */
+export function detectHallucinatedPomMethods(
+  text: string,
+  pomVar: string,
+  knownIdentifiers: Set<string>,
+): string[] {
+  const hits: string[] = [];
+  // Match `<pomVar>.<identifier>` and capture the identifier. We don't
+  // require it to be followed by `(` because field chains like
+  // `loginPage.usernameInput.fill` start with a valid field access that
+  // must still be a known identifier.
+  const escaped = pomVar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${escaped}\\.([a-zA-Z_$][\\w$]*)`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const id = m[1];
+    if (!knownIdentifiers.has(id)) hits.push(`${pomVar}.${id}`);
+  }
+  return hits;
+}
+
+/**
  * Parse the LLM's text response as JSON and validate it has the expected
  * StepBinding shape. Returns undefined on any failure (caller soft-fails).
  *
@@ -812,6 +856,66 @@ export function parseBindingJson(
     for (const hit of detectHallucinatedLocators(field)) allHits.add(hit);
   }
   if (allHits.size > 0) {
+    return undefined;
+  }
+
+  // v4.0.1 — reject hallucinated POM-instance methods.
+  //
+  // The POM has two surfaces:
+  //   - METHODS  (pom.methods, e.g. "goto"): directly callable
+  //   - FIELDS   (pom.fields, e.g. "email"): Locator instances; NOT
+  //              callable directly, must be chained (`email.fill(...)`)
+  //
+  // So an emitted call `<pomVar>.<name>(...)` is valid iff `<name>` is
+  // a known METHOD, OR a chain whose first token is a known FIELD or
+  // "page". Bare field calls like `loginPage.email("x")` and bare
+  // hallucinations like `loginPage.fill(loc)` are both rejected.
+  const knownMethods = new Set<string>(["goto"]);
+  for (const meth of input.pom.methods) knownMethods.add(meth.name);
+  const knownFields = new Set<string>(["page"]);
+  for (const f of input.pom.fields) knownFields.add(f.fieldName);
+  // For text-scan we still want the union — chains like
+  // `loginPage.email.fill(...)` start with the field name, which must
+  // resolve to either a method or a field.
+  const knownIds = new Set<string>([...knownMethods, ...knownFields]);
+
+  // Text-scan path — catches hallucinations baked into free-form
+  // customBody or assertion locator strings.
+  const pomHits = new Set<string>();
+  for (const field of checkFields) {
+    for (const hit of detectHallucinatedPomMethods(
+      field,
+      input.pageVar,
+      knownIds,
+    )) {
+      pomHits.add(hit);
+    }
+  }
+
+  // v4.0.1.1 — structured-pomCall path. The pomCall.method shape is
+  // either "<method>" (calling a method directly) or "<field>.<...>"
+  // (chain through a Locator field). Bare "<field>" is invalid — a
+  // Locator instance is not callable, TypeScript rejects with
+  // "This expression is not callable".
+  if (out.pomCall) {
+    const tokens = out.pomCall.method.split(".");
+    const first = tokens[0];
+    if (!first) {
+      pomHits.add(`${input.pageVar}.<empty>`);
+    } else if (tokens.length === 1) {
+      // Bare call: must be a known method, NOT a field.
+      if (!knownMethods.has(first)) {
+        pomHits.add(`${input.pageVar}.${first}`);
+      }
+    } else {
+      // Chain: first token must be a known field (or "page").
+      if (!knownFields.has(first)) {
+        pomHits.add(`${input.pageVar}.${first}`);
+      }
+    }
+  }
+
+  if (pomHits.size > 0) {
     return undefined;
   }
 

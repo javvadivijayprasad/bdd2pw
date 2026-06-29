@@ -1,0 +1,7 @@
+{
+  "name": "Conduit (RealWorld)",
+  "url": "https://demo.realworld.io/#/login",
+  "pageName": "LoginPage",
+  "noDiscovery": false,
+  "skipRuntimeTests": false
+}

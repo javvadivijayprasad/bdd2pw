@@ -65,6 +65,14 @@ program
     "v3.9.0 — write <repo>/artefacts/llm-stats.json with per-call latency, token counts, cache hit rate, and estimated cost.",
     false,
   )
+  // v3.4.0 — domain rule packs. Comma-separated list of any of:
+  // banking, healthcare, insurance, retail, gov, education, telecom.
+  // Enables the corresponding deterministic rule packs for industry-
+  // specific phrasings (currency, account numbers, NHS numbers, etc).
+  .option(
+    "--domains <list>",
+    "v3.4.0 — comma-separated industry rule packs to enable. Any of: banking, healthcare, insurance, retail, gov, education, telecom.",
+  )
   // v4.0.0 — data-driven Examples injection.
   .option(
     "--data <path>",
@@ -152,6 +160,13 @@ program
         // Commander negates --no-discovery into opts.discovery=false
         noDiscovery: opts.discovery === false,
         selfHealing: opts.selfHealing,
+        // v3.4.0 — domain rule packs. Empty array if --domains not passed.
+        domains: opts.domains
+          ? opts.domains
+              .split(",")
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : undefined,
         // v3.9.0 — telemetry sidecar
         llmStats: opts.llmStats === true,
         // v4.0.0 — data-driven Examples injection. --data wins over

@@ -1,0 +1,7 @@
+{
+  "name": "the-internet (Heroku)",
+  "url": "https://the-internet.herokuapp.com/login",
+  "pageName": "FormAuthPage",
+  "noDiscovery": false,
+  "skipRuntimeTests": false
+}

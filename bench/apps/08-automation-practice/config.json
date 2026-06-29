@@ -1,0 +1,8 @@
+{
+  "name": "AutomationPractice (PrestaShop)",
+  "url": "http://automationpractice.pl/index.php?controller=authentication",
+  "pageName": "AuthenticationPage",
+  "noDiscovery": false,
+  "domains": ["retail"],
+  "skipRuntimeTests": false
+}

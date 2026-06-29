@@ -1,0 +1,213 @@
+{
+  "opts": {
+    "apps": [
+      "01-saucedemo",
+      "02-the-internet",
+      "03-juice-shop",
+      "04-opencart",
+      "05-magento",
+      "06-conduit",
+      "07-reqres-api",
+      "08-automation-practice"
+    ],
+    "llm": "anthropic",
+    "llmStats": true,
+    "runTests": false,
+    "repeat": 1,
+    "ablation": false
+  },
+  "results": [
+    {
+      "app": "01-saucedemo",
+      "scaffold_time_ms": 10045,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 2,
+      "llm_cost_usd": 0.012486,
+      "llm_cache_hit_rate": 0.25,
+      "locators_by_type": {
+        "getByRole": 3,
+        "getByLabel": 0,
+        "getByPlaceholder": 2,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 1,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 0,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "92f3ff93e5fbe73bc1d0f0e338f2d1d95669646cc45168974235ed21fce97cd9",
+      "pom_sha256": "49204ddc94963f97060b7eabd52680b4d0dca9f4798b7f58b42f9584a44a65cb"
+    },
+    {
+      "app": "02-the-internet",
+      "scaffold_time_ms": 11190,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.020874,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 4,
+        "getByLabel": 2,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 3,
+        "css_locator": 1,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 0,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "350ca45b02b9d0ea89872f452a07abd795436305a783cbd37d1e4e5689773d8e",
+      "pom_sha256": "f061dad8da1408d0781062d90e24acba5418bf9a069ecfe51f5db3effbb31b8a"
+    },
+    {
+      "app": "03-juice-shop",
+      "scaffold_time_ms": 17978,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.037878,
+      "llm_cache_hit_rate": 0.09090909090909091,
+      "locators_by_type": {
+        "getByRole": 24,
+        "getByLabel": 6,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 9,
+        "css_locator": 5,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 4,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "55416c6dedcffa849945c4c167b53203a274132d289cfa03ec498a163309c305",
+      "pom_sha256": "d967c2a8e886a2cb68b4fb76086ae389dec943ab904f737b4e972fcf0a45be83"
+    },
+    {
+      "app": "04-opencart",
+      "scaffold_time_ms": 23095,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.025695,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 4,
+        "getByLabel": 2,
+        "getByPlaceholder": 1,
+        "getByTestId": 0,
+        "getByText": 1,
+        "css_locator": 1,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 4,
+      "review_errors": 0,
+      "todo_count_in_spec": 1,
+      "spec_sha256": "73477284092bddec04ff3a3a6b17fb410db5b74c7f97005c21e46ed4aa5e4d73",
+      "pom_sha256": "d16978dbce2d0d27742cad8ad0a00f694852ceec83ca540d205ef0284ecf1f2e"
+    },
+    {
+      "app": "05-magento",
+      "scaffold_time_ms": 18484,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.029871,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 17,
+        "getByLabel": 2,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 2,
+        "css_locator": 5,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 5,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "6366d3fddcf6d1eebdd9709cade384f10a69f952660a3b7370bea14ed330941f",
+      "pom_sha256": "b384cde964bae3d2480a660a56c8141ed7fbe21cea630f0ebe2b169d57346470"
+    },
+    {
+      "app": "06-conduit",
+      "scaffold_time_ms": 23014,
+      "tsc_passed": false,
+      "tsc_error_count": 3,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.032151,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 5,
+        "getByLabel": 2,
+        "getByPlaceholder": 5,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 3,
+      "review_errors": 3,
+      "todo_count_in_spec": 1,
+      "spec_sha256": "3d172ade2f312cbd7c2fc23db2cca41ee544747ee901fb560c28cc67dde861e8",
+      "pom_sha256": "4cb6c2fe8630caf2f0684aa550443d6f1e4bfa29b95c6914f4bfef6e1b24359b"
+    },
+    {
+      "app": "07-reqres-api",
+      "scaffold_time_ms": 20515,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.027918,
+      "llm_cache_hit_rate": 0.2,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 10,
+      "review_errors": 0,
+      "todo_count_in_spec": 7,
+      "spec_sha256": "dbb91492624c14684d65ff5476400da60c8d191b8675b0d8c0930d72527743d7",
+      "pom_sha256": "37d32c8683a48561306996e9108f727622704c5436055ca3daf0be0787571f87"
+    },
+    {
+      "app": "08-automation-practice",
+      "scaffold_time_ms": 19883,
+      "tsc_passed": false,
+      "tsc_error_count": 2,
+      "llm_calls": 3,
+      "llm_cost_usd": 0.023244,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 5,
+        "getByLabel": 3,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 2,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 1,
+      "review_errors": 2,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "6ff1fd1ad0edfe6e4fe2dcfad9b2c834c3010e46073775ec5d87ed799bb80de0",
+      "pom_sha256": "a50e90c3113847cc076efd46ce566abd724ca91b84806e9870f331e5ba10b3b3"
+    }
+  ]
+}

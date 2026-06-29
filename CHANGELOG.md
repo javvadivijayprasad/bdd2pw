@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.0.1] — 2026-06-29
+
+### Fixed — LLM hallucinated POM methods land as TODO instead of broken code
+
+The LLM occasionally invented helpers like `loginPage.fill(locator, value)`
+or `loginPage.click(locator)`, treating the Page Object as if it had a
+generic `fill`/`click` API. Real POMs only expose `goto`, `page`, and
+whatever fields the locator picker discovered — so the emitted spec
+failed to compile with `Property 'fill' does not exist on type 'LoginPage'`.
+
+`parseBindingJson` now runs a second hallucination check after the
+existing `detectHallucinatedLocators` gate: any `<pomVar>.<token>`
+access where `<token>` is not in the known POM identifier set
+(`goto`, `page`, plus declared fields and methods) is rejected. The
+binding is dropped and the step lands as `// TODO` with a useful
+warning, same fail-safe behaviour as the v2.2.3 locator gate.
+
+### Why this matters
+
+In the v4.0 benchmark (R1 evidence for SoftwareX paper), 2 of 8
+apps (Conduit, AutomationPractice) emitted specs that failed tsc
+because of this exact hallucination. After v4.0.1 the LLM mode should
+return to 8/8 compilation passes — the LLM still produces a binding
+candidate, but if it invents methods, the candidate is rejected
+rather than written to the spec.
+
+### Added
+
+- `detectHallucinatedPomMethods(text, pomVar, knownIdentifiers)` —
+  reusable validator, exported from `src/llm/anthropicClient.ts`.
+- 12 unit tests in `tests/unit/v401PomHallucination.test.ts` covering
+  acceptance and rejection paths.
+
+### No breaking changes
+
+Patch release. Programmatic and CLI surface unchanged.
+
 ## [4.0.0] — 2026-06-25
 
 ### Theme: Data-driven scaffolds — bring your own data or generate it

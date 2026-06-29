@@ -1,0 +1,207 @@
+{
+  "opts": {
+    "apps": [
+      "01-saucedemo",
+      "02-the-internet",
+      "03-juice-shop",
+      "04-opencart",
+      "05-magento",
+      "06-conduit",
+      "07-reqres-api",
+      "08-automation-practice"
+    ],
+    "llm": "anthropic",
+    "llmStats": true,
+    "runTests": false,
+    "repeat": 1,
+    "ablation": false
+  },
+  "results": [
+    {
+      "app": "01-saucedemo",
+      "scaffold_time_ms": 3099,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 4,
+      "review_errors": 0,
+      "todo_count_in_spec": 4,
+      "spec_sha256": "758f993bee342cb90ab143a7a802852a7cae26b7cd027f5796ba4703c9213f2e",
+      "pom_sha256": "49204ddc94963f97060b7eabd52680b4d0dca9f4798b7f58b42f9584a44a65cb"
+    },
+    {
+      "app": "02-the-internet",
+      "scaffold_time_ms": 3124,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 3,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 5,
+      "review_errors": 0,
+      "todo_count_in_spec": 5,
+      "spec_sha256": "6ae580a448dfeba9d511745ee087b9757876ceb540fbe14bfdd35e257870a1d1",
+      "pom_sha256": "f061dad8da1408d0781062d90e24acba5418bf9a069ecfe51f5db3effbb31b8a"
+    },
+    {
+      "app": "03-juice-shop",
+      "scaffold_time_ms": 3190,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 2,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 11,
+      "review_errors": 0,
+      "todo_count_in_spec": 11,
+      "spec_sha256": "c9c58da703b338c61328785584701cf020ddf1edab9f5fefa1fb63cfcbb9492d",
+      "pom_sha256": "1f7a3665092921a7a425dd5b984d070e8a2f49f0963315bcc4b4c75db3171907"
+    },
+    {
+      "app": "04-opencart",
+      "scaffold_time_ms": 595,
+      "tsc_passed": false,
+      "tsc_error_count": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 0,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "MISSING",
+      "pom_sha256": "MISSING",
+      "error": "error: unknown option '--domains'\n"
+    },
+    {
+      "app": "05-magento",
+      "scaffold_time_ms": 579,
+      "tsc_passed": false,
+      "tsc_error_count": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 0,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "MISSING",
+      "pom_sha256": "MISSING",
+      "error": "error: unknown option '--domains'\n"
+    },
+    {
+      "app": "06-conduit",
+      "scaffold_time_ms": 2796,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 13,
+      "review_errors": 0,
+      "todo_count_in_spec": 13,
+      "spec_sha256": "a779607c88b93c63642d0677984dfb11c7f59c961683c9203c3a1561d12ac0a4",
+      "pom_sha256": "4cb6c2fe8630caf2f0684aa550443d6f1e4bfa29b95c6914f4bfef6e1b24359b"
+    },
+    {
+      "app": "07-reqres-api",
+      "scaffold_time_ms": 1635,
+      "tsc_passed": true,
+      "tsc_error_count": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0,
+      "llm_cache_hit_rate": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 10,
+      "review_errors": 0,
+      "todo_count_in_spec": 10,
+      "spec_sha256": "919605c03e6881389e045dfafe7eb0a861b2c054ee4b179a4775e2328690c263",
+      "pom_sha256": "37d32c8683a48561306996e9108f727622704c5436055ca3daf0be0787571f87"
+    },
+    {
+      "app": "08-automation-practice",
+      "scaffold_time_ms": 570,
+      "tsc_passed": false,
+      "tsc_error_count": 0,
+      "locators_by_type": {
+        "getByRole": 0,
+        "getByLabel": 0,
+        "getByPlaceholder": 0,
+        "getByTestId": 0,
+        "getByText": 0,
+        "css_locator": 0,
+        "xpath": 0
+      },
+      "framework_classes_rejected": 0,
+      "review_warnings": 0,
+      "review_errors": 0,
+      "todo_count_in_spec": 0,
+      "spec_sha256": "MISSING",
+      "pom_sha256": "MISSING",
+      "error": "error: unknown option '--domains'\n"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Reqres (API only)",
+  "url": "https://reqres.in",
+  "pageName": "ReqresApi",
+  "noDiscovery": true,
+  "apiOnly": true,
+  "skipRuntimeTests": false
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Magento demo (softwaretestingboard)",
+  "url": "https://magento.softwaretestingboard.com/customer/account/login",
+  "pageName": "CustomerLoginPage",
+  "noDiscovery": false,
+  "domains": ["retail"],
+  "skipRuntimeTests": false
+}

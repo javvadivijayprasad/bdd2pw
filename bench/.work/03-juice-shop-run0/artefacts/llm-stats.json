@@ -1,0 +1,56 @@
+{
+  "version": "4.0.1",
+  "scaffoldId": "scaffold-1782776070322-ophelp",
+  "generatedAt": "2026-06-29T23:34:47.764Z",
+  "totals": {
+    "callsAttempted": 3,
+    "callsSuccessful": 3,
+    "bindingsGenerated": 11,
+    "cacheHits": 1,
+    "cacheMisses": 10,
+    "cacheHitRate": 0.09090909090909091,
+    "inputTokens": 8311,
+    "outputTokens": 859,
+    "estimatedCostUsd": 0.037818
+  },
+  "calls": [
+    {
+      "index": 1,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 2824,
+      "outputTokens": 545,
+      "latencyMs": 7620,
+      "fromCache": false,
+      "batchSize": 6
+    },
+    {
+      "index": 2,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 2743,
+      "outputTokens": 158,
+      "latencyMs": 3097,
+      "fromCache": false,
+      "batchSize": 2
+    },
+    {
+      "index": 3,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 2744,
+      "outputTokens": 156,
+      "latencyMs": 5627,
+      "fromCache": false,
+      "batchSize": 2
+    }
+  ],
+  "latencyMs": {
+    "p50": 5627,
+    "p95": 7620,
+    "min": 3097,
+    "max": 7620
+  },
+  "pricing": {
+    "model": "claude-sonnet-4-6",
+    "inputUsdPerMillion": 3,
+    "outputUsdPerMillion": 15
+  }
+}

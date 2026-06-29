@@ -1,0 +1,16 @@
+{
+  "name": "bdd2pw-bench",
+  "version": "1.0.0",
+  "description": "Multi-application reproducibility benchmark for bdd2pw. Added for SoftwareX R1 revision (June 2026).",
+  "private": true,
+  "scripts": {
+    "bench": "ts-node runner.ts",
+    "bench:ablation": "ts-node runner.ts --ablation",
+    "bench:determinism": "ts-node runner.ts --repeat 3"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "@playwright/test": "^1.45.0"
+  }
+}

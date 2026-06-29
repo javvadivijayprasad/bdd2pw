@@ -1,0 +1,56 @@
+{
+  "version": "4.0.1",
+  "scaffoldId": "scaffold-1782776059219-5cv67t",
+  "generatedAt": "2026-06-29T23:34:28.027Z",
+  "totals": {
+    "callsAttempted": 3,
+    "callsSuccessful": 3,
+    "bindingsGenerated": 5,
+    "cacheHits": 0,
+    "cacheMisses": 5,
+    "cacheHitRate": 0,
+    "inputTokens": 4813,
+    "outputTokens": 429,
+    "estimatedCostUsd": 0.020874
+  },
+  "calls": [
+    {
+      "index": 1,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1646,
+      "outputTokens": 164,
+      "latencyMs": 2659,
+      "fromCache": false,
+      "batchSize": 2
+    },
+    {
+      "index": 2,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1646,
+      "outputTokens": 162,
+      "latencyMs": 2744,
+      "fromCache": false,
+      "batchSize": 2
+    },
+    {
+      "index": 3,
+      "model": "claude-sonnet-4-6",
+      "inputTokens": 1521,
+      "outputTokens": 103,
+      "latencyMs": 2349,
+      "fromCache": false,
+      "batchSize": 1
+    }
+  ],
+  "latencyMs": {
+    "p50": 2659,
+    "p95": 2744,
+    "min": 2349,
+    "max": 2744
+  },
+  "pricing": {
+    "model": "claude-sonnet-4-6",
+    "inputUsdPerMillion": 3,
+    "outputUsdPerMillion": 15
+  }
+}

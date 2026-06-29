@@ -1,0 +1,8 @@
+{
+  "name": "OpenCart demo",
+  "url": "https://demo.opencart.com/index.php?route=account/login",
+  "pageName": "AccountLoginPage",
+  "noDiscovery": false,
+  "domains": ["retail"],
+  "skipRuntimeTests": false
+}

@@ -1,0 +1,7 @@
+{
+  "name": "SauceDemo",
+  "url": "https://www.saucedemo.com",
+  "pageName": "LoginPage",
+  "noDiscovery": false,
+  "skipRuntimeTests": false
+}

@@ -1,0 +1,8 @@
+{
+  "name": "OWASP Juice Shop",
+  "url": "http://localhost:3030/#/login",
+  "pageName": "LoginPage",
+  "noDiscovery": false,
+  "skipRuntimeTests": false,
+  "setupHint": "docker compose up -d juice-shop (Juice Shop maps container :3000 to host :3030 to avoid the common Node dev-server conflict)"
+}

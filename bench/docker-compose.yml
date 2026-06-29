@@ -1,0 +1,29 @@
+# Local instances of demo apps the benchmark uses.
+# Run before bench to pin app 03's DOM.
+#
+#   docker compose up -d juice-shop
+#   # wait ~30s
+#   curl http://localhost:3030     # confirm
+#
+# To stop and clean:
+#   docker compose down -v
+#
+# Why port 3030 (not 3000): port 3000 is commonly occupied by Node
+# dev servers on developer machines, causing bind errors on `docker
+# compose up`. We map the container's internal :3000 to host :3030 to
+# sidestep the conflict. If 3030 is also taken, edit the host side
+# below AND apps/03-juice-shop/config.json to match.
+
+services:
+  juice-shop:
+    image: bkimminich/juice-shop:v17.1.1
+    ports:
+      - "3030:3000"
+    environment:
+      NODE_ENV: ci
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
