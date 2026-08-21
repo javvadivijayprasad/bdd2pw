@@ -368,9 +368,14 @@ describe("parseBindingJson", () => {
     expect(b?.assertion?.locator).toBe("page");
   });
 
-  it("v2.2.4 — defaults empty locator to 'page' even for non-page matchers", () => {
-    // `expect()` is never a legal call. Better to render against page
-    // and have the matcher fail loudly than to emit broken TS.
+  it("v4.1.0 — rejects assertion when locator defaults to 'page' AND matcher is Locator-only", () => {
+    // v2.2.4 originally defaulted locator to "page" and hoped the matcher
+    // would fire correctly. In practice, `expect(page).toBeVisible()` /
+    // `.toHaveText()` / `.toContainText()` do NOT compile — these are
+    // Locator-only matchers. v4.1 Pattern F tightens: if resolved
+    // locator is "page" and matcher isn't one of the Page-valid set
+    // (toHaveURL, toHaveTitle, toHaveScreenshot), the assertion is
+    // dropped and the step lands as TODO.
     const out = parseBindingJson(
       JSON.stringify({
         step: { keyword: "Then", text: "some assertion" },
@@ -381,7 +386,8 @@ describe("parseBindingJson", () => {
       }),
       stub,
     );
-    expect(out?.assertion?.locator).toBe("page");
+    // Assertion dropped → whole binding is empty → returns undefined.
+    expect(out).toBeUndefined();
   });
 
   it("v2.2.4 — leaves non-empty locators unchanged", () => {
@@ -402,10 +408,13 @@ describe("parseBindingJson", () => {
 
   it("preserves the input step text rather than the LLM's echo", () => {
     // LLM might capitalise or reword — we always echo the original.
+    // Use a Page-valid matcher (toHaveURL) so Pattern F doesn't
+    // reject the assertion — this test is checking step echo, not
+    // matcher validation.
     const out = parseBindingJson(
       JSON.stringify({
         step: { keyword: "When", text: "I DO A THING" }, // LLM mangled
-        assertion: { locator: "page", matcher: "toBeVisible" },
+        assertion: { locator: "page", matcher: "toHaveURL", expected: '"/x"' },
       }),
       stub,
     );
