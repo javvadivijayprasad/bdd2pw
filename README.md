@@ -362,20 +362,22 @@ output/
 | v3.10.0 | Heal stats | `bdd2pw heal-stats <repo>` CLI consumes `artefacts/heal-events.jsonl` and writes `heal-stats.json` with heal rate, top failing fields, top error patterns, retry latency, candidate-selector promotions. Self-healing ROI per test run. |
 | v3.11.0 | OpenAI provider | `LLMClientOptions.provider: "openai"` lands with cache + governance + batching + telemetry parity. Default model `gpt-4o-mini` (~17x cheaper than `gpt-4o` for structured-JSON tasks). |
 | v3.12.0 | Gemini provider | `LLMClientOptions.provider: "gemini"` lands with full parity. Default model `gemini-2.5-flash` ($0.10/M input — cheapest across all three providers). Three-provider parity complete. |
-| **v4.0.0 (current)** | Data-driven scaffolds | `--data <path>` (CSV/JSON/XLSX) and `--gen-data --schema <path>` (Faker + LLM) inject Examples rows into Scenario Outlines. `LLMClient.generateText()` added to all three providers. **Additive only — no breaking changes.** |
+| v4.0.0 | Data-driven scaffolds | `--data <path>` (CSV/JSON/XLSX) and `--gen-data --schema <path>` (Faker + LLM) inject Examples rows into Scenario Outlines. `LLMClient.generateText()` added to all three providers. **Additive only — no breaking changes.** |
+| v4.0.1 | LLM hallucination gates | Three-layer rejector for invented POM helpers — bindings that would compile-fail land as TODO instead of broken code. 19 unit tests lock the behaviour. |
+| **v4.1.0 (current)** | LLM binding rewriter | Six-pattern rewriter that mechanically fixes common LLM emission mistakes (invented helpers, bare-field args, CSS-selector args, `page.<method>` in customBody, hallucinated Page matchers, bare-identifier assertion locators). Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Peer-reviewed publication in Elsevier SoftwareX. |
 
-### Next 6 months (Jun 2026 → Nov 2026, ~2 releases/month)
+### Next 6 months (Sep 2026 → Feb 2027, ~1 release/month)
 
 | Target | Version | Theme | Headline |
 |---|---|---|---|
-| Aug 2026 | **v3.13.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
-| Aug 2026 | **v4.1.0** | Modern defaults | Bump default models, retire v2.x deprecated APIs, flip opt-in defaults (domains, llm-stats, healing) to opt-out. Migration guide ships alongside. |
-| Sep 2026 | **v4.1.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future v3.x emitter improvements automatically flow to Selenium users. |
-| Sep 2026 | **v4.2.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
-| Oct 2026 | **v4.3.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
-| Oct 2026 | **v4.4.0** | Coverage analyzer | `bdd2pw coverage` CLI: which deterministic rules fired on which features across a fleet, per-pack hit rate, dead-rule report, suggestion to retire unused rules. |
-| Nov 2026 | **v4.5.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
-| Nov 2026 | **v4.6.0** | Mobile dialect | Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the same emitter pipeline; opt-in via `domains: ["mobile"]`. |
+| Sep 2026 | **v4.2.0** | Silent-problems-loud | POM-header DOM-snapshot hash + `--fail-on-drift` CI flag — silent UI changes surface as diffs in `BDD_REVIEW.md` instead of mystery test failures. `@llm-generated` Playwright tag + `bdd2pw quarantine-stats` CLI reports pass rate for the LLM-fallback lane separately from the deterministic lane. |
+| Sep 2026 | **v4.3.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future emitter improvements automatically flow to Selenium users. |
+| Oct 2026 | **v4.4.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
+| Oct 2026 | **v4.5.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
+| Nov 2026 | **v4.6.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
+| Dec 2026 | **v4.7.0** | Coverage analyzer | `bdd2pw coverage` CLI: which deterministic rules fired on which features across a fleet, per-pack hit rate, dead-rule report, suggestion to retire unused rules. |
+| Jan 2027 | **v4.8.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
+| Feb 2027 | **v4.9.0** | Mobile dialect | Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the same emitter pipeline; opt-in via `domains: ["mobile"]`. |
 
 Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains: []` byte-stable for existing users so the upgrade path stays painless.
 
