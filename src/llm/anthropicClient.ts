@@ -813,12 +813,33 @@ export function parseBindingJson(
       // their .not variants) `expect(page)` is the right call anyway.
       const resolvedLoc =
         trimmedLoc === "" ? "page" : rewriteBareContext(rawLoc);
-      out.assertion = {
-        locator: resolvedLoc,
-        matcher,
-        expected:
-          typeof a.expected === "string" ? a.expected : undefined,
-      };
+      // v4.1.0 — Page-matcher validation gate.
+      // `expect(page).<matcher>` only supports a small set (toHaveURL,
+      // toHaveTitle, toHaveScreenshot, plus their .not variants). The
+      // LLM occasionally emits `toHaveText` / `toContainText` /
+      // `toBeVisible` on `page`, which are Locator matchers and TS
+      // rejects them. When locator resolves to `page` AND the matcher
+      // is Locator-only, drop the assertion. It lands as TODO instead
+      // of shipping a spec that fails to compile.
+      const isPageResolved = resolvedLoc === "page";
+      const strippedMatcher = matcher.replace(/^not\./, "");
+      const pageValidMatchers = new Set([
+        "toHaveURL",
+        "toHaveTitle",
+        "toHaveScreenshot",
+      ]);
+      if (isPageResolved && !pageValidMatchers.has(strippedMatcher)) {
+        // Skip assignment — falls through to the "empty binding" check
+        // below and lands as TODO with a `warning` if the LLM provided
+        // one, or bare undefined otherwise.
+      } else {
+        out.assertion = {
+          locator: resolvedLoc,
+          matcher,
+          expected:
+            typeof a.expected === "string" ? a.expected : undefined,
+        };
+      }
     }
   }
   if (typeof parsed.customBody === "string") {
@@ -892,6 +913,78 @@ export function parseBindingJson(
     }
   }
 
+  // v4.1.0 — invented-helper rewriter.
+  //
+  // The OpenAI gpt-4o-mini provider emits `pomCall` shapes like:
+  //   {"page":"loginPage","method":"fill","args":["loginPage.usernameInput","\"x\""]}
+  // treating the POM as if it had a generic `fill(locator, value)` helper.
+  // Real POMs don't; `fill` lives on `Locator`. Before v4.1 this landed as
+  // TODO via the v4.0.1 rejector. But the LLM's INTENT is unambiguous —
+  // it wants `loginPage.usernameInput.fill("x")` — and we can mechanically
+  // rewrite to that form without asking the LLM again.
+  //
+  // The rewriter is fail-safe by construction: if the pattern doesn't
+  // match, `out.pomCall` is untouched and execution falls through to the
+  // v4.0.1 rejector, preserving the fail-closed guarantee. In the v4.0
+  // bench this pattern accounted for 100% of OpenAI's 0% closure rate;
+  // the rewriter should lift it to the ~60% Anthropic already achieves.
+  if (out.pomCall) {
+    tryRewriteInventedHelper(out.pomCall, input.pageVar, knownFields, knownMethods);
+  }
+
+  // v4.1.0 — Pattern C: CSS selector emitted as first arg.
+  //   {method:"fill", args:["input[name='email']", "\"x\""]}
+  // The LLM knew a selector but didn't route through the POM. Convert
+  // to a customBody using `pomVar.page.locator(<sel>)` chain, which
+  // always compiles. Only fires if Pattern A/B rewrite didn't already
+  // land the binding on a POM field.
+  if (out.pomCall) {
+    const promoted = tryPromotePomCallCssSelectorToCustomBody(
+      out.pomCall,
+      input.pageVar,
+      knownMethods,
+    );
+    if (promoted) {
+      out.customBody = promoted;
+      out.pomCall = undefined;
+    }
+  }
+
+  // v4.1.0 — Pattern D: customBody containing `page.<method>(pomVar.<field>, ...)`.
+  // The LLM occasionally expands a compound step by inventing
+  //   await page.fill(pomVar.field, "x");
+  // which is NOT valid Playwright (page.fill takes a string selector,
+  // not a Locator). Rewrite inline to `pomVar.field.<method>("x")`.
+  if (out.customBody) {
+    out.customBody = rewriteCustomBodyPageMethods(
+      out.customBody,
+      input.pageVar,
+      knownFields,
+    );
+  }
+
+  // v4.1.0 — Pattern G: bare-identifier assertion locator.
+  // Conduit bench: LLM emitted `{assertion:{locator:"commentsList", ...}}`
+  // producing `expect(commentsList).toContainText(...)` — but
+  // `commentsList` isn't declared in the spec (should be
+  // `loginPage.commentsList`). If the bare identifier IS a known POM
+  // field, prepend `pomVar.` to fix. If it's NOT a known field, drop
+  // the assertion so the step lands as TODO instead of shipping code
+  // with an undefined reference.
+  if (out.assertion && out.assertion.locator) {
+    const loc = out.assertion.locator.trim();
+    // Bare identifier check — no dots, no parens, just [a-zA-Z_$]+
+    if (/^[a-zA-Z_$][\w$]*$/.test(loc) && loc !== "page") {
+      if (knownFields.has(loc)) {
+        out.assertion.locator = `${input.pageVar}.${loc}`;
+      } else {
+        // Unknown field — reject the assertion. Falls through to the
+        // empty-binding check; step will land as TODO.
+        out.assertion = undefined;
+      }
+    }
+  }
+
   // v4.0.1.1 — structured-pomCall path. The pomCall.method shape is
   // either "<method>" (calling a method directly) or "<field>.<...>"
   // (chain through a Locator field). Bare "<field>" is invalid — a
@@ -919,5 +1012,267 @@ export function parseBindingJson(
     return undefined;
   }
 
+  // v4.1.0 — final empty-binding check. The v4.1 rewriters (Pattern G
+  // in particular) can nuke the last surviving field. If after all
+  // rewrites there's nothing to emit, drop the binding so the step
+  // lands as TODO.
+  if (
+    !out.pomCall &&
+    !out.assertion &&
+    !out.customBody &&
+    !out.warning
+  ) {
+    return undefined;
+  }
+
   return out;
+}
+
+// ============================================================
+// v4.1.0 — invented-helper rewriter (OpenAI compat)
+// ============================================================
+
+/**
+ * Playwright Locator methods that the LLM sometimes calls as if they
+ * were POM-level helpers. Each is a method that lives on `Locator`,
+ * takes a value argument (or none), and can be legitimately rewritten
+ * from `pomVar.<method>(pomVar.field, ...args)` to `field.<method>(...args)`.
+ *
+ * Kept small on purpose — a method must be in this set AND the caller's
+ * first arg must resolve to a known field for the rewrite to fire. This
+ * is intentionally more conservative than the full Playwright surface;
+ * expanding it later is safe, contracting it is not.
+ */
+const LOCATOR_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
+  "fill",
+  "click",
+  "check",
+  "uncheck",
+  "type",
+  "press",
+  "hover",
+  "focus",
+  "blur",
+  "dblclick",
+  "tap",
+  "clear",
+  "selectOption",
+  "setInputFiles",
+  "scrollIntoViewIfNeeded",
+  "dispatchEvent",
+  "screenshot",
+]);
+
+/**
+ * v4.1.0 — wrap a raw arg value in JS string quotes if it looks like a
+ * bare string literal the LLM forgot to quote. Used when rewriting
+ * Pattern B where args come through unquoted.
+ *
+ * Returns the value in a form safe to concatenate into TypeScript. Rules:
+ *  - Already quoted (`"..."`, `'...'`, backtick) → return as-is.
+ *  - Reserved literals (`true`, `false`, `null`, `undefined`, numbers) → as-is.
+ *  - Property-access chain of two or more parts (`data.email`, `env.USER`)
+ *    → as-is; almost always a legit variable reference.
+ *  - Everything else — including single bare identifiers like
+ *    `locked_out_user`, `secret_sauce`, `standard_user` — wrap in double
+ *    quotes.
+ *
+ * Rationale for the aggressive single-identifier wrapping: LLM-emitted
+ * `fill(someBareWord)` calls are, in practice, ALWAYS meant as string
+ * literals the model forgot to quote (see SauceDemo v4.1 bench: the LLM
+ * emitted `fill(locked_out_user)` when the Gherkin step was `I enter
+ * "locked_out_user" as my username` — the string content lost its
+ * quotes during JSON emission). Being wrong in the over-quoting
+ * direction just creates a string (safe); being wrong in the
+ * under-quoting direction leaves an undefined reference (TS compile
+ * fail). We optimise for the failure mode that actually shows up.
+ */
+function wrapAsStringLiteralIfNeeded(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return raw;
+  // Already quoted?
+  const firstCh = trimmed[0];
+  const lastCh = trimmed[trimmed.length - 1];
+  if (
+    (firstCh === '"' && lastCh === '"') ||
+    (firstCh === "'" && lastCh === "'") ||
+    (firstCh === "`" && lastCh === "`")
+  ) {
+    return raw;
+  }
+  // Reserved literals / numbers — don't wrap.
+  if (/^(true|false|null|undefined)$/.test(trimmed)) return raw;
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return raw;
+  // Property-access CHAIN (two+ parts: foo.bar, env.USER, data.field.sub)
+  // — leave; almost always a legit variable reference.
+  if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)+$/.test(trimmed)) return raw;
+  // Everything else — including bare single identifiers, text with
+  // spaces, email addresses, punctuation — wrap in double quotes,
+  // escaping internal " and \.
+  const escaped = trimmed.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/**
+ * v4.1.0 — mutate `pomCall` in place when the LLM's shape matches an
+ * invented-helper pattern. Two patterns supported:
+ *
+ * Pattern A — pomVar-prefixed field, already-quoted value (OpenAI style):
+ *   {method:"fill", args:["loginPage.usernameInput", "\"x\""]}
+ *   → {method:"usernameInput.fill", args:["\"x\""]}
+ *
+ * Pattern B — bare-identifier field, unquoted value (AutomationPractice
+ * style seen in the v4.0 bench; the LLM emitted the JSON shorthand
+ * assuming the caller would resolve `email` → `pomVar.email` and
+ * quote `bench@example.com` as a string):
+ *   {method:"fill", args:["email", "bench@example.com"]}
+ *   → {method:"email.fill", args:["\"bench@example.com\""]}
+ *
+ * Fail-safe rules — if ANY fail, `pomCall` is untouched and the caller's
+ * v4.0.1 gate rejects as before:
+ *  1. `method` must be a bare identifier in LOCATOR_METHOD_ALLOWLIST.
+ *  2. Method must NOT already be a known POM method (e.g. `goto`) —
+ *     the LLM meant something else; we don't rewrite valid calls.
+ *  3. `args[0]` must resolve to a known POM field (via `pomVar.<field>`
+ *     for Pattern A, or a bare `<field>` reference for Pattern B).
+ *  4. `page` is never a valid rewrite target (built-in, not a POM field).
+ *
+ * Returns true if a rewrite happened, false otherwise.
+ */
+export function tryRewriteInventedHelper(
+  pomCall: { page: string; method: string; args: string[] },
+  pomVar: string,
+  knownFields: ReadonlySet<string>,
+  knownMethods: ReadonlySet<string>,
+): boolean {
+  const method = pomCall.method;
+  // Rule 1 — method must be a Locator method in the allowlist.
+  if (!LOCATOR_METHOD_ALLOWLIST.has(method)) return false;
+  // Rule 2 — don't rewrite calls that already resolve to a POM method.
+  if (knownMethods.has(method)) return false;
+  const args = pomCall.args;
+  if (!args || args.length === 0) return false;
+  const first = args[0];
+  if (typeof first !== "string") return false;
+
+  // Determine which pattern this is by parsing the first arg.
+  let fieldName: string | undefined;
+  const escaped = pomVar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Pattern A: <pomVar>.<field>
+  const patA = first.match(new RegExp(`^\\s*${escaped}\\.([a-zA-Z_$][\\w$]*)\\s*$`));
+  if (patA) {
+    fieldName = patA[1];
+  } else {
+    // Pattern B: bare <field> identifier.
+    const patB = first.match(/^\s*([a-zA-Z_$][\w$]*)\s*$/);
+    if (patB) fieldName = patB[1];
+  }
+  if (!fieldName) return false;
+  // Rule 3 — field must be a known POM field.
+  if (!knownFields.has(fieldName)) return false;
+  // Rule 4 — `page` is off-limits.
+  if (fieldName === "page") return false;
+
+  // All rules pass. Mutate in place. For Pattern B, also auto-quote any
+  // trailing args that look like bare string literals (e.g. email
+  // addresses, human-readable text).
+  pomCall.method = `${fieldName}.${method}`;
+  const rest = args.slice(1);
+  if (patA) {
+    // Pattern A — args are already quoted by convention; pass through.
+    pomCall.args = rest;
+  } else {
+    // Pattern B — value(s) probably need quoting.
+    pomCall.args = rest.map(wrapAsStringLiteralIfNeeded);
+  }
+  return true;
+}
+
+/**
+ * v4.1.0 — Pattern C. Detect a `pomCall` where the first arg is a raw
+ * CSS selector rather than a POM field. Convert to a `customBody`
+ * expression using `pomVar.page.locator("<selector>").<method>(...)`.
+ *
+ * Returns the customBody string if promotion happened, or undefined if
+ * no rewrite applies. Callers set `out.customBody = <result>` and clear
+ * `out.pomCall` when a value is returned.
+ *
+ * Heuristic for "looks like a CSS selector": contains any of `[ ] # . > ~ + :`
+ * OR whitespace (typical of compound selectors), AND is NOT already a
+ * bare JS identifier / property chain. This is conservative — bare
+ * identifiers like "email" are handled by Pattern B, not here.
+ */
+export function tryPromotePomCallCssSelectorToCustomBody(
+  pomCall: { page: string; method: string; args: string[] },
+  pomVar: string,
+  knownMethods: ReadonlySet<string>,
+): string | undefined {
+  const method = pomCall.method;
+  if (!LOCATOR_METHOD_ALLOWLIST.has(method)) return undefined;
+  if (knownMethods.has(method)) return undefined;
+  const args = pomCall.args;
+  if (!args || args.length === 0) return undefined;
+  const first = args[0];
+  if (typeof first !== "string") return undefined;
+  const trimmed = first.trim();
+  if (trimmed.length === 0) return undefined;
+  // Exclude JS-identifier-shaped strings (Pattern A/B territory).
+  if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(trimmed)) return undefined;
+  // Exclude JS function calls and template literals (`page.getByLabel("x")`,
+  // `data.foo()`, backtick strings) — those are Playwright / JS code
+  // the LLM produced by mistake, not CSS selectors. Legitimate CSS
+  // like `input[name='email']` has quotes inside brackets but never
+  // parentheses at top level.
+  if (/[()`]/.test(trimmed)) return undefined;
+  // Require actual CSS-selector syntax. Whitespace alone is NOT enough
+  // (button text like "Sign in" has spaces but isn't a selector). The
+  // characters below only appear in CSS selectors or the syntax that
+  // qualifies a bare tag like `div>span`, `#id`, `.class`, `[attr=x]`,
+  // `:hover`, `*`, `+ sibling`, `~ general-sibling`.
+  const looksLikeSelector = /[\[\]#>~+*]|\.[A-Za-z_]|:[a-z]/.test(trimmed);
+  if (!looksLikeSelector) return undefined;
+  // Strip surrounding quotes if already quoted (LLM sometimes emits
+  // `"input[name='email']"`, sometimes bare `input[name='email']`).
+  let sel = trimmed;
+  if ((sel.startsWith('"') && sel.endsWith('"')) || (sel.startsWith("'") && sel.endsWith("'"))) {
+    sel = sel.slice(1, -1);
+  }
+  const restArgs = args.slice(1).map(wrapAsStringLiteralIfNeeded);
+  const argList = restArgs.join(", ");
+  const selLiteral = JSON.stringify(sel);
+  return `await ${pomVar}.page.locator(${selLiteral}).${method}(${argList});`;
+}
+
+/**
+ * v4.1.0 — Pattern D. Rewrite `page.<method>(<pomVar>.<field>, <value>)`
+ * patterns inside a customBody string, since `page.<method>(locator, ...)`
+ * is not valid Playwright — `page.fill/click/etc.` take string selectors,
+ * not Locator instances. The correct form is `<pomVar>.<field>.<method>(<value>)`.
+ *
+ * Only rewrites methods in LOCATOR_METHOD_ALLOWLIST and only when the
+ * arg is `<pomVar>.<field>` where <field> is a known POM field. All
+ * other `page.<method>(...)` calls (including legit ones like
+ * `page.goto("/url")` or `page.locator("...")`) are left untouched.
+ */
+export function rewriteCustomBodyPageMethods(
+  body: string,
+  pomVar: string,
+  knownFields: ReadonlySet<string>,
+): string {
+  const escapedPomVar = pomVar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Match: page.<method>(<pomVar>.<field>[, <rest>]);
+  // Capture the method, field, and (optionally) rest of args.
+  const methodAlt = Array.from(LOCATOR_METHOD_ALLOWLIST).join("|");
+  const re = new RegExp(
+    `\\bpage\\.(${methodAlt})\\(\\s*${escapedPomVar}\\.([a-zA-Z_$][\\w$]*)\\s*(?:,\\s*([^;]*?))?\\)`,
+    "g",
+  );
+  return body.replace(re, (whole, method, fieldName, rest) => {
+    if (!knownFields.has(fieldName)) return whole; // Unknown field — leave alone.
+    if (fieldName === "page") return whole; // `pomVar.page` never rewrites.
+    const restTrimmed = (rest ?? "").trim();
+    return restTrimmed.length > 0
+      ? `${pomVar}.${fieldName}.${method}(${restTrimmed})`
+      : `${pomVar}.${fieldName}.${method}()`;
+  });
 }

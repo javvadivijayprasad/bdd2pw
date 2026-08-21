@@ -1,6 +1,6 @@
 {
   "name": "@vijaypjavvadi/bdd2pw",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "Scaffold runnable Playwright TypeScript tests from Gherkin .feature files. Detects existing Page Objects, scans live pages via Microsoft Playwright MCP, emits POMs + specs, ready for execution. CLI + HTTP service. Optional governed LLM fallback (Anthropic / OpenAI / Gemini).",
   "bin": {
     "bdd2pw": "dist/cli.js"

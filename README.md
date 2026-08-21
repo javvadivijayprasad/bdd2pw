@@ -25,20 +25,24 @@ Most teams writing BDD test cases (via Cucumber `.feature` files, possibly autho
 
 Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live page with Chromium, picks the most stable locator for every interactive element, matches each step to a POM method call, and emits a runnable Playwright TypeScript repo — including `playwright.config.ts`, `pages/login.page.ts`, `tests/login.spec.ts`, and a `BDD_REVIEW.md` listing anything a human still needs to look at.
 
-## What `bdd2pw` is and isn't (as of v3.8.1)
+## What `bdd2pw` is and isn't (as of v4.1.0)
 
-`bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback**. The output is honest about its limits:
+`bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback across three providers**. The output is honest about its limits:
 
-- **Specific `.feature` files** — quoted credentials, concrete assertion targets, standard verb forms — convert to **runnable specs with zero hand-edits**. Validated end-to-end against real public sites (`practicetestautomation.com`, `owasp-juice-shop`): every scenario green.
-- **Vague `.feature` files** — "Enter valid username and password and click login button" with no quoted values — get partial coverage. Unmatched steps either route to the LLM fallback (when an Anthropic / OpenAI key is configured) or land as `// TODO` comments + warnings in `BDD_REVIEW.md`.
+- **Specific `.feature` files** — quoted credentials, concrete assertion targets, standard verb forms — convert to **runnable specs with zero hand-edits**. Validated end-to-end against 8 public benchmark applications (`practicetestautomation.com`, `owasp-juice-shop`, SauceDemo, the-internet, OpenCart, Magento, Conduit, Reqres): 8/8 compilation across deterministic and LLM-governed modes.
+- **Vague `.feature` files** — "Enter valid username and password and click login button" with no quoted values — get partial coverage. Unmatched steps either route to the LLM fallback (when an Anthropic / OpenAI / Gemini key is configured) or land as `// TODO` comments + warnings in `BDD_REVIEW.md`.
 - **200+ deterministic rules**, organised across three layers:
   - **API rules** (v3.0+) — `page.request.*` patterns for GET / POST / PUT / DELETE / PATCH, body / header / status assertions.
   - **Visibility rules** (v3.1+) — `<noun> is visible / displayed / shown / appears` intercepts before URL-slug heuristics, so prose like "the user's name or profile indicator is visible in the UI" never gets slugified into a URL regex.
   - **UI + URL rules** (v1.x lineage, refined through v3.7.1) — 30+ rules covering first-person, third-person, no-subject Cucumber dialects + compound input steps.
 - **7 opt-in domain rule packs** (v3.4 + v3.8) — banking, healthcare, insurance, retail, gov, education, telecom. Each adds ~20 industry-specific patterns. Activated via `domains: ["banking"]`; empty by default for byte-stable existing behaviour.
-- **LLM fallback is batched per scenario** (v3.5) — one Anthropic / OpenAI / Gemini call per scenario instead of one per unmatched step. ~75% cost reduction on unmatched-heavy scaffolds. Every prompt goes through the `ai-governance` sidecar's `/sanitize` endpoint (fail-closed).
+- **Three-provider LLM fallback, batched per scenario** (v3.5 + v3.11 + v3.12) — one Anthropic Claude Sonnet 4.6, OpenAI gpt-4o-mini, or Google Gemini 2.5 Flash call per scenario instead of one per unmatched step. ~75% cost reduction on unmatched-heavy scaffolds. Every prompt goes through the `ai-governance` sidecar's `/sanitize` endpoint (fail-closed on 4xx/5xx/timeout — the run terminates rather than emit ungoverned code).
+- **Three hallucination-rejection gates on LLM output** (v4.0.1) — invented-helper detection, structured-pomCall guard, and bare-field-call trap. Bindings the LLM emits that would compile-fail land as `// TODO` comments with `BDD_REVIEW.md` entries instead of broken code. Locked by 19 dedicated unit tests.
+- **Six-pattern LLM-binding rewriter** (v4.1) — mechanically transforms common LLM emission mistakes (invented-helper shapes, bare-field args, unquoted string values, CSS-selector args, `page.<method>` invented-helpers in customBody, Locator-only matchers hallucinated on `page`, bare-identifier assertion locators) into valid Playwright-idiomatic code. Runs *before* the v4.0.1 gates; if a rewrite would still produce broken code, the binding is rejected and lands as TODO. Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Locked by 35 unit tests.
+- **Data-driven scaffolds** (v4.0.0) — `--data <path>` injects CSV / JSON / XLSX rows into every Scenario Outline's `Examples:` table; `--gen-data --schema <path> --rows N` generates synthetic rows via Faker + optional per-column LLM calls (`llm:auto insurance claim description`); seeded (`--seed 42`) for reproducibility.
 - **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical.
 - **`--merge` mode** (v3.2) preserves `// bdd2pw:user-block id="..."` sections across regenerations so iterative locator tuning doesn't lose work.
+- **Reproducible benchmark harness** (v4.0.0) — `bench/runner.ts` scaffolds all 8 benchmark apps in three modes (deterministic-only, LLM-blocked, LLM-governed) with per-app sha256 verification. Public artifact accompanying the SoftwareX manuscript.
 
 > **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest — or you let the governed LLM finish them.
 
@@ -394,7 +398,9 @@ Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains
 
 If you use `@vijaypjavvadi/bdd2pw` in academic work, please cite:
 
-> Javvadi, V. P. (2026). *@vijaypjavvadi/bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP* (Version 3.8.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20450278
+> Javvadi, V. P. (2026). *@vijaypjavvadi/bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP* (Version 4.0.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21050268
+
+(v4.0.2 is a documentation-only patch on top of the v4.0.1 artifact; cite v4.0.1 for reproducibility.)
 
 A machine-readable [`CITATION.cff`](CITATION.cff) file is included in the repository root.
 

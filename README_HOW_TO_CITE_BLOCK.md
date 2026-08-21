@@ -20,10 +20,10 @@ If you use **bdd2pw** in your work, please cite the archived release on Zenodo. 
   author       = {Javvadi, Vijay Prasad},
   title        = {{bdd2pw}: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright {MCP}},
   year         = 2026,
-  version      = {3.8.1},
+  version      = {4.0.1},
   publisher    = {Zenodo},
-  doi          = {10.5281/zenodo.20452068},
-  url          = {https://doi.org/10.5281/zenodo.20452068}
+  doi          = {10.5281/zenodo.21050268},
+  url          = {https://doi.org/10.5281/zenodo.21050268}
 }
 ```
 
@@ -42,4 +42,4 @@ If you use **bdd2pw** in your work, please cite the archived release on Zenodo. 
 
 ### APA
 
-> Javvadi, V. P. (2026). *bdd2pw: Live-DOM page object scaffolding from Gherkin specifications via the Microsoft Playwright MCP* (Version 3.8.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20452068
+> Javvadi, V. P. (2026). *bdd2pw: Live-DOM page object scaffolding from Gherkin specifications via the Microsoft Playwright MCP* (Version 4.0.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21050268

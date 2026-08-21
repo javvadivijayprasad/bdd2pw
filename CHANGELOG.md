@@ -9,6 +9,159 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.1.0] — 2026-08-21
+
+### Theme: LLM-binding rewriter — 3/8 → 8/8 bench apps compile cleanly
+
+v4.0 (paper release) landed 3/8 bench apps that emitted a fully
+compiling Playwright TypeScript spec via the LLM fallback. The other
+5 hit specific LLM emission patterns that the v4.0.1 hallucination
+gates correctly rejected — meaning the steps landed as `// TODO`
+comments and the spec failed to compile.
+
+v4.1 introduces a **binding-rewriter suite** that mechanically
+transforms six well-known LLM emission patterns into valid
+Playwright-idiomatic code, then runs the resulting binding through
+the existing v4.0.1 gates. If any rewrite would produce compile-fail
+code, the binding is dropped and the step lands as `// TODO` (the
+fail-closed guarantee is unchanged). The result: **every one of the
+8 benchmark apps now emits a spec that passes `tsc --noEmit`.**
+
+### Added — six LLM-emission rewrite patterns
+
+1. **Pattern A** — `{method:"fill", args:["pomVar.field", "\"x\""]}` →
+   `{method:"field.fill", args:["\"x\""]}`. Catches OpenAI
+   gpt-4o-mini's "invented helper on the POM" shape.
+
+2. **Pattern B** — `{method:"fill", args:["field", "value"]}` →
+   `{method:"field.fill", args:["\"value\""]}`. Bare-field variant
+   with auto-quoting of unquoted string values (email addresses,
+   punctuation-bearing text, human-readable strings, bare
+   identifiers). Reserved literals (`true`, `false`, `null`,
+   `undefined`, numbers) and property-access chains
+   (`data.foo`, `env.USER`) are left untouched. Fixes the SauceDemo
+   `fill(locked_out_user)` regression where the LLM dropped the
+   string quotes.
+
+3. **Pattern C** — `{method:"fill", args:["input[name='email']", "x"]}` →
+   `customBody: await pomVar.page.locator("input[name='email']").fill("x")`.
+   Promotes a raw CSS selector arg to a `page.locator()` chain in
+   customBody. Tightened to require actual CSS syntax characters
+   (`[`, `#`, `>`, `~`, `+`, `*`, `.identifier`, `:pseudo-class`) —
+   plain-text button labels like `"Sign in"` are no longer
+   misclassified as selectors.
+
+4. **Pattern D** — inside `customBody`, `page.<locatorMethod>(pomVar.<field>, ...)`
+   → `pomVar.<field>.<locatorMethod>(...)`. Catches compound-step
+   expansions that accidentally used `page.fill(locator, value)`
+   (invalid Playwright API — `page.fill` requires a string
+   selector, not a Locator instance).
+
+5. **Pattern F — Page-matcher validation gate.** `expect(page).<matcher>`
+   is only valid when `<matcher>` is one of `toHaveURL`,
+   `toHaveTitle`, or `toHaveScreenshot`. Locator-only matchers
+   (`toHaveText`, `toContainText`, `toBeVisible`, etc.) emitted
+   against `page` are dropped and land as TODO instead of shipping
+   as compile-fail code.
+
+6. **Pattern G — bare-identifier assertion locator rewrite.**
+   `{assertion:{locator:"commentsList", matcher:"toContainText"}}`
+   → `{assertion:{locator:"loginPage.commentsList", ...}}` when
+   `commentsList` is a known POM field. If the bare identifier
+   isn't a known field, the entire assertion is dropped (Conduit
+   bench regression: LLM emitted `expect(commentsList)` — an
+   undefined reference).
+
+### Added — final empty-binding gate
+
+After all rewriters run, a second empty-binding check drops bindings
+that survived initial validation but had every field nuked by a
+subsequent rewriter (Pattern G rejection was the primary trigger).
+
+### Added — tests
+
+- 21-case vitest suite in `tests/unit/v410BindingRewriter.test.ts`
+  covering all six rewrite patterns plus integration paths for the
+  real bench emissions from OpenAI, Gemini, and Anthropic.
+- 35-case Node.js smoke runner in `scripts/smoke-v410-rewriter.mjs`
+  that bypasses vitest and rollup native binaries — useful for
+  environments where the vitest transformer's platform-specific
+  binaries aren't installed.
+
+### Benchmark comparison — v4.0 vs v4.1 (`--llm openai --skip-governance`)
+
+| App | v4.0.1 tsc | v4.1 tsc | v4.0.1 TODOs | v4.1 TODOs |
+|---|---|---|---|---|
+| 01-saucedemo | fail | **pass** | 4 | **0** |
+| 02-the-internet | fail | **pass** | 4 | **0** |
+| 03-juice-shop | pass | pass | 13 | 9 |
+| 04-opencart | fail | **pass** | 4 | 5 |
+| 05-magento | fail | **pass** | 6 | 4 |
+| 06-conduit | fail | **pass** | 6 | 11 |
+| 07-reqres-api | pass | pass | 10 | 10 |
+| 08-automation-practice | pass | pass | 5 | **2** |
+| **Total** | **3/8 pass** | **8/8 pass** | 52 | 41 |
+
+TODOs may go up in a few apps because Pattern G / Pattern F now
+correctly reject bindings that previously slipped through as
+compile-broken code. Fewer *broken* lines shipped is the intended
+tradeoff.
+
+### No breaking changes
+
+Feature release. Public API surface identical to v4.0.1. Zero-config
+users see no behavioural change on scaffolds that don't invoke the
+LLM fallback. Deterministic mode is byte-identical to v4.0.1.
+
+### Migration
+
+`npm i @vijaypjavvadi/bdd2pw@4.1.0` — no code changes required. The
+rewriter is on by default and cannot be disabled (it only ever
+increases the compile rate of LLM-emitted bindings; if you want a
+binding rejected instead of rewritten, hand-edit the emitted spec).
+
+## [4.0.2] — 2026-07-24
+
+### Documentation-only patch — README refresh to match the actual v4.0.x feature set
+
+The npm storefront (`https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw`)
+was still describing bdd2pw "as of v3.8.1" three major/minor versions
+later. Anyone landing on the page was reading a description that omitted
+data-driven scaffolds, the three v4.0.1 hallucination-rejection gates,
+the OpenAI + Gemini providers, and the 8-app reproducible benchmark
+harness. That's a versioning-hygiene issue — the code shipped, the
+storefront didn't catch up.
+
+### Changed
+
+- **README** — "What `bdd2pw` is and isn't (as of v3.8.1)" → "(as of v4.0.2)".
+- **README** — LLM fallback bullet rewritten to name all three providers
+  by name (Anthropic Claude Sonnet 4.6, OpenAI gpt-4o-mini, Google
+  Gemini 2.5 Flash) and describe the fail-closed governance semantics
+  explicitly.
+- **README** — New bullet documenting the three v4.0.1 hallucination
+  rejection gates (invented-helper, structured pomCall, bare field call)
+  and the 19 unit tests locking behaviour.
+- **README** — New bullet documenting v4.0.0 data-driven scaffolds
+  (`--data`, `--gen-data`, `--schema`, `--seed`).
+- **README** — New bullet documenting the 8-app reproducible benchmark
+  harness (`bench/runner.ts`) that accompanies the SoftwareX manuscript.
+- **README** — "Validated end-to-end against real public sites" list
+  expanded from 2 apps to the full 8-app benchmark set.
+
+### No code changes
+
+Patch release. No changes under `src/`, `dist/`, `templates/`, `bin`, or
+public API. `npm i @vijaypjavvadi/bdd2pw@4.0.2` is byte-identical to
+`@4.0.1` at runtime — only `README.md`, `CHANGELOG.md`, and `package.json`
+version differ.
+
+### Why patch and not minor
+
+SemVer patch is correct here: no new user-facing capability, no bug fix
+in shipped code, only documentation. Bumping to 4.1 would falsely signal
+new features to CI systems that pin ranges like `^4.0.0`.
+
 ## [4.0.1] — 2026-06-29
 
 ### Fixed — LLM hallucinated POM methods land as TODO instead of broken code

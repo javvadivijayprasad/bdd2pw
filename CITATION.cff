@@ -13,8 +13,8 @@ abstract: >
   and LLM batching diagnostics.
 type: software
 license: MIT
-version: 3.8.1
-date-released: 2026-05-29
+version: 4.1.0
+date-released: 2026-08-21
 authors:
   - family-names: "Javvadi"
     given-names: "Vijay Prasad"
@@ -51,9 +51,9 @@ preferred-citation:
       orcid: "https://orcid.org/0009-0004-1192-6906"
       affiliation: "Independent Researcher, Plainsboro, NJ, USA"
   year: 2026
-  version: "3.8.1"
-  doi: "10.5281/zenodo.20452068"
-  url: "https://doi.org/10.5281/zenodo.20452068"
+  version: "4.0.1"
+  doi: "10.5281/zenodo.21050268"
+  url: "https://doi.org/10.5281/zenodo.21050268"
   notes: >
     A companion peer-reviewed manuscript on bdd2pw is currently under
     review at Elsevier SoftwareX (manuscript ID SOFTX-S-26-00858); the
