@@ -23,3 +23,10 @@ bdd2pw-jobs/
 Thumbs.db
 .vs/
 *.swp
+
+# v4.1 — bench artifacts (regenerated on every bench run)
+bench/.work/
+bench/results/results.json
+bench/results/results.md
+bench/results/results-*.json
+bench/results/results-*.md
