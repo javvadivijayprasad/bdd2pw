@@ -97,6 +97,11 @@ program
     "v4.0.0 — Faker RNG seed for --gen-data reproducibility. Default 42.",
     "42",
   )
+  .option(
+    "--fail-on-drift",
+    "v4.2.0 — exit non-zero when the page's DOM has drifted since the previous scaffold (POM header dom-hash mismatch). Useful in CI to gate merges on silent UI regressions.",
+    false,
+  )
   .action(async (feature: string, opts) => {
     try {
       // v2.0 — wire the actual LLM config when --llm is passed. The legacy
@@ -184,8 +189,18 @@ program
                 seed: opts.seed ? Number(opts.seed) : undefined,
               }
             : undefined,
+        // v4.2.0 — drift gate for CI.
+        failOnDrift: opts.failOnDrift === true,
       });
       logger.info({ result }, "scaffold complete");
+      // v4.2.0 — exit non-zero when the user asked to gate on drift
+      // and drift was actually detected. Runs AFTER the scaffold has
+      // fully written its output so users still see the drift warning
+      // in BDD_REVIEW.md and can review the affected fields.
+      if (opts.failOnDrift === true && result.driftDetected === true) {
+        logger.warn("--fail-on-drift set and DOM drift detected; exiting with code 2");
+        process.exit(2);
+      }
     } catch (err) {
       logger.error({ err }, "scaffold failed");
       process.exit(exitCodeFor(err));

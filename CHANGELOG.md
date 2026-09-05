@@ -9,6 +9,129 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.2.0] — 2026-09-02
+
+### Theme: Silent problems, made loud — DOM drift detection
+
+Silent UI changes are the second-worst failure mode in Playwright
+suites (the worst being flaky locators — which bdd2pw's healing loop
+already addresses). A vendor updates their design system, a component
+library rolls out a new variant, a form input's role attribute
+changes — and a week later three tests start failing with `element
+not found` and no obvious cause. The team spends an hour bisecting
+the DOM instead of an hour fixing the UI.
+
+v4.2 embeds a **stable sha256 of the page's accessibility tree** in
+every emitted POM's header comment. On re-scaffold, bdd2pw compares
+the new snapshot against the hash stored in the existing POM. If
+they differ, a `DOM DRIFT` warning lands in `BDD_REVIEW.md` with
+both hashes and a suggested triage path. A new `--fail-on-drift`
+CLI flag turns the warning into a non-zero exit code so CI can
+gate merges on silent UI regressions.
+
+Credit for the idea: a LinkedIn commenter on the v4.1 release post
+suggested "version the emitted POM against a DOM snapshot hash so a
+silent UI change shows up as a diff rather than a mystery failure
+next run." That's exactly what v4.2 does.
+
+### Added — DOM-hash utilities (`src/discovery/domHash.ts`)
+
+- `computeDomHash(snapshot)` — deterministic sha256 of the
+  accessibility tree via canonical JSON stringify (sorted keys at
+  every object level). Identical trees always produce identical
+  hashes regardless of MCP's property ordering. Only the tree
+  contributes to the hash — url, title, and raw DOM string are
+  ignored so unrelated changes don't false-positive.
+- `buildDomHashHeader(hash, url, at?)` — the JSDoc-formatted
+  `@bdd2pw` comment block prepended to every emitted POM.
+- `extractDomHashFromPom(contents)` — reverse operation for drift
+  detection on re-scaffold.
+- `prependDomHashHeader(contents, header)` — idempotent header
+  injection; replaces any prior `@bdd2pw` block instead of
+  stacking duplicates.
+
+### Added — POM header emission
+
+Every emitted POM now carries a comment block above the imports:
+
+```typescript
+/**
+ * @bdd2pw generated 2026-09-02T14:32:00.000Z
+ * @bdd2pw dom-hash a3f8c2e4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+ * @bdd2pw url https://saucedemo.com/
+ *
+ * The dom-hash line is used by bdd2pw to detect DOM drift on
+ * re-scaffold. Do not edit it by hand — regenerate with `bdd2pw
+ * scaffold` or `bdd2pw update-pom` to refresh.
+ */
+import { Page } from "@playwright/test";
+export class LoginPage { ... }
+```
+
+Emission is unconditional — deterministic-only runs, LLM-fallback
+runs, and `--dry-run` all produce the header when a snapshot exists.
+`--no-discovery` runs (no snapshot) skip the header, and re-scaffold
+against a v4.1-or-earlier POM emits an info-level `BDD_REVIEW.md`
+note that says the baseline hash was just planted.
+
+### Added — drift detection on re-scaffold
+
+When `scaffold()` runs in `augment` mode (existing POM present) and
+the new snapshot's hash differs from the one embedded in the POM:
+
+- A `warn`-severity `ReviewItem` is added to `BDD_REVIEW.md` with
+  both truncated hashes and a suggested review path.
+- `ScaffoldResult.driftDetected` is set to `true` for programmatic
+  callers.
+
+### Added — `--fail-on-drift` CLI flag
+
+`bdd2pw scaffold ... --fail-on-drift` exits with code `2` when
+drift is detected, AFTER the scaffold completes writing (so
+`BDD_REVIEW.md` and the refreshed POM are still on disk for the
+developer to inspect). Exit code `2` is distinct from `1` (used for
+other scaffold errors) so CI can special-case drift vs. real failures.
+
+### Added — API surface
+
+Two new optional fields on the public types:
+
+```typescript
+interface ScaffoldOptions {
+  // ... existing fields
+  failOnDrift?: boolean;   // v4.2.0
+}
+
+interface ScaffoldResult {
+  // ... existing fields
+  driftDetected?: boolean; // v4.2.0
+}
+```
+
+### Added — tests
+
+- 15-case vitest suite in `tests/unit/v420DomHash.test.ts` covering
+  hash determinism, canonical key ordering, round-trip
+  extract/build, and idempotent header injection.
+- 11-case Node.js smoke runner in `scripts/smoke-v420-domhash.mjs`
+  that bypasses vitest.
+
+### No breaking changes
+
+Additive-only. Programmatic callers that don't set `failOnDrift`
+see no behavioural change (drift is still detected and reported in
+`BDD_REVIEW.md`, but the process exit code is unchanged). Emitted
+POMs gain a comment block above the imports; all downstream
+consumers (Playwright itself, `merge` mode, `updatePom`) tolerate
+the comment. `updatePom`'s append-only guarantee is preserved.
+
+### Migration
+
+`npm i @vijaypjavvadi/bdd2pw@4.2.0` — no code changes required. The
+first re-scaffold of an existing repo plants the baseline hash and
+emits an info-level `BDD_REVIEW.md` line. From the second re-scaffold
+onward, DOM drift will be detected and warned about.
+
 ## [4.1.0] — 2026-08-21
 
 ### Theme: LLM-binding rewriter — 3/8 → 8/8 bench apps compile cleanly

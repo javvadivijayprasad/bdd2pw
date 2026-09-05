@@ -38,6 +38,12 @@ import {
   setActiveDomains,
 } from "./transformers/stepMatcher";
 import { emitPageObject, emitTestFile } from "./emitters/facade";
+import {
+  computeDomHash,
+  buildDomHashHeader,
+  extractDomHashFromPom,
+  prependDomHashHeader,
+} from "./discovery/domHash";
 import { tscValidate } from "./validate/tscRunner";
 import { writeReviewReport } from "./reports/reviewReport";
 import { bindingsToMetaSteps, type MetaSidecar } from "./reports/metaSidecar";
@@ -168,6 +174,10 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   //    lands and rule-only steps (`I am on the page`, `should be redirected`)
   //    still produce useful output even when the URL isn't reachable.
   let elements: ReturnType<typeof parseSnapshot> = [];
+  // v4.2.0 — DOM-hash tracking. Snapshot is hoisted here so the hash can
+  // be embedded in the POM header (§8 below). undefined if discovery
+  // failed or was skipped, which suppresses the header.
+  let capturedSnapshot: Awaited<ReturnType<typeof scanPage>> | undefined;
   if (opts.noDiscovery) {
     reviewItems.push({
       severity: "info",
@@ -175,13 +185,13 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     });
   } else {
     try {
-      const snapshot = await scanPage({
+      capturedSnapshot = await scanPage({
         url: opts.url,
         storageState: opts.storageState,
         headed: opts.headed,
         snapshotFile: opts.snapshotFile,
       });
-      elements = parseSnapshot(snapshot);
+      elements = parseSnapshot(capturedSnapshot);
     } catch (err) {
       reviewItems.push({
         severity: "warn",
@@ -512,6 +522,43 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
 
   const filesWritten: string[] = [...scaffoldResult.filesWritten];
 
+  // v4.2.0 — drift detection. Runs BEFORE the emit so a warning lands
+  // even if the emit itself fails partway through. `driftDetected` is
+  // surfaced in the return value for --fail-on-drift CI behaviour.
+  let driftDetected = false;
+  const currentDomHash = capturedSnapshot ? computeDomHash(capturedSnapshot) : undefined;
+  if (currentDomHash && decision.existing) {
+    const existingPomContents = await fs
+      .readFile(decision.existing.filePath, "utf8")
+      .catch(() => undefined);
+    if (existingPomContents) {
+      const previousHash = extractDomHashFromPom(existingPomContents);
+      if (previousHash && previousHash !== currentDomHash) {
+        driftDetected = true;
+        reviewItems.push({
+          severity: "warn",
+          message:
+            "DOM DRIFT detected: the page's accessibility tree has changed since the last scaffold. " +
+            "Previous hash " +
+            previousHash.slice(0, 12) +
+            "… → new hash " +
+            currentDomHash.slice(0, 12) +
+            "…. Any pinned locators may now point at moved or missing elements.",
+          suggestion:
+            "Review the diff between the last snapshot and the current one, then re-run the affected specs to confirm behaviour. Pass --fail-on-drift in CI to gate merges on this signal.",
+          file: finalPom.filePath,
+        });
+      } else if (!previousHash) {
+        reviewItems.push({
+          severity: "info",
+          message:
+            "Existing POM predates v4.2 dom-hash tracking. First scaffold with v4.2+ will embed a baseline hash; future runs will detect drift.",
+          file: finalPom.filePath,
+        });
+      }
+    }
+  }
+
   if (!opts.dryRun) {
     // 8) Emit Page Object
     const pomEmitMode = decision.decision === "CREATE" ? "create" : "augment";
@@ -526,8 +573,18 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     reviewItems.push(
       ...pomEmit.warnings.map((w) => ({ ...w, file: finalPom.filePath })),
     );
+    // v4.2.0 — prepend DOM-hash header if we have a snapshot. Header is
+    // idempotent (replaces any prior header block from a previous
+    // scaffold) so re-emitting doesn't stack duplicates.
+    let pomContents = pomEmit.contents;
+    if (currentDomHash) {
+      pomContents = prependDomHashHeader(
+        pomContents,
+        buildDomHashHeader(currentDomHash, opts.url),
+      );
+    }
     await fs.ensureDir(path.dirname(finalPom.filePath));
-    await fs.writeFile(finalPom.filePath, pomEmit.contents, "utf8");
+    await fs.writeFile(finalPom.filePath, pomContents, "utf8");
     filesWritten.push(finalPom.filePath);
 
     // 9) Emit spec file. pageObjectFileName returns "login.page.ts"; strip
@@ -648,7 +705,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // Close the SQLite cache handle if we opened one.
   if (llm?.close) await llm.close().catch(() => undefined);
 
-  return { filesWritten, reviewItems, tscErrorCount, reviewReportPath };
+  return { filesWritten, reviewItems, tscErrorCount, reviewReportPath, driftDetected };
 }
 
 /**

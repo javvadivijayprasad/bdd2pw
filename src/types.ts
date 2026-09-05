@@ -355,6 +355,14 @@ export interface ScaffoldOptions {
     /** type === "synthetic" only. Faker seed for reproducibility. Default 42. */
     seed?: number;
   };
+  /**
+   * v4.2.0 — treat DOM drift as an error. When true and re-scaffold
+   * detects that the accessibility tree of the target URL has changed
+   * since the previous run (POM header dom-hash mismatch), `scaffold()`
+   * returns `driftDetected: true` and the CLI exits with a non-zero
+   * code. Useful in CI to gate merges on silent UI regressions.
+   */
+  failOnDrift?: boolean;
 }
 
 export interface ScaffoldResult {
@@ -362,6 +370,13 @@ export interface ScaffoldResult {
   reviewItems: ReviewItem[];
   tscErrorCount: number;
   reviewReportPath: string;
+  /**
+   * v4.2.0 — true iff the DOM snapshot hash differs from the one
+   * embedded in the existing POM. Independent of `failOnDrift` — the
+   * flag is always populated so callers can inspect drift status even
+   * without triggering an exit.
+   */
+  driftDetected?: boolean;
 }
 
 export interface AnalyzeOptions {
