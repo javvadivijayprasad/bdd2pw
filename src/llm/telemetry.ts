@@ -206,7 +206,7 @@ export class LLMTelemetry {
         if (this.inFlight) this.inFlight.batchSize += 1;
         else this.pendingMisses += 1;
         break;
-      case "provider_call_start":
+      case "provider_call_start": {
         this.callsAttempted += 1;
         this.inFlight = {
           model: event.model,
@@ -227,6 +227,7 @@ export class LLMTelemetry {
           DEFAULT_PRICING[event.model];
         if (pricing) this.modelPricing = pricing;
         break;
+      }
       case "provider_call_done":
         if (this.inFlight) {
           this.inFlight.latencyMs = event.latencyMs;

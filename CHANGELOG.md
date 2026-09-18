@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.3.2] — 2026-09-18
+
+### Fixed
+
+Three ESLint errors in `src/` that survived v4.3.1's fixture-only
+lint cleanup and blocked CI publish:
+
+- `src/llm/anthropicClient.ts` — remove needless `\[` `\]` escapes
+  inside the CSS-selector-detection character class (`no-useless-escape`).
+- `src/llm/telemetry.ts` — wrap the `provider_call_start` case
+  body in braces so the `const pricing` declaration has its own
+  scope (`no-case-declarations`).
+- `src/transformers/stepNormalizer.ts` — drop needless `\.` escape
+  inside a character class (`no-useless-escape`).
+
+No behavioural changes at runtime. `npm i @vijaypjavvadi/bdd2pw@4.3.2`
+is byte-identical to `@4.3.1` for the emitted code paths — only the
+release workflow now completes.
+
 ## [4.3.1] — 2026-09-18
 
 ### Fixed

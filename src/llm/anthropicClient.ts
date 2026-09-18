@@ -1229,7 +1229,7 @@ export function tryPromotePomCallCssSelectorToCustomBody(
   // characters below only appear in CSS selectors or the syntax that
   // qualifies a bare tag like `div>span`, `#id`, `.class`, `[attr=x]`,
   // `:hover`, `*`, `+ sibling`, `~ general-sibling`.
-  const looksLikeSelector = /[\[\]#>~+*]|\.[A-Za-z_]|:[a-z]/.test(trimmed);
+  const looksLikeSelector = /[[\]#>~+*]|\.[A-Za-z_]|:[a-z]/.test(trimmed);
   if (!looksLikeSelector) return undefined;
   // Strip surrounding quotes if already quoted (LLM sometimes emits
   // `"input[name='email']"`, sometimes bare `input[name='email']`).
