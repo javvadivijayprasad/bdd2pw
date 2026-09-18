@@ -87,7 +87,8 @@ describe("v4.0.0 — DataLoader CSV", () => {
   });
 
   it("strips UTF-8 BOM (PowerShell Out-File default)", () => {
-    // ﻿ is the UTF-8 BOM as a string literal.
+    // U+FEFF is the UTF-8 BOM. Expressed here as an escape sequence
+    // so the source file itself doesn't contain the irregular char.
     const rows = parseCsv("﻿name,email\nAlice,a@x.io");
     expect(rows).toEqual([{ name: "Alice", email: "a@x.io" }]);
     // Header must NOT include the BOM character.

@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.3.1] — 2026-09-18
+
+### Fixed
+
+Lint gate for the release workflow. v4.3.0 was tagged but the CI
+release workflow failed on pre-existing ESLint errors that had
+accumulated in fixture files. v4.3.1 clears them so `npm publish`
+can complete:
+
+- Add `tests/expected-output/`, `test-v4/`, `test-v430/`,
+  `bench/.work/`, and `scripts/` to `.eslintrc.json`
+  `ignorePatterns`. These are generated fixtures or scratch dirs
+  that shouldn't participate in the source lint.
+- Refactor the UTF-8 BOM literal in
+  `tests/unit/v400Data.test.ts` to use the `﻿` escape sequence
+  instead of an inline BOM character, so `no-irregular-whitespace`
+  no longer trips. Behaviour identical at runtime.
+
+No source or emitted behaviour changes. `npm i @vijaypjavvadi/bdd2pw@4.3.1`
+is byte-identical to `@4.3.0` at runtime — only the release workflow
+now completes.
+
 ## [4.3.0] — 2026-09-18
 
 ### Theme: in-process self-healing via `@vijaypjavvadi/pw-self-heal`

@@ -25,6 +25,11 @@
     "dist/",
     "node_modules/",
     "examples/",
-    "templates/"
+    "templates/",
+    "tests/expected-output/",
+    "test-v4/",
+    "test-v430/",
+    "bench/.work/",
+    "scripts/"
   ]
 }
