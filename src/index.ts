@@ -157,6 +157,9 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     baseUrl: opts.url,
     projectName: feature.name.toLowerCase().replace(/\s+/g, "-"),
     selfHealing: opts.selfHealing,
+    // v4.3.0 — pw-self-heal integration.
+    selfHealingMode: opts.selfHealingMode,
+    legacyHealing: opts.legacyHealing,
     dependencyStrategy: opts.dependencyStrategy,
   });
   reviewItems.push(...scaffoldResult.warnings);
@@ -568,7 +571,12 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       existing: decision.existing
         ? await fs.readFile(decision.existing.filePath, "utf8").catch(() => undefined)
         : undefined,
-      selfHealingShim: opts.selfHealing,
+      // v4.3.0 — the pw-emit healing shim (healOrThrow wrapping) is ONLY
+      // emitted for --legacy-healing. New-mode healing is transparent —
+      // the emitted spec imports `test` from a fixtures file that wraps
+      // the base test with `withSelfHealing(...)`, so POM classes need
+      // no changes and every field call heals through the wrapped page.
+      selfHealingShim: opts.selfHealing === true && opts.legacyHealing === true,
     });
     reviewItems.push(
       ...pomEmit.warnings.map((w) => ({ ...w, file: finalPom.filePath })),
@@ -617,6 +625,21 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // prepend a `// bdd2pw:generated v=… source=…` header so future
     // merges can recognise our own output.
     let finalSpec = specEmit.contents;
+
+    // v4.3.0 — pw-self-heal integration. When --self-healing is on and
+    // --legacy-healing is not set, redirect the emitted spec's `test` /
+    // `expect` import from `@playwright/test` to the sibling `./fixtures`
+    // file scaffoldProject wrote. The fixtures file re-exports the two
+    // symbols with `withSelfHealing()` applied to `test`, so every
+    // `page` fixture in the spec heals broken locators at runtime.
+    // Only rewrites the exact top-of-file import — inline type-only
+    // imports elsewhere in the spec are left untouched.
+    if (opts.selfHealing === true && opts.legacyHealing !== true) {
+      finalSpec = finalSpec.replace(
+        /^import\s+\{\s*test\s*,\s*expect\s*\}\s+from\s+["']@playwright\/test["'];\s*$/m,
+        'import { test, expect } from "./fixtures";',
+      );
+    }
     if (opts.merge) {
       finalSpec = prependGeneratedHeader(
         finalSpec,

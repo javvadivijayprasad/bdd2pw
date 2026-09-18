@@ -9,6 +9,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.3.0] — 2026-09-18
+
+### Theme: in-process self-healing via `@vijaypjavvadi/pw-self-heal`
+
+`--self-healing` used to emit a 450-line `lib/heal.ts` shim, patch
+`tsconfig.json` with a path alias, and require an external HTTP
+service at `SELF_HEALING_URL` to actually rank replacement locators.
+That worked but the operational burden — a Python service, a
+database, network hop on every heal — meant most users never turned
+it on.
+
+v4.3 replaces that entire stack with `@vijaypjavvadi/pw-self-heal`
+— the trained-ONNX-ranker sibling package with a published Zenodo
+DOI (10.5281/zenodo.19684439). It runs in-process, needs no server,
+no API key, no Python, and the DOM never leaves the machine.
+
+Emitted repos with `--self-healing` now get a **3-line**
+`tests/fixtures.ts`:
+
+```typescript
+import { test as base } from "@playwright/test";
+import { withSelfHealing } from "@vijaypjavvadi/pw-self-heal";
+export const test = withSelfHealing(base, { mode: "hybrid" });
+export { expect } from "@playwright/test";
+```
+
+Every emitted spec's top-of-file import auto-rewrites from
+`@playwright/test` to `./fixtures`. POM classes are unchanged —
+they receive the healing-wrapped `page` transparently, so
+`await loginPage.usernameInput.fill("x")` heals on locator drift
+without a single `healOrThrow(...)` wrapper.
+
+### Added — pw-self-heal scaffold emission (default when `--self-healing`)
+
+- **`tests/fixtures.ts`** — wraps `@playwright/test`'s base `test`
+  with `withSelfHealing({ mode })`. Re-exports `test` and `expect`.
+  Overwritten idempotently on every re-scaffold so mode changes
+  propagate; hand-editing this file is supported (rename it or move
+  it out of `tests/` to prevent overwrite).
+- **`.pwheal/.gitkeep`** — placeholder so the telemetry directory
+  exists on fresh clones. pw-self-heal appends
+  `.pwheal/heal-events.jsonl` at runtime; the JSONL itself is
+  gitignored.
+- **Emitted `package.json` devDependencies** get
+  `@vijaypjavvadi/pw-self-heal ^1.1.2` unconditionally, and
+  `onnxruntime-node ^1.18.0` only when the ranker mode is `ml` or
+  `hybrid` (the `heuristic` mode has zero native deps).
+- **Spec import rewrite** — the top-of-file
+  `import { test, expect } from "@playwright/test"` in every
+  emitted spec is redirected to `"./fixtures"` when
+  `--self-healing` is on without `--legacy-healing`. Exact single-
+  line regex — inline type-only imports elsewhere in the spec are
+  left untouched.
+- **POM emission** — `--self-healing` no longer passes
+  `selfHealingShim: true` to `pw-emit`, so POM fields are plain
+  `page.getByLabel(...)` calls without the `healOrThrow(page, {...})`
+  wrapping. The healing happens invisibly through the wrapped
+  fixture instead.
+
+### Added — CLI flags
+
+- **`--self-healing-mode <heuristic|ml|hybrid>`** — pass through to
+  `withSelfHealing({ mode })`. Default `hybrid`. Matches pw-self-heal's
+  production default (0.4·heuristic + 0.6·ml, 68.63% HSR on their
+  bench).
+- **`--legacy-healing`** — DEPRECATED. Keeps emitting the v4.2
+  `lib/heal.ts` + external service shim for one release. Prints a
+  `warn`-severity entry in `BDD_REVIEW.md` so users see the
+  deprecation path. Removed in v5.0.
+
+### Added — API surface
+
+Two new optional fields on the public types:
+
+```typescript
+interface ScaffoldOptions {
+  // ... existing fields
+  selfHealingMode?: "heuristic" | "ml" | "hybrid"; // v4.3.0
+  legacyHealing?: boolean;                          // v4.3.0
+}
+```
+
+### Added — tests
+
+- 10-case vitest suite in `tests/unit/v430PwSelfHeal.test.ts`
+  covering: default mode, mode override, re-emit idempotency,
+  `.pwheal` gitkeep, package.json devDependency patching (hybrid
+  vs. heuristic), legacy-healing deprecation warning, and
+  self-healing-off no-op.
+- 8-case Node.js smoke runner in `scripts/smoke-v430-selfheal.mjs`
+  that bypasses vitest.
+
+### Deprecated
+
+- **`--legacy-healing`** (v4.3.0 → removed in v5.0.0). One-release
+  window for existing users to migrate off the external
+  `SELF_HEALING_URL` service. The `bdd2pw heal-stats` CLI continues
+  to work — it now reads `.pwheal/heal-events.jsonl` by default
+  and falls back to the v4.2 `artefacts/heal-events.jsonl` path.
+
+### No breaking changes
+
+Users NOT passing `--self-healing` see identical output to v4.2.
+Users on `--self-healing --legacy-healing` see the same
+lib/heal.ts + tsconfig-alias emission as v4.2. Users adopting the
+new `--self-healing` default get a smaller emitted repo (no
+`lib/heal.ts`, no tsconfig `paths`, no external service required)
+plus a strictly better runtime healer.
+
+### Migration
+
+`npm i @vijaypjavvadi/bdd2pw@4.3.0` — no code changes required.
+Re-scaffold repos that use `--self-healing` and the new fixture
+wiring lands automatically. If you were relying on the v4.2
+`SELF_HEALING_URL` service, either:
+
+1. Drop it and adopt the new default (recommended — trained ONNX
+   ranker with a published DOI, no service to run).
+2. Pass `--legacy-healing` for one release while you plan the
+   migration. Deprecation warning appears in `BDD_REVIEW.md`.
+
 ## [4.2.0] — 2026-09-02
 
 ### Theme: Silent problems, made loud — DOM drift detection

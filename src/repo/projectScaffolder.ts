@@ -29,8 +29,31 @@ export interface ScaffoldProjectOptions {
   baseUrl?: string;
   /** Injected as `name` in package.json. */
   projectName?: string;
-  /** When true, also write lib/heal.ts and patch tsconfig paths. */
+  /**
+   * When true, wire runtime locator healing into the emitted repo.
+   * v4.3.0+: default emission uses `@vijaypjavvadi/pw-self-heal` —
+   * a `tests/fixtures.ts` is written that wraps `@playwright/test`
+   * with `withSelfHealing(...)` and the emitted spec files import
+   * `test` and `expect` from `../fixtures` instead of directly from
+   * `@playwright/test`. No `lib/heal.ts` template, no tsconfig path
+   * alias, no external service.
+   *
+   * When combined with `legacyHealing: true`, the v4.2 behaviour
+   * (bundled `lib/heal.ts` template + tsconfig alias + external
+   * `SELF_HEALING_URL` service) is emitted instead. Deprecated —
+   * removed in v5.0.
+   */
   selfHealing?: boolean;
+  /**
+   * v4.3.0 — ranker mode passed to `withSelfHealing({mode})` in the
+   * emitted fixtures. Ignored when `legacyHealing: true`.
+   */
+  selfHealingMode?: "heuristic" | "ml" | "hybrid";
+  /**
+   * v4.3.0 — keep emitting the v4.2 `lib/heal.ts` + external service
+   * shim. One-release deprecation window; will be removed in v5.0.
+   */
+  legacyHealing?: boolean;
   /**
    * v3.2.0 — pin emitted devDependency versions when set to `exact`.
    * Default `caret` matches existing behavior. See TestForge handoff
@@ -63,7 +86,23 @@ export async function scaffoldProject(
   const warnings = [...result.warnings];
 
   if (opts.selfHealing) {
-    await emitSelfHealingScaffold(opts.repoRoot, filesWritten, warnings);
+    if (opts.legacyHealing) {
+      warnings.push({
+        severity: "warn",
+        message:
+          "--legacy-healing emits the v4.2 bundled lib/heal.ts + external SELF_HEALING_URL service shim. This mode is deprecated and will be removed in v5.0.",
+        suggestion:
+          "Drop --legacy-healing to use the v4.3+ in-process @vijaypjavvadi/pw-self-heal integration (trained ONNX ranker, no server, no API key).",
+      });
+      await emitLegacyHealingScaffold(opts.repoRoot, filesWritten, warnings);
+    } else {
+      await emitPwSelfHealScaffold(
+        opts.repoRoot,
+        opts.selfHealingMode ?? "hybrid",
+        filesWritten,
+        warnings,
+      );
+    }
   }
 
   return {
@@ -74,10 +113,130 @@ export async function scaffoldProject(
 }
 
 /**
- * Add lib/heal.ts + tsconfig path alias + artefacts/.gitkeep when the
- * scaffold is run with --self-healing. All three operations are idempotent.
+ * v4.3.0+ — emit the pw-self-heal fixture wiring:
+ *  - `tests/fixtures.ts` — re-exports `test`/`expect` with
+ *    `withSelfHealing()` applied to the base test.
+ *  - `.pwheal/.gitkeep` — placeholder so the telemetry directory exists
+ *    on fresh clones (heal-events.jsonl is gitignored).
+ *  - Append `@vijaypjavvadi/pw-self-heal` + optional `onnxruntime-node`
+ *    to the emitted `package.json` devDependencies.
+ *
+ * All operations are idempotent — re-scaffold rewrites the fixture with
+ * the currently-selected mode but never appends duplicates to
+ * package.json. Existing `tests/fixtures.ts` is overwritten so mode
+ * changes propagate. Downstream consumers that need a custom fixture
+ * (extra beforeEach, storage state, etc.) can copy the emitted file
+ * to a different path and update spec imports accordingly.
  */
-async function emitSelfHealingScaffold(
+async function emitPwSelfHealScaffold(
+  repoRoot: string,
+  mode: "heuristic" | "ml" | "hybrid",
+  filesWritten: string[],
+  warnings: ReviewItem[],
+): Promise<void> {
+  // 1) tests/fixtures.ts — the minimal wrapper.
+  const testsDir = path.join(repoRoot, "tests");
+  await fs.ensureDir(testsDir);
+  const fixturesPath = path.join(testsDir, "fixtures.ts");
+  const fixturesContent = renderPwSelfHealFixtures(mode);
+  await fs.writeFile(fixturesPath, fixturesContent, "utf8");
+  if (!filesWritten.includes(fixturesPath)) filesWritten.push(fixturesPath);
+
+  // 2) .pwheal/.gitkeep so telemetry directory is committable.
+  const pwhealDir = path.join(repoRoot, ".pwheal");
+  await fs.ensureDir(pwhealDir);
+  const gitkeep = path.join(pwhealDir, ".gitkeep");
+  if (!(await fs.pathExists(gitkeep))) {
+    await fs.writeFile(
+      gitkeep,
+      "# @vijaypjavvadi/pw-self-heal writes heal-events.jsonl here at test\n" +
+        "# runtime. Files in this directory are intentionally excluded from\n" +
+        "# version control via the project's .gitignore — only this\n" +
+        "# placeholder is tracked so the directory exists on a fresh checkout.\n",
+      "utf8",
+    );
+    filesWritten.push(gitkeep);
+  }
+
+  // 3) Append pw-self-heal + optional onnxruntime-node to package.json.
+  const pkgPath = path.join(repoRoot, "package.json");
+  if (await fs.pathExists(pkgPath)) {
+    try {
+      const pkgRaw = await fs.readFile(pkgPath, "utf8");
+      const pkg = JSON.parse(pkgRaw);
+      pkg.devDependencies ??= {};
+      let mutated = false;
+      if (!pkg.devDependencies["@vijaypjavvadi/pw-self-heal"]) {
+        pkg.devDependencies["@vijaypjavvadi/pw-self-heal"] = "^1.1.2";
+        mutated = true;
+      }
+      // onnxruntime-node is required only for `ml` and `hybrid` modes.
+      // Emit it as optional so `mode: heuristic` users can drop it.
+      if (
+        (mode === "ml" || mode === "hybrid") &&
+        !pkg.devDependencies["onnxruntime-node"]
+      ) {
+        pkg.devDependencies["onnxruntime-node"] = "^1.18.0";
+        mutated = true;
+      }
+      if (mutated) {
+        // Preserve trailing newline convention.
+        const trailer = pkgRaw.endsWith("\n") ? "\n" : "";
+        await fs.writeFile(
+          pkgPath,
+          JSON.stringify(pkg, null, 2) + trailer,
+          "utf8",
+        );
+      }
+    } catch {
+      warnings.push({
+        severity: "warn",
+        message:
+          "Could not append @vijaypjavvadi/pw-self-heal to package.json — file was malformed. Add it manually: `npm i -D @vijaypjavvadi/pw-self-heal onnxruntime-node`.",
+      });
+    }
+  }
+}
+
+/**
+ * Build the fixtures.ts contents.
+ */
+function renderPwSelfHealFixtures(
+  mode: "heuristic" | "ml" | "hybrid",
+): string {
+  return [
+    "/**",
+    " * Generated by bdd2pw v4.3.0+ — self-healing test fixtures.",
+    " *",
+    " * Every scaffolded spec imports `test` and `expect` from this file",
+    " * instead of `@playwright/test` directly. `withSelfHealing()` wraps",
+    " * the base `test` so the `page` fixture heals broken locators at",
+    " * runtime — POM classes need zero changes.",
+    " *",
+    " * Ranker mode: " + JSON.stringify(mode) + " — override via",
+    " * `bdd2pw scaffold --self-healing-mode {heuristic|ml|hybrid}`.",
+    " *",
+    " * See https://www.npmjs.com/package/@vijaypjavvadi/pw-self-heal",
+    " */",
+    'import { test as base } from "@playwright/test";',
+    'import { withSelfHealing } from "@vijaypjavvadi/pw-self-heal";',
+    "",
+    "export const test = withSelfHealing(base, { mode: " +
+      JSON.stringify(mode) +
+      " });",
+    'export { expect } from "@playwright/test";',
+    "",
+  ].join("\n");
+}
+
+/**
+ * v4.2 — legacy healing scaffold. Deprecated in v4.3, removed in v5.0.
+ *
+ * Add lib/heal.ts + tsconfig path alias + artefacts/.gitkeep when the
+ * scaffold is run with --self-healing --legacy-healing. All three
+ * operations are idempotent.
+ */
+async function emitLegacyHealingScaffold(
   repoRoot: string,
   filesWritten: string[],
   warnings: ReviewItem[],

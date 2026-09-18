@@ -25,7 +25,7 @@ Most teams writing BDD test cases (via Cucumber `.feature` files, possibly autho
 
 Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live page with Chromium, picks the most stable locator for every interactive element, matches each step to a POM method call, and emits a runnable Playwright TypeScript repo — including `playwright.config.ts`, `pages/login.page.ts`, `tests/login.spec.ts`, and a `BDD_REVIEW.md` listing anything a human still needs to look at.
 
-## What `bdd2pw` is and isn't (as of v4.2.0)
+## What `bdd2pw` is and isn't (as of v4.3.0)
 
 `bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback across three providers**. The output is honest about its limits:
 
@@ -40,6 +40,7 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 - **Three hallucination-rejection gates on LLM output** (v4.0.1) — invented-helper detection, structured-pomCall guard, and bare-field-call trap. Bindings the LLM emits that would compile-fail land as `// TODO` comments with `BDD_REVIEW.md` entries instead of broken code. Locked by 19 dedicated unit tests.
 - **Six-pattern LLM-binding rewriter** (v4.1) — mechanically transforms common LLM emission mistakes (invented-helper shapes, bare-field args, unquoted string values, CSS-selector args, `page.<method>` invented-helpers in customBody, Locator-only matchers hallucinated on `page`, bare-identifier assertion locators) into valid Playwright-idiomatic code. Runs *before* the v4.0.1 gates; if a rewrite would still produce broken code, the binding is rejected and lands as TODO. Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Locked by 35 unit tests.
 - **DOM-drift detection via POM header hash** (v4.2) — every emitted POM carries a `@bdd2pw dom-hash` comment with a stable sha256 of the page's accessibility tree. On re-scaffold, bdd2pw diffs the new snapshot against the stored hash. Silent UI changes surface as a `DOM DRIFT` warning in `BDD_REVIEW.md` with both hashes and a suggested triage path. `--fail-on-drift` turns it into a non-zero exit code so CI can gate merges on silent UI regressions.
+- **In-process self-healing locators via `@vijaypjavvadi/pw-self-heal`** (v4.3) — `--self-healing` emits a 3-line `tests/fixtures.ts` that wraps the base `test` with `withSelfHealing({ mode })`. Every spec's top-of-file import auto-rewrites to pull `test` + `expect` from `./fixtures` instead of `@playwright/test` directly. POM classes are unchanged; healing is transparent. Ranker: trained ONNX model with a published Zenodo DOI ([10.5281/zenodo.19684439](https://doi.org/10.5281/zenodo.19684439)), GB AUC 0.9993, three modes (`heuristic` / `ml` / `hybrid`). No server, no API key, no Python — the DOM never leaves the machine.
 - **Data-driven scaffolds** (v4.0.0) — `--data <path>` injects CSV / JSON / XLSX rows into every Scenario Outline's `Examples:` table; `--gen-data --schema <path> --rows N` generates synthetic rows via Faker + optional per-column LLM calls (`llm:auto insurance claim description`); seeded (`--seed 42`) for reproducibility.
 - **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical.
 - **`--merge` mode** (v3.2) preserves `// bdd2pw:user-block id="..."` sections across regenerations so iterative locator tuning doesn't lose work.
@@ -366,14 +367,15 @@ output/
 | v4.0.0 | Data-driven scaffolds | `--data <path>` (CSV/JSON/XLSX) and `--gen-data --schema <path>` (Faker + LLM) inject Examples rows into Scenario Outlines. `LLMClient.generateText()` added to all three providers. **Additive only — no breaking changes.** |
 | v4.0.1 | LLM hallucination gates | Three-layer rejector for invented POM helpers — bindings that would compile-fail land as TODO instead of broken code. 19 unit tests lock the behaviour. |
 | v4.1.0 | LLM binding rewriter | Six-pattern rewriter that mechanically fixes common LLM emission mistakes (invented helpers, bare-field args, CSS-selector args, `page.<method>` in customBody, hallucinated Page matchers, bare-identifier assertion locators). Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Peer-reviewed publication in Elsevier SoftwareX. |
-| **v4.2.0 (current)** | DOM-drift detection | Every emitted POM carries a `@bdd2pw dom-hash` header (sha256 of the accessibility tree). Re-scaffold diffs against the stored hash and surfaces silent UI changes in `BDD_REVIEW.md`. `--fail-on-drift` CLI flag exits non-zero when drift is detected (CI merge gate). |
+| v4.2.0 | DOM-drift detection | Every emitted POM carries a `@bdd2pw dom-hash` header (sha256 of the accessibility tree). Re-scaffold diffs against the stored hash and surfaces silent UI changes in `BDD_REVIEW.md`. `--fail-on-drift` CLI flag exits non-zero when drift is detected (CI merge gate). |
+| **v4.3.0 (current)** | pw-self-heal integration | `--self-healing` swaps the v4.2 lib/heal.ts + external service shim for `@vijaypjavvadi/pw-self-heal` — trained ONNX ranker (Zenodo DOI 10.5281/zenodo.19684439), in-process, no server. Emits a 3-line `tests/fixtures.ts`; POM classes unchanged. `--legacy-healing` keeps v4.2 behaviour for one release. |
 
-### Next 6 months (Sep 2026 → Feb 2027, ~1 release/month)
+### Next 6 months (Oct 2026 → Mar 2027, ~1 release/month)
 
 | Target | Version | Theme | Headline |
 |---|---|---|---|
-| Sep 2026 | **v4.3.0** | LLM quarantine lane | `@llm-generated` Playwright tag on every LLM-derived scenario + `bdd2pw quarantine-stats` CLI that reports pass rate for the LLM-fallback lane separately from the deterministic lane. Teams can filter runs with `--grep-invert @llm-generated` for a "trusted only" execution. |
-| Oct 2026 | **v4.4.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future emitter improvements automatically flow to Selenium users. |
+| Oct 2026 | **v4.4.0** | LLM quarantine lane | `@llm-generated` Playwright tag on every LLM-derived scenario + `bdd2pw quarantine-stats` CLI that reports pass rate for the LLM-fallback lane separately from the deterministic lane. Teams can filter runs with `--grep-invert @llm-generated` for a "trusted only" execution. |
+| Nov 2026 | **v4.5.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future emitter improvements automatically flow to Selenium users. |
 | Oct 2026 | **v4.5.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
 | Nov 2026 | **v4.6.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
 | Nov 2026 | **v4.7.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |

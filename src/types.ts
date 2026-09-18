@@ -232,6 +232,20 @@ export interface ScaffoldOptions {
    */
   selfHealing?: boolean;
   /**
+   * v4.3.0 — self-healing ranker mode passed through to
+   * `withSelfHealing({mode})` in the emitted `tests/fixtures.ts`.
+   * Ignored when `legacyHealing: true` or `selfHealing: false`.
+   * Default `hybrid` — the production default per pw-self-heal docs
+   * (0.4·heuristic + 0.6·ml, 68.63% HSR on their bench).
+   */
+  selfHealingMode?: "heuristic" | "ml" | "hybrid";
+  /**
+   * v4.3.0 — keep emitting the v4.2 lib/heal.ts + external service
+   * shim instead of the pw-self-heal integration. Deprecated —
+   * removed in v5.0. Prints a warning in BDD_REVIEW.md.
+   */
+  legacyHealing?: boolean;
+  /**
    * v3.1.0 — opt-in instrumentation. See TestForge handoff Issue 4 and
    * Issue 5.
    *

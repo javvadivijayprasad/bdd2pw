@@ -57,7 +57,17 @@ program
   .option("--force", "Overwrite existing spec files", false)
   .option(
     "--self-healing",
-    "Wrap emitted locators in healOrThrow() and generate lib/heal.ts + tsconfig path alias. Locator events are logged to artefacts/heal-events.jsonl for the offline self-heal pipeline. Action-time healing is v1.2.",
+    "v4.3.0 — wire the emitted test suite to @vijaypjavvadi/pw-self-heal (in-process, trained ONNX ranker, no server). Writes tests/fixtures.ts + adds pw-self-heal to devDependencies. Combine with --legacy-healing to keep the v4.2 lib/heal.ts + external SELF_HEALING_URL service shim (deprecated).",
+    false,
+  )
+  .option(
+    "--self-healing-mode <mode>",
+    "v4.3.0 — pw-self-heal ranker mode: heuristic (no native deps) | ml (ONNX only) | hybrid (default: 0.4·heuristic + 0.6·ml).",
+    "hybrid",
+  )
+  .option(
+    "--legacy-healing",
+    "v4.3.0 — DEPRECATED. Keep emitting the v4.2 lib/heal.ts + external SELF_HEALING_URL service shim instead of the pw-self-heal integration. Removed in v5.0.",
     false,
   )
   .option(
@@ -165,6 +175,14 @@ program
         // Commander negates --no-discovery into opts.discovery=false
         noDiscovery: opts.discovery === false,
         selfHealing: opts.selfHealing,
+        // v4.3.0 — pw-self-heal integration.
+        selfHealingMode:
+          opts.selfHealingMode === "heuristic" ||
+          opts.selfHealingMode === "ml" ||
+          opts.selfHealingMode === "hybrid"
+            ? opts.selfHealingMode
+            : "hybrid",
+        legacyHealing: opts.legacyHealing === true,
         // v3.4.0 — domain rule packs. Empty array if --domains not passed.
         domains: opts.domains
           ? opts.domains
