@@ -2,7 +2,7 @@
   "name": "bdd2pw",
   "displayName": "bdd2pw — Gherkin to Playwright",
   "description": "Scaffold runnable Playwright TypeScript tests from your Gherkin .feature files. Right-click a feature, get POMs + specs ready to run.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "vijaypjavvadi",
   "license": "MIT",
   "icon": "icon.png",
@@ -256,7 +256,7 @@
     "test": "vscode-test"
   },
   "dependencies": {
-    "@vijaypjavvadi/bdd2pw": "^3.8.0"
+    "@vijaypjavvadi/bdd2pw": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",

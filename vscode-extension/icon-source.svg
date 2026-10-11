@@ -1,14 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="20" fill="#0f3d3e"/>
-  <g transform="translate(28 18)">
-    <!-- Feature file outline -->
+  <!-- Background: modern Playwright-inspired green gradient rounded square -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#0f5e46"/>
+      <stop offset="100%" stop-color="#0d3d2e"/>
+    </linearGradient>
+    <linearGradient id="doc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e5f2ec"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+
+  <!-- Feature file (top-left, tilted slightly for depth) -->
+  <g transform="translate(20 20) rotate(-6)">
     <path
-      d="M0 8a8 8 0 0 1 8-8h40l24 24v68a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8V8z"
-      fill="#f3f7f4"
+      d="M0 6a6 6 0 0 1 6-6h28l16 16v48a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6z"
+      fill="url(#doc)"
     />
-    <!-- Fold -->
-    <path d="M48 0v24h24z" fill="#cfdbd2"/>
-    <!-- Play triangle (Gherkin in / Playwright out) -->
-    <path d="M22 44l28 18-28 18V44z" fill="#2dd4bf"/>
+    <!-- Corner fold -->
+    <path d="M34 0v16h16z" fill="#c0d6cb"/>
+    <!-- Gherkin lines -->
+    <rect x="8"  y="26" width="30" height="3" rx="1.5" fill="#0d3d2e" opacity="0.75"/>
+    <rect x="8"  y="34" width="24" height="3" rx="1.5" fill="#0d3d2e" opacity="0.55"/>
+    <rect x="8"  y="42" width="28" height="3" rx="1.5" fill="#0d3d2e" opacity="0.55"/>
+    <rect x="8"  y="50" width="20" height="3" rx="1.5" fill="#0d3d2e" opacity="0.55"/>
+  </g>
+
+  <!-- Bold central arrow: the transformation -->
+  <g transform="translate(48 56)" fill="#2dd4bf">
+    <path d="M0 8 L18 8 L18 0 L34 16 L18 32 L18 24 L0 24 Z"/>
+  </g>
+
+  <!-- Playwright spec file (bottom-right, tilted opposite for depth) -->
+  <g transform="translate(58 58) rotate(6)">
+    <path
+      d="M0 6a6 6 0 0 1 6-6h28l16 16v48a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6z"
+      fill="url(#doc)"
+    />
+    <path d="M34 0v16h16z" fill="#c0d6cb"/>
+    <!-- Playwright brand green check + code lines -->
+    <path
+      d="M9 32 l6 6 l14 -14"
+      stroke="#10b981"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      fill="none"
+    />
+    <rect x="8"  y="48" width="30" height="3" rx="1.5" fill="#0d3d2e" opacity="0.55"/>
+    <rect x="8"  y="56" width="22" height="3" rx="1.5" fill="#0d3d2e" opacity="0.55"/>
   </g>
 </svg>
