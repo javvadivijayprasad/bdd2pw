@@ -121,6 +121,12 @@ export class OpenAILLMClient implements LLMClient {
   callsAttempted(): number {
     return this.attemptsCounter;
   }
+  providerName(): "anthropic" | "openai" | "gemini" {
+    return "openai";
+  }
+  governanceSkipped(): boolean {
+    return this.skipGovernance;
+  }
   cacheBackendPersistent(): boolean | null {
     return this.cachePersistent;
   }

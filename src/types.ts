@@ -107,6 +107,45 @@ export interface StepBinding {
    * flag is per-binding, the emitter aggregates per-scenario.
    */
   apiContext?: true;
+  /**
+   * v4.4.0 — provenance. Records whether this binding was produced by
+   * the deterministic rule table or by the LLM fallback. Set by the
+   * step-match orchestrator (llmStepMatcher). The emitter uses the
+   * presence of any `provenance.source === "llm"` binding in a
+   * scenario to add the `@llm-generated` tag; the meta-sidecar
+   * writer copies the full record into `step.llm`.
+   *
+   * When absent, the binding is treated as rule-produced — the
+   * default for every step emitted without --llm.
+   */
+  provenance?: {
+    source: "rule" | "llm";
+    /**
+     * v4.4.0 Slice 2 — rule attribution. Populated when
+     * `source === "rule"`. `ruleId` matches `ruleIdFor(rule, idx)`
+     * in `stepMatcher.ts` (e.g. `"rule-14"`, `"domain-03"`, etc.).
+     * `pack` names the domain rule pack when the rule is domain-scoped;
+     * `undefined` for the built-in registry.
+     */
+    ruleId?: string;
+    pack?: "banking" | "healthcare" | "insurance" | "retail" | "gov" | "education" | "telecom";
+    /** Populated when `source === "llm"`. */
+    llm?: {
+      provider: "anthropic" | "openai" | "gemini";
+      model: string;
+      /** sha256 hash of the prompt actually sent to the provider. */
+      promptHash?: string;
+      /** True when the binding came from the LLM cache instead of a live provider call. */
+      cached: boolean;
+      /**
+       * Whether the governance sidecar sanitised the prompt.
+       * `"skipped"` when --llm-skip-governance was passed for this run.
+       */
+      governance: "sanitised" | "skipped";
+      /** ISO timestamp of when the binding was recorded. */
+      at: string;
+    };
+  };
 }
 
 // --- Reporting -------------------------------------------------------------
@@ -135,6 +174,19 @@ export interface ScaffoldOptions {
   page: string;
   repo: string;
   pages?: string[];
+  /**
+   * v4.4.0 — override the emitted spec filename stem. When omitted,
+   * bdd2pw derives the stem from the Page Object name
+   * (`LoginPage` → `tests/login.spec.ts`). When set, the spec file
+   * is written to `tests/<specName>.spec.ts` instead. The POM
+   * filename, class name, and import path are unaffected.
+   *
+   * Added for upstream consumers (attestqa, custom orchestrators)
+   * that keep one feature file per epic and expect
+   * `tests/<feature-stem>.spec.ts` regardless of which POM the
+   * feature targets. Passing `--spec-name` from the CLI sets this.
+   */
+  specName?: string;
   storageState?: string;
   headed?: boolean;
   llm?: "anthropic" | "openai" | "gemini";

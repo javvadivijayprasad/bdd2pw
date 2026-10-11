@@ -214,6 +214,20 @@ export interface LLMClient {
   cacheBackendFallbackReason?(): string | undefined;
   /** Close any underlying resources (cache db handle, etc.). */
   close?(): Promise<void>;
+  /**
+   * v4.4.0 — provider identifier the binding provenance system uses to
+   * tag scenarios and populate the meta-sidecar's `llm.provider` field.
+   * Optional for backwards compat — older clients return undefined and
+   * `matchStepWithLLM` falls back to `"anthropic"` as the historical
+   * default.
+   */
+  providerName?(): "anthropic" | "openai" | "gemini";
+  /**
+   * v4.4.0 — was governance skipped for this client? Used to fill the
+   * meta-sidecar's `llm.governance` field (`"sanitised"` | `"skipped"`).
+   * Optional; defaults to `"sanitised"` when absent.
+   */
+  governanceSkipped?(): boolean;
 }
 
 /**

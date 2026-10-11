@@ -41,6 +41,24 @@ export interface MetaSidecarStep {
   locator?: string;
   /** Matcher name or method name when the binding has one. */
   assertion?: string;
+  /**
+   * v4.4.0 — provenance. `null` when this step was bound by the LLM
+   * fallback; a `{ ruleId, pack? }` object when bound by the
+   * deterministic rule table. Absent only when the binding was
+   * emitted before v4.4 (old sidecars remain parseable).
+   */
+  rule?: null | { ruleId: string; pack?: string };
+  /**
+   * v4.4.0 — populated iff this step was bound by the LLM fallback.
+   * Consumed by `bdd2pw quarantine-stats` and `bdd2pw coverage`.
+   */
+  llm?: {
+    provider: "anthropic" | "openai" | "gemini";
+    model: string;
+    cached: boolean;
+    governance: "sanitised" | "skipped";
+    at: string;
+  };
 }
 
 export interface MetaSidecarScenario {
@@ -100,6 +118,25 @@ export function bindingsToMetaSteps(
     } else if (b.assertion) {
       step.locator = b.assertion.locator;
       step.assertion = b.assertion.matcher;
+    }
+    // v4.4.0 — provenance passthrough.
+    //   LLM binding → `rule: null` + full `llm` block.
+    //   Rule binding → `rule: { ruleId, pack? }`.
+    //   No provenance (legacy binding) → both fields absent.
+    if (b.provenance?.source === "llm" && b.provenance.llm) {
+      step.rule = null;
+      step.llm = {
+        provider: b.provenance.llm.provider,
+        model: b.provenance.llm.model,
+        cached: b.provenance.llm.cached,
+        governance: b.provenance.llm.governance,
+        at: b.provenance.llm.at,
+      };
+    } else if (b.provenance?.source === "rule" && b.provenance.ruleId) {
+      step.rule = {
+        ruleId: b.provenance.ruleId,
+        ...(b.provenance.pack ? { pack: b.provenance.pack } : {}),
+      };
     }
     return step;
   });

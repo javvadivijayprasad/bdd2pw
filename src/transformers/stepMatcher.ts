@@ -64,21 +64,57 @@ const DOMAIN_RULES: Record<DomainName, Rule[]> = {
 };
 
 let activeDomainRules: Rule[] = [];
+/**
+ * v4.4.0 Slice 2 — parallel array to `activeDomainRules`. Index N
+ * names the domain pack that owns `activeDomainRules[N]`. Consumed by
+ * `matchStep()` when it decorates a rule-produced binding with
+ * `provenance.pack`.
+ */
+let activeDomainRulePacks: DomainName[] = [];
 
 export function setActiveDomains(domains: readonly DomainName[] | undefined): void {
   if (!domains || domains.length === 0) {
     activeDomainRules = [];
+    activeDomainRulePacks = [];
     return;
   }
   const seen = new Set<DomainName>();
   const out: Rule[] = [];
+  const packs: DomainName[] = [];
   for (const d of domains) {
     if (seen.has(d)) continue;
     seen.add(d);
     const pack = DOMAIN_RULES[d];
-    if (pack) out.push(...pack);
+    if (pack) {
+      for (const r of pack) {
+        out.push(r);
+        packs.push(d);
+      }
+    }
   }
   activeDomainRules = out;
+  activeDomainRulePacks = packs;
+}
+
+/**
+ * v4.4.0 Slice 2 — returns the full list of every rule id currently in
+ * the registry, ordered as `matchStep()` walks them. Consumed by
+ * `bdd2pw coverage` to seed the "dead rules" report (a rule appears in
+ * this list but not in any sidecar).
+ */
+export function listAllRuleIds(): { ruleId: string; pack?: DomainName }[] {
+  const domainCount = activeDomainRules.length;
+  const out: { ruleId: string; pack?: DomainName }[] = [];
+  for (let i = 0; i < domainCount; i++) {
+    out.push({
+      ruleId: `domain-${String(i + 1).padStart(2, "0")}`,
+      pack: activeDomainRulePacks[i],
+    });
+  }
+  for (let i = 0; i < RULES.length; i++) {
+    out.push({ ruleId: `rule-${String(i + 1).padStart(2, "0")}` });
+  }
+  return out;
 }
 
 export interface MatchStepsInput {
@@ -132,11 +168,30 @@ export function matchStep(
     activeDomainRules.length > 0
       ? [...activeDomainRules, ...RULES]
       : RULES;
-  for (const rule of effectiveRules) {
+  const domainCount = activeDomainRules.length;
+  for (let idx = 0; idx < effectiveRules.length; idx++) {
+    const rule = effectiveRules[idx];
     const m = normalisedStep.text.match(rule.pattern);
     if (m) {
       const result = rule.build(m, normalisedStep, pom, pageVar);
-      if (result) return result;
+      if (result) {
+        // v4.4.0 Slice 2 — attach rule provenance so the meta-sidecar
+        // + `bdd2pw coverage` CLI can report which rule bound each
+        // step. If the rule's own build() already set a provenance
+        // block (extremely rare — no rule does today), leave it alone.
+        if (result.provenance) return result;
+        const isDomain = idx < domainCount;
+        return {
+          ...result,
+          provenance: {
+            source: "rule",
+            ruleId: isDomain
+              ? `domain-${String(idx + 1).padStart(2, "0")}`
+              : `rule-${String(idx - domainCount + 1).padStart(2, "0")}`,
+            pack: isDomain ? activeDomainRulePacks[idx] : undefined,
+          },
+        };
+      }
     }
   }
   return {

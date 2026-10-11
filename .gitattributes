@@ -1,0 +1,29 @@
+# v4.4.0 — line-ending normalization. Every text file in the repo is
+# stored with LF; checkouts on Windows don't rewrite them.
+#
+# Historically this repo had no .gitattributes, so Windows editors
+# auto-converted LF -> CRLF on save and every `git status` /
+# `git diff` was drowned in "LF will be replaced by CRLF" warnings.
+# Fixed in v4.4.0 per the attestqa reply dated 2026-10-11; a
+# follow-up "chore: normalize line endings" commit runs
+# `git add --renormalize .` so the whole tree lands at LF.
+#
+# Platform-specific scripts stay as CRLF where the OS requires it
+# (PowerShell / Windows batch).
+
+* text=auto eol=lf
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binaries must never be normalized.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.vsix binary
+*.tgz  binary
+*.zip  binary
+*.onnx binary

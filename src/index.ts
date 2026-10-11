@@ -509,6 +509,24 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         });
       }
     }
+    // v4.4.0 — Slice 1 (LLM quarantine lane). Any scenario with at
+    // least one LLM-produced binding earns the `@llm-generated` tag so
+    // teams can filter runs with `--grep-invert @llm-generated` for a
+    // trusted-only lane. The tag is idempotent — a re-scaffold that
+    // finds every step now rule-bound drops it automatically.
+    const hasLlmBinding = sc.bindings.some(
+      (b) => b.provenance?.source === "llm",
+    );
+    if (hasLlmBinding) {
+      const existing = sc.tags ?? [];
+      if (!existing.includes("@llm-generated")) {
+        sc.tags = [...existing, "@llm-generated"];
+      }
+    } else if (sc.tags) {
+      // No LLM bindings in this scenario — strip the tag if it was
+      // present from a previous re-scaffold with different inputs.
+      sc.tags = sc.tags.filter((t) => t !== "@llm-generated");
+    }
   }
   // Background bindings emit into beforeEach but their warnings were being
   // dropped from the review report. Surface them with a [Background] tag.
@@ -598,7 +616,16 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // 9) Emit spec file. pageObjectFileName returns "login.page.ts"; strip
     //    the trailing ".ts" for both the spec file stem and the import path.
     const pomStem = pomFileName.replace(/\.ts$/, ""); // "login.page"
-    const specStem = pomStem.replace(/\.page$/, ""); // "login"
+    // v4.4.0 — spec stem resolution. When `opts.specName` is set, use it
+    // verbatim for the spec file + its sidecar + merge-mode lookup.
+    // Otherwise fall back to the historical POM-derived stem. The POM
+    // filename, class name, and `../pages/<pomStem>` import path are
+    // never touched — only the spec filename. See attestqa integration
+    // note dated 2026-10-11 for the motivation.
+    const resolvedSpecName = opts.specName && opts.specName.trim().length > 0
+      ? opts.specName.trim().replace(/\.spec\.ts$/, "").replace(/\.spec$/, "")
+      : undefined;
+    const specStem = resolvedSpecName ?? pomStem.replace(/\.page$/, ""); // "login"
     const specPath = path.join(opts.repo, "tests", `${specStem}.spec.ts`);
     const specEmit = emitTestFile({
       describeName: feature.name,

@@ -9,6 +9,16 @@ import * as path from "path";
 import { scaffold, analyze, updatePom } from "./index";
 import { proposeRules } from "./llm";
 import { analyseHealStats } from "./reports/healStats";
+import {
+  analyseQuarantineStats,
+  renderQuarantineStatsTable,
+} from "./reports/quarantineStats";
+import {
+  analyseCoverage,
+  renderCoverageTable,
+  renderSuggestRetire,
+} from "./reports/coverage";
+import { listAllRuleIds, setActiveDomains } from "./transformers/stepMatcher";
 import { logger } from "./utils/logger";
 
 const program = new Command();
@@ -30,6 +40,10 @@ program
   .requiredOption("--page <Name>", "Page Object class name (PascalCase)")
   .requiredOption("--repo <dir>", "Target Playwright TS repo (created if missing)")
   .option("--pages <list>", "Comma-separated list of additional Page Object names")
+  .option(
+    "--spec-name <stem>",
+    "v4.4.0 — override the emitted spec filename stem. Writes `tests/<stem>.spec.ts` instead of the default POM-derived name (e.g. `login.spec.ts` from `LoginPage`). Useful when one feature file maps to one spec regardless of which POM it targets (attestqa, epic-per-feature layouts).",
+  )
   .option("--storage-state <path>", "Pre-authenticated storage state JSON")
   .option("--headed", "Show browser during MCP scan", false)
   .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
@@ -161,6 +175,8 @@ program
         page: opts.page,
         repo: path.resolve(opts.repo),
         pages: opts.pages?.split(",").map((s: string) => s.trim()),
+        // v4.4.0 — attestqa integration: let the caller name the spec file.
+        specName: typeof opts.specName === "string" ? opts.specName : undefined,
         storageState: opts.storageState,
         headed: opts.headed,
         llm: opts.llm,
@@ -358,6 +374,114 @@ program
  * and the candidate selectors that got promoted. Run after
  * `npx playwright test` in CI to track self-healing ROI per test run.
  */
+program
+  .command("quarantine-stats")
+  .description(
+    "v4.4.0 Slice 1 — aggregate LLM-provenance data (spec.meta.json sidecars + candidate-rules.jsonl) into a per-feature quarantine-lane report. Writes <repo>/artefacts/quarantine-stats.json.",
+  )
+  .argument(
+    "<repo>",
+    "Path to the scaffolded test repo (contains tests/ and artefacts/).",
+  )
+  .option(
+    "--out <path>",
+    "Where to write quarantine-stats.json. Defaults to <repo>/artefacts/quarantine-stats.json.",
+  )
+  .option("--json", "Print the report as JSON to stdout instead of the table.", false)
+  .action(async (repo: string, raw: { out?: string; json?: boolean }) => {
+    try {
+      const pkgVersion = (
+        require("../package.json") as { version: string }
+      ).version;
+      const { stats, outputPath } = await analyseQuarantineStats({
+        repo: path.resolve(repo),
+        version: pkgVersion,
+        outputPath: raw.out,
+      });
+      if (raw.json === true) {
+        process.stdout.write(JSON.stringify(stats, null, 2) + "\n");
+      } else {
+        process.stdout.write(renderQuarantineStatsTable(stats));
+        process.stdout.write(
+          `\nquarantine-stats: wrote ${outputPath}\n`,
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, "quarantine-stats: read error");
+      process.exit(1);
+    }
+  });
+
+program
+  .command("coverage")
+  .description(
+    "v4.4.0 Slice 2 — rule + pack hit rate, dead rules, promotion trail, heal pressure. Reads spec.meta.json + candidate-rules.jsonl + heal-events.jsonl. Writes <repo>/artefacts/coverage.json.",
+  )
+  .argument(
+    "<repo>",
+    "Path to the scaffolded test repo (contains tests/ and artefacts/).",
+  )
+  .option("--out <path>", "Where to write coverage.json. Defaults to <repo>/artefacts/coverage.json.")
+  .option("--json", "Print the report as JSON to stdout instead of the table.", false)
+  .option(
+    "--suggest-retire",
+    "Print a copyable stanza listing dead packs + rules for this repo. Never edits anything.",
+    false,
+  )
+  .option(
+    "--domains <list>",
+    "Comma-separated domain packs to consider active (matches the scaffold's --domains flag). Empty = core rules only. Affects the dead-rules calculation.",
+  )
+  .action(
+    async (
+      repo: string,
+      raw: {
+        out?: string;
+        json?: boolean;
+        suggestRetire?: boolean;
+        domains?: string;
+      },
+    ) => {
+      try {
+        // Match the scaffold's --domains behaviour so the ruleId ↔ pack
+        // mapping the coverage report uses agrees with what the sidecar
+        // would have written.
+        const domainList = raw.domains
+          ? raw.domains
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined;
+        if (domainList) {
+          // Best-effort — invalid names are silently dropped by setActiveDomains.
+          setActiveDomains(
+            domainList as Parameters<typeof setActiveDomains>[0],
+          );
+        }
+        const pkgVersion = (
+          require("../package.json") as { version: string }
+        ).version;
+        const { coverage, outputPath } = await analyseCoverage({
+          repo: path.resolve(repo),
+          version: pkgVersion,
+          outputPath: raw.out,
+          registryRuleIds: listAllRuleIds(),
+        });
+        if (raw.json === true) {
+          process.stdout.write(JSON.stringify(coverage, null, 2) + "\n");
+        } else if (raw.suggestRetire === true) {
+          process.stdout.write(renderSuggestRetire(coverage));
+        } else {
+          process.stdout.write(renderCoverageTable(coverage));
+          process.stdout.write(`\ncoverage: wrote ${outputPath}\n`);
+        }
+      } catch (err) {
+        logger.error({ err }, "coverage: read error");
+        process.exit(1);
+      }
+    },
+  );
+
 program
   .command("heal-stats")
   .description(

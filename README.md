@@ -25,7 +25,7 @@ Most teams writing BDD test cases (via Cucumber `.feature` files, possibly autho
 
 Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live page with Chromium, picks the most stable locator for every interactive element, matches each step to a POM method call, and emits a runnable Playwright TypeScript repo — including `playwright.config.ts`, `pages/login.page.ts`, `tests/login.spec.ts`, and a `BDD_REVIEW.md` listing anything a human still needs to look at.
 
-## What `bdd2pw` is and isn't (as of v4.3.0)
+## What `bdd2pw` is and isn't (as of v4.4.0)
 
 `bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback across three providers**. The output is honest about its limits:
 
@@ -41,6 +41,7 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 - **Six-pattern LLM-binding rewriter** (v4.1) — mechanically transforms common LLM emission mistakes (invented-helper shapes, bare-field args, unquoted string values, CSS-selector args, `page.<method>` invented-helpers in customBody, Locator-only matchers hallucinated on `page`, bare-identifier assertion locators) into valid Playwright-idiomatic code. Runs *before* the v4.0.1 gates; if a rewrite would still produce broken code, the binding is rejected and lands as TODO. Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Locked by 35 unit tests.
 - **DOM-drift detection via POM header hash** (v4.2) — every emitted POM carries a `@bdd2pw dom-hash` comment with a stable sha256 of the page's accessibility tree. On re-scaffold, bdd2pw diffs the new snapshot against the stored hash. Silent UI changes surface as a `DOM DRIFT` warning in `BDD_REVIEW.md` with both hashes and a suggested triage path. `--fail-on-drift` turns it into a non-zero exit code so CI can gate merges on silent UI regressions.
 - **In-process self-healing locators via `@vijaypjavvadi/pw-self-heal`** (v4.3) — `--self-healing` emits a 3-line `tests/fixtures.ts` that wraps the base `test` with `withSelfHealing({ mode })`. Every spec's top-of-file import auto-rewrites to pull `test` + `expect` from `./fixtures` instead of `@playwright/test` directly. POM classes are unchanged; healing is transparent. Ranker: trained ONNX model with a published Zenodo DOI ([10.5281/zenodo.19684439](https://doi.org/10.5281/zenodo.19684439)), GB AUC 0.9993, three modes (`heuristic` / `ml` / `hybrid`). No server, no API key, no Python — the DOM never leaves the machine.
+- **Legible provenance — `@llm-generated` tag + rule attribution + two report CLIs** (v4.4) — every emitted step records which rule (or which LLM provider + model) produced it in `*.spec.meta.json`. A scenario with an LLM-bound step gets the `@llm-generated` tag so `npx playwright test --grep-invert @llm-generated` runs the trusted lane. `bdd2pw quarantine-stats` reports scenarios / steps / cache-hit share / promotions per lane. `bdd2pw coverage` turns the same data into decisions: rule hit rate, dead rules, dead packs, promotion trail (candidate → rule → firing), and heal pressure. Both write JSON sidecars with a shared shape. Both are reports, not gates.
 - **Data-driven scaffolds** (v4.0.0) — `--data <path>` injects CSV / JSON / XLSX rows into every Scenario Outline's `Examples:` table; `--gen-data --schema <path> --rows N` generates synthetic rows via Faker + optional per-column LLM calls (`llm:auto insurance claim description`); seeded (`--seed 42`) for reproducibility.
 - **`updatePom` is append-only by construction.** Re-scanning a page that already has a Page Object adds new locators only. Hand-edited method bodies, custom helper methods, custom imports are all preserved byte-identical.
 - **`--merge` mode** (v3.2) preserves `// bdd2pw:user-block id="..."` sections across regenerations so iterative locator tuning doesn't lose work.
@@ -120,6 +121,62 @@ bdd2pw scaffold ./my.feature \
 ```
 
 Every successful LLM-binding is appended to `<repo>/artefacts/candidate-rules.jsonl` so an offline review pipeline can propose new deterministic rules. Auto-write back to `stepMatcher.ts` is deferred to v2.1+ — for v2.0 the LLM is a runtime overlay, never a code generator for the matcher itself.
+
+### Two-lane runs — trusted vs review (v4.4+)
+
+A scenario in which at least one step was bound by the LLM fallback is emitted with a `@llm-generated` tag next to its existing tags. That lets Playwright's own `--grep`/`--grep-invert` filter split every run into two lanes with zero framework wiring:
+
+```bash
+# Trusted lane — only scenarios whose every step was rule-bound
+npx playwright test --grep-invert @llm-generated
+
+# Review lane — only the scenarios that used the LLM fallback
+npx playwright test --grep @llm-generated
+```
+
+Per-step provenance lives in the sidecar `<spec>.spec.meta.json` next to the emitted spec. LLM-bound steps carry `"rule": null` plus an `"llm": { provider, model, cached, governance, at }` block; rule-bound steps carry neither field. Everything the tag hides at scenario level is inspectable at step level.
+
+Aggregate a scaffolded repo with:
+
+```bash
+npx bdd2pw quarantine-stats ./my-tests           # table + writes artefacts/quarantine-stats.json
+npx bdd2pw quarantine-stats ./my-tests --json    # machine-readable, same shape as the file
+```
+
+Sample table output:
+
+```
+scenarios: 24 total · 21 deterministic · 3 @llm-generated
+steps:     58 total · 55 by rule · 3 by LLM
+LLM cache hit share: 66.7%
+
+promotions: 2/9 candidate step(s) now rule-bound
+```
+
+The `promotions` line is the story: candidate step-texts recorded in `artefacts/candidate-rules.jsonl` from earlier runs that no longer need the LLM because a deterministic rule now covers them. That number going up is the point of running the LLM at all — a scaffold, then a rule, then no LLM.
+
+`quarantine-stats` is a report, not a gate. It exits 0 on every clean read and only fails with a non-zero code on a real I/O error against the repo root. Wire it into your CI dashboard, don't wire it into your merge gate.
+
+### Rule + pack coverage (v4.4+)
+
+Slice 1 tells you which lane a step is in. Coverage tells you which rules earned their place in the table:
+
+```bash
+npx bdd2pw coverage ./my-tests --domains banking,retail
+npx bdd2pw coverage ./my-tests --json
+npx bdd2pw coverage ./my-tests --suggest-retire
+```
+
+The report answers four things:
+
+- **rule hit rate** — for every rule that fired, how many steps it bound, plus up to 3 sample step texts.
+- **dead rules / dead packs** — every rule in the current registry that did NOT fire in this repo, and every domain pack whose rules were all dead. "Dead here" is a repo-scoped observation, not a global verdict on the rule.
+- **promotion trail** — same field as `quarantine-stats`. Candidate steps recorded by past LLM fallbacks that are now bound by a rule.
+- **heal pressure** — top locators from `artefacts/heal-events.jsonl` (or `.pwheal/heal-events.jsonl` when running with the v4.3 in-process healer). A rule that binds and then always needs healing is worse than no rule.
+
+`--suggest-retire` prints a copyable stanza listing the dead packs and dead rules; it never edits `stepMatcher.ts` or your bdd2pw config. Paste the parts you want to apply.
+
+The `totals` and `promotions` blocks in `coverage.json` are byte-identical to the same-named blocks in `quarantine-stats.json`, so a dashboard reading either one gets the same numbers.
 
 ### Governance sanitization (mandatory by default)
 
@@ -368,20 +425,19 @@ output/
 | v4.0.1 | LLM hallucination gates | Three-layer rejector for invented POM helpers — bindings that would compile-fail land as TODO instead of broken code. 19 unit tests lock the behaviour. |
 | v4.1.0 | LLM binding rewriter | Six-pattern rewriter that mechanically fixes common LLM emission mistakes (invented helpers, bare-field args, CSS-selector args, `page.<method>` in customBody, hallucinated Page matchers, bare-identifier assertion locators). Bench result: 3/8 → **8/8 apps produce specs that pass `tsc --noEmit`**. Peer-reviewed publication in Elsevier SoftwareX. |
 | v4.2.0 | DOM-drift detection | Every emitted POM carries a `@bdd2pw dom-hash` header (sha256 of the accessibility tree). Re-scaffold diffs against the stored hash and surfaces silent UI changes in `BDD_REVIEW.md`. `--fail-on-drift` CLI flag exits non-zero when drift is detected (CI merge gate). |
-| **v4.3.0 (current)** | pw-self-heal integration | `--self-healing` swaps the v4.2 lib/heal.ts + external service shim for `@vijaypjavvadi/pw-self-heal` — trained ONNX ranker (Zenodo DOI 10.5281/zenodo.19684439), in-process, no server. Emits a 3-line `tests/fixtures.ts`; POM classes unchanged. `--legacy-healing` keeps v4.2 behaviour for one release. |
+| v4.3.0 | pw-self-heal integration | `--self-healing` swaps the v4.2 lib/heal.ts + external service shim for `@vijaypjavvadi/pw-self-heal` — trained ONNX ranker (Zenodo DOI 10.5281/zenodo.19684439), in-process, no server. Emits a 3-line `tests/fixtures.ts`; POM classes unchanged. `--legacy-healing` keeps v4.2 behaviour for one release. |
+| **v4.4.0 (current)** | Legible provenance | `@llm-generated` scenario tag + rule/pack attribution recorded in `*.spec.meta.json`. Two report CLIs: `bdd2pw quarantine-stats` splits the suite into trusted vs review lanes; `bdd2pw coverage` reports rule hit rate, dead rules, dead packs, promotion trail, and heal pressure. Reports, not gates. |
 
 ### Next 6 months (Oct 2026 → Mar 2027, ~1 release/month)
 
 | Target | Version | Theme | Headline |
 |---|---|---|---|
-| Oct 2026 | **v4.4.0** | LLM quarantine lane | `@llm-generated` Playwright tag on every LLM-derived scenario + `bdd2pw quarantine-stats` CLI that reports pass rate for the LLM-fallback lane separately from the deterministic lane. Teams can filter runs with `--grep-invert @llm-generated` for a "trusted only" execution. |
-| Nov 2026 | **v4.5.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future emitter improvements automatically flow to Selenium users. |
-| Oct 2026 | **v4.5.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
-| Nov 2026 | **v4.6.0** | Domain packs | Three more opt-in packs: **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
-| Nov 2026 | **v4.7.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
-| Dec 2026 | **v4.8.0** | Coverage analyzer | `bdd2pw coverage` CLI: which deterministic rules fired on which features across a fleet, per-pack hit rate, dead-rule report, suggestion to retire unused rules. |
-| Jan 2027 | **v4.9.0** | CI/CD templates | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs. Opt-in via `--ci <provider>`. |
-| Feb 2027 | **v5.0.0** | Mobile dialect | Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the same emitter pipeline; opt-in via `domains: ["mobile"]`. Bumps to v5 alongside a small set of default flips (llm-stats + healing become opt-out). Migration guide ships alongside. |
+| Oct 2026 | **v4.5.0** | Mobile dialect | New `mobile` domain pack. Touch / swipe / scroll-into-view rules + responsive viewport assertions. Reuses the existing emitter pipeline; opt-in via `domains: ["mobile"]`. Scenarios tagged `@mobile` scaffold against a mobile device descriptor (Pixel 7 by default). |
+| Nov 2026 | **v4.6.0** | sel2pw merge | sel2pw migrated onto `@vijaypjavvadi/pw-emit` — three packages share one emitter. All future emitter improvements automatically flow to Selenium users. |
+| Nov 2026 | **v4.7.0** | Auto-rules | `bdd2pw apply-proposals --interactive` — walks the human through each v3.6 proposal, validates the regex compiles + matches the sample texts, optionally appends to `stepMatcher.ts`. Closes the propose-rules loop. |
+| Dec 2026 | **v4.8.0** | Domain packs (3 more) | **fintech** (KYC, AML, trading desks), **real-estate** (MLS, listings, escrow), **hospitality** (PMS, reservations, OTA). ~60 more rules. |
+| Jan 2027 | **v4.9.0** | API v2 | WebSocket assertion rules, multipart file-upload patterns, GraphQL query / mutation / subscription rules. Extends v3.0's API testing surface. |
+| Feb 2027 | **v5.0.0** | CI/CD templates + default flips | Optional scaffolder output: GitHub Actions / GitLab CI / Azure Pipelines / CircleCI starter workflows wired to run the generated specs (opt-in via `--ci <provider>`). Bumps to v5 alongside a small set of default flips (llm-stats + healing become opt-out). Migration guide ships alongside. |
 
 Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains: []` byte-stable for existing users so the upgrade path stays painless.
 

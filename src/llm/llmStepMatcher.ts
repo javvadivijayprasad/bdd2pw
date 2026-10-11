@@ -122,6 +122,12 @@ export async function matchStepWithLLM(
           : ruleBased.warning,
       };
     }
+    // v4.4.0 — resolve provenance metadata once for both the
+    // candidate-rules.jsonl append and the StepBinding.provenance
+    // decoration below.
+    const provider = ctx.llm.providerName?.() ?? "anthropic";
+    const governance: "sanitised" | "skipped" =
+      ctx.llm.governanceSkipped?.() === true ? "skipped" : "sanitised";
     // Append to candidate-rules.jsonl for offline review. Best-effort.
     if (ctx.candidates) {
       await ctx.candidates.append({
@@ -135,12 +141,28 @@ export async function matchStepWithLLM(
           fieldNames: pom.fields.map((f) => f.fieldName),
           methodNames: pom.methods.map((m) => m.name),
         },
-        provider: "anthropic",
+        provider,
         model: result.model ?? "(unknown)",
         fromCache: result.fromCache,
       });
     }
-    return result.binding;
+    // v4.4.0 — decorate the binding with LLM provenance so downstream
+    // consumers (scenario tagger, meta-sidecar writer, quarantine-stats)
+    // can distinguish rule-produced from model-produced steps without
+    // re-running the matcher.
+    return {
+      ...result.binding,
+      provenance: {
+        source: "llm",
+        llm: {
+          provider,
+          model: result.model ?? "(unknown)",
+          cached: result.fromCache,
+          governance,
+          at: new Date().toISOString(),
+        },
+      },
+    };
   } catch (err) {
     // v2.0.1: flattenForComment so multi-line error messages (the classic
     // case: better-sqlite3 NODE_MODULE_VERSION mismatch — a 5-line stack
@@ -267,6 +289,12 @@ export async function matchScenarioWithLLM(
   // 5) Distribute results back to their original positions. Write
   //    candidate-rules.jsonl for every success; annotate warnings
   //    for every failure.
+  // v4.4.0 — resolve provenance once for the whole batch. Every slot
+  // in this batch used the same LLM client, so provider + governance
+  // mode are constant.
+  const provider = ctx.llm.providerName?.() ?? "anthropic";
+  const governance: "sanitised" | "skipped" =
+    ctx.llm.governanceSkipped?.() === true ? "skipped" : "sanitised";
   const out = [...ruleBindings];
   for (let j = 0; j < warningIndexes.length; j++) {
     const idx = warningIndexes[j];
@@ -292,12 +320,25 @@ export async function matchScenarioWithLLM(
           fieldNames: pom.fields.map((f) => f.fieldName),
           methodNames: pom.methods.map((m) => m.name),
         },
-        provider: "anthropic",
+        provider,
         model: result.model ?? "(unknown)",
         fromCache: result.fromCache,
       });
     }
-    out[idx] = result.binding;
+    // v4.4.0 — decorate every successful batch binding with provenance.
+    out[idx] = {
+      ...result.binding,
+      provenance: {
+        source: "llm",
+        llm: {
+          provider,
+          model: result.model ?? "(unknown)",
+          cached: result.fromCache,
+          governance,
+          at: new Date().toISOString(),
+        },
+      },
+    };
   }
   return out;
 }

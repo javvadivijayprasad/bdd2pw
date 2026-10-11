@@ -138,6 +138,17 @@ export class AnthropicLLMClient implements LLMClient {
     return this.attemptsCounter;
   }
   /**
+   * v4.4.0 — provider identity + governance-mode accessors for the
+   * binding provenance system (used to tag scenarios `@llm-generated`
+   * and populate the meta-sidecar's `llm.*` fields).
+   */
+  providerName(): "anthropic" | "openai" | "gemini" {
+    return "anthropic";
+  }
+  governanceSkipped(): boolean {
+    return this.skipGovernance;
+  }
+  /**
    * v2.0.2 — true when the SQLite cache loaded successfully, false when
    * we degraded to in-memory. `null` until ensureCache() is called for
    * the first time. Callers can use this to print a one-time warning at

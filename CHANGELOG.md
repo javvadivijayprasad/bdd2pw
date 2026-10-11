@@ -9,6 +9,147 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.4.0] — 2026-09-26
+
+### Theme: legible provenance — which lane, which rule, which pack
+
+v4.3 made the LLM fallback safe (governance sidecar, cache, three
+providers, in-process healing). v4.4 makes it **legible**. A reader
+of a generated suite should be able to tell — per scenario, per
+step — where each line came from: a deterministic rule (with which
+rule id and which pack), the LLM fallback (with which provider and
+which model), or a person's hand-edit.
+
+Two new CLIs land here:
+
+- `bdd2pw quarantine-stats <repo>` splits the suite into a trusted
+  lane (only rule-bound scenarios) and a review lane (`@llm-generated`
+  scenarios) and reports both. Slice 1.
+- `bdd2pw coverage <repo>` turns the same provenance data into
+  decisions — which rules earned their place in the table, which
+  packs pulled their weight, which locators keep needing to heal.
+  Slice 2.
+
+Both write JSON sidecars (`artefacts/quarantine-stats.json`,
+`artefacts/coverage.json`) with a shared shape on the fields they
+have in common, so a dashboard can consume either without switching
+schemas. Both are reports, not gates — they exit non-zero only on a
+real I/O error against the repo root.
+
+### Added — `--spec-name <stem>` for consumer-controlled spec filenames
+
+Upstream consumers (attestqa, custom orchestrators) that keep one
+feature file per epic and expect `tests/<feature-stem>.spec.ts`
+regardless of which POM the feature targets can now override the
+emitted spec filename.
+
+```bash
+bdd2pw scaffold features/epic-scrum-5-customer-account-access.feature \
+  --url https://... \
+  --page LoginPage \
+  --repo ./out \
+  --spec-name epic-scrum-5-customer-account-access
+# → tests/epic-scrum-5-customer-account-access.spec.ts
+```
+
+Programmatic API: `ScaffoldOptions.specName?: string`. When set, the
+spec file is written to `tests/<specName>.spec.ts` and the
+`*.spec.meta.json` sidecar follows the same stem. The POM filename,
+class name, and `../pages/<pomStem>` import path are unaffected.
+
+Trailing `.spec.ts` / `.spec` suffixes are tolerated so callers can
+pass either form. Empty / whitespace-only values fall back to the
+historical POM-derived default. Default behavior (`specName` unset
+or omitted) is byte-identical to v4.3 — zero risk to existing users.
+
+### Added — Slice 1: LLM quarantine lane
+
+- **`@llm-generated` scenario tag.** Any scenario whose emission
+  used the LLM for at least one step is emitted with the tag next to
+  its existing tags. That's all the wiring needed to filter runs
+  with Playwright's own `--grep-invert @llm-generated` (trusted lane)
+  or `--grep @llm-generated` (review lane).
+- **Per-step provenance in `*.spec.meta.json`.** Rule-bound steps
+  carry `"rule": { "ruleId", "pack"? }`. LLM-bound steps carry
+  `"rule": null` plus `"llm": { provider, model, cached, governance,
+  at }`. Nothing about a scenario's binding is guessed from text
+  anymore; it's recorded at the source.
+- **`bdd2pw quarantine-stats <repo>` CLI.** Reports per feature and
+  per repo: scenarios (total / `@llm-generated` / deterministic),
+  steps (by rule / by LLM), LLM cache-hit share, and promotions
+  (candidate step-texts recorded in `candidate-rules.jsonl` that
+  are no longer LLM-bound because a rule now covers them). `--json`
+  for CI, human table by default.
+
+### Added — Slice 2: Rule + pack coverage
+
+- **`bdd2pw coverage <repo>` CLI.** Reads sidecars +
+  `candidate-rules.jsonl` + `heal-events.jsonl` (both v4.2
+  `artefacts/` and v4.3 `.pwheal/` locations). Reports:
+  - **rule hit rate** — per rule, how many steps it bound, plus up
+    to 3 sample step texts.
+  - **dead rules** — every registry rule that did NOT fire in this
+    repo. Repo-scoped observation, not a global verdict.
+  - **per-pack hit rate** — which domain packs pulled their weight;
+    packs whose rules all died appear under `packs.dead`.
+  - **promotion trail** — same shape as `quarantine-stats.promotions`.
+  - **heal pressure** — top locators from the heal-events log; a
+    rule that binds and then always needs healing is worse than no
+    rule.
+- **`--suggest-retire`** prints a copyable stanza listing dead
+  packs and dead rules. Never edits `stepMatcher.ts` or any config.
+- **`--domains <list>`** matches the scaffold's flag so the
+  ruleId ↔ pack mapping the coverage report uses agrees with what
+  the sidecar would have written.
+- **Cross-report agreement** — `coverage.totals` and
+  `coverage.promotions` are byte-identical to the same-named blocks
+  in `quarantine-stats.json` on the same repo. Locked by a property
+  test.
+
+### Added — provenance surface (foundation for both slices)
+
+- **`StepBinding.provenance?: { source: "rule" \| "llm", ... }`.**
+  New optional field on the internal binding shape. Rule provenance
+  carries `ruleId` (matches `ruleIdFor()` — e.g. `"rule-14"`,
+  `"domain-03"`) and `pack` when the rule is domain-scoped. LLM
+  provenance carries provider / model / cached / governance / at.
+- **`matchStep()` decorates every rule-produced binding** with its
+  ruleId + pack on the way out. No rule build() callback had to
+  change.
+- **`llmStepMatcher.matchStepWithLLM` and `matchScenarioWithLLM`
+  decorate every LLM binding** (both per-step and batch paths)
+  with the same shape. The candidate-rules writer's hard-coded
+  `provider: "anthropic"` is fixed — it now reflects the actual
+  client used.
+- **`LLMClient.providerName()` + `governanceSkipped()`** accessors
+  on the client interface, implemented for all three providers
+  (Anthropic, OpenAI, Gemini). Optional for backwards compat.
+- **`listAllRuleIds()`** — new public export from
+  `transformers/stepMatcher.ts`. Returns the ordered registry list
+  (core + active domain packs) so the coverage CLI can compute the
+  dead-rule set.
+
+### Added — tests
+
+- 7-case vitest suite in `tests/unit/v440QuarantineLane.test.ts`
+  covering all five Slice 1 acceptance criteria plus a malformed-
+  sidecar bonus.
+- 5-case vitest suite in `tests/unit/v440Coverage.test.ts` covering
+  all four Slice 2 acceptance criteria plus a heal-pressure sort case.
+- 6-case Node.js smoke runner in `scripts/smoke-v440-quarantine.mjs`.
+- 5-case Node.js smoke runner in `scripts/smoke-v440-coverage.mjs`.
+
+### No breaking changes
+
+Additive-only. Users NOT using `--llm` see identical scaffold output
+to v4.3 (no provenance block, no `@llm-generated` tag, no `llm`
+entries in the sidecar). Users NOT calling `quarantine-stats` or
+`coverage` see no change. Existing consumers of the meta-sidecar
+tolerate the new optional `rule` and `llm` fields; the shape is
+strictly a superset of v4.3.
+
+Slice 3 (mobile dialect domain pack) moves to v4.5.0.
+
 ## [4.3.2] — 2026-09-18
 
 ### Fixed
