@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.5.0] — 2026-10-11
+
+### Theme: fixtures emission routed through pw-emit — one place to look
+
+v4.3.0 introduced `tests/fixtures.ts` emission for the `--self-healing`
+flow. The renderer lived inline in `src/repo/projectScaffolder.ts` as
+`renderPwSelfHealFixtures()`. That worked, but it meant every file
+bdd2pw writes EXCEPT the fixtures came from `@vijaypjavvadi/pw-emit` —
+and the fixtures emission duplicated code with sibling scaffolders.
+
+pw-emit v1.4.0 lifts that renderer into the shared library as the new
+`emitFixtures()` export. v4.5.0 wires bdd2pw's `--self-healing` path
+to it. Every file bdd2pw writes now comes from pw-emit except the
+legacy `lib/heal.ts` (already slated for v5.0 removal).
+
+Attestqa integration (reply dated 2026-10-11, ask #4) — closed.
+
+### Changed
+
+- **Peer dependency**: `@vijaypjavvadi/pw-emit` `^1.3.0` → `^1.4.0`.
+- **`src/repo/projectScaffolder.ts`**: `renderPwSelfHealFixtures()`
+  removed; `emitPwSelfHealScaffold()` now calls
+  `emitFixtures({ selfHealing: mode })` from pw-emit.
+- **Emitted `tests/fixtures.ts` contents**: byte-identical to v4.3.0
+  through v4.4.1 output when `--self-healing` is set. Confirmed by
+  the pre-existing `scripts/smoke-v430-selfheal.mjs` (8/8 pass).
+
+### Backwards compat
+
+Users of `bdd2pw scaffold --self-healing` see **zero visible change**
+in the emitted project. The fixture file still has the same imports,
+the same `withSelfHealing(base, { mode })` wrapper, the same
+`export { expect } from "@playwright/test";` re-export, and the same
+`.pwheal/.gitkeep` placeholder.
+
+### Why the minor bump
+
+pw-emit `^1.4.0` is a hard peer-dep bump — users who run
+`npm i @vijaypjavvadi/bdd2pw@4.5.0` will see their lockfile pull
+pw-emit `1.4.0` or newer. That's a visible dep tree change, so it's
+a minor bump (per our policy from v4.0+).
+
+### Not shipped in v4.5.0 — moved to later
+
+Slice 3 (mobile dialect pack — touch, swipe, scroll-into-view,
+responsive viewport assertions) was originally bundled with the
+pw-emit refactor in the attestqa reply. Shipping v4.5.0 as the
+pw-emit refactor alone lets attestqa take the dep today instead of
+waiting on the mobile pack. Mobile dialect ships as v4.6.0 or
+later; its roadmap entry is now independent of attestqa.
+
 ## [4.4.1] — 2026-10-11
 
 ### Theme: in-spec provenance comments + SemVer-covered contract
