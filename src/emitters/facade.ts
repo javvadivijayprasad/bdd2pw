@@ -97,6 +97,17 @@ export interface EmitTestFileInput {
    */
   stepHooks?: boolean;
   /**
+   * v4.4.1 — emit a one-line `// @bdd2pw` provenance comment above
+   * every binding statement inside each `test.step` body. The comment
+   * grammar is documented in `docs/PROVENANCE_CONTRACT.md` and
+   * SemVer-covered — field names and order are stable; adding fields
+   * is a minor bump, removing fields is a major bump.
+   *
+   * Default: true. Opt-out by passing false here or `--no-provenance-comments`
+   * at the CLI.
+   */
+  provenanceComments?: boolean;
+  /**
    * v3.1.0 — opt-in step boundary markers. When true, each `test.step` is
    * bracketed by `// bdd2pw:step-open id="NNNN" title="..."` and
    * `// bdd2pw:step-close id="NNNN"` comments. Lets post-processors
@@ -182,6 +193,9 @@ export function emitTestFile(input: EmitTestFileInput): EmitResult {
     stepHooks: input.stepHooks === true,
     stepMarkers: input.stepMarkers === true,
     fixtures: defaultFixtures,
+    // v4.4.1 — provenance comments default ON. Callers that need
+    // byte-stable pre-v4.4.1 output pass `false`.
+    provenanceComments: input.provenanceComments !== false,
   };
   const ir: TestSpecIR = {
     describeName: input.describeName,
@@ -263,6 +277,12 @@ function bindingsToBody(
      * Defaults to `["page"]`.
      */
     fixtures?: string[];
+    /**
+     * v4.4.1 — emit `// @bdd2pw lane=... [...]` comments above each
+     * binding statement. See `docs/PROVENANCE_CONTRACT.md` for the
+     * SemVer-covered grammar.
+     */
+    provenanceComments?: boolean;
   } = {},
 ): string {
   const fixtureNames =
@@ -302,6 +322,15 @@ function bindingsToBody(
     // buffer is wrapped in try/catch/finally below; otherwise it's
     // emitted directly inside the test.step arrow.
     const bodyLines: string[] = [];
+    // v4.4.1 — provenance comment. Emitted ONCE per step as the first
+    // body line, directly before the binding statement(s). Grammar is
+    // SemVer-locked (see docs/PROVENANCE_CONTRACT.md). The comment is
+    // always present when provenanceComments is on, even for TODO
+    // steps — attestqa and other orchestrators rely on being able to
+    // grep every step's lane.
+    if (options.provenanceComments) {
+      bodyLines.push(formatProvenanceComment(b, isTodo));
+    }
     if (b.customBody) {
       // Compound step — body has multiple statements pre-rendered.
       // v2.2.5 — sanitize digit-leading POM references that may have been
@@ -385,4 +414,61 @@ function bindingsToBody(
   // Trim trailing blank
   while (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines.join("\n");
+}
+
+/**
+ * v4.4.1 — format the per-step `// @bdd2pw` provenance comment.
+ *
+ * Grammar (SemVer-covered — see `docs/PROVENANCE_CONTRACT.md`):
+ *
+ *   provenance-comment = "// @bdd2pw" SP field *(SP field)
+ *   field              = lane-field | rule-field | pack-field
+ *                      | provider-field | model-field | cached-field | governance-field
+ *   lane-field         = "lane=" ( "rule" | "llm" | "todo" )
+ *   rule-field         = "rule=" ident            ; required when lane=rule
+ *   pack-field         = "pack=" pack-name        ; present iff rule came from a domain pack
+ *   provider-field     = "provider=" ( "anthropic" | "openai" | "gemini" )   ; required when lane=llm
+ *   model-field        = "model=" ident
+ *   cached-field       = "cached=" ( "true" | "false" )
+ *   governance-field   = "governance=" ( "sanitised" | "skipped" )
+ *
+ * Rules the parser can rely on:
+ *   - One line per step; `// @bdd2pw` is always first on the line.
+ *   - Field order fixed: lane first; then rule/pack for the rule lane,
+ *     or provider/model/cached/governance for the llm lane.
+ *   - Field keys never change spelling.
+ *   - New fields may be appended at the end of their lane's block in a
+ *     minor release but never prepended or inserted.
+ *   - Removing a field is a major-version change.
+ *   - `lane=todo` has no other fields.
+ *
+ * Fallbacks:
+ *   - A binding with no `provenance` is treated as `lane=rule` with no
+ *     rule id (unknown rule, pre-v4.4 cached binding, etc.) — the comment
+ *     line is just `// @bdd2pw lane=rule` which still records the lane.
+ *   - A TODO step always serialises as `lane=todo` regardless of what
+ *     stale provenance a half-filled binding carries.
+ */
+function formatProvenanceComment(b: StepBinding, isTodo: boolean): string {
+  if (isTodo) return "// @bdd2pw lane=todo";
+  const prov = b.provenance;
+  if (!prov) return "// @bdd2pw lane=rule";
+  if (prov.source === "llm" && prov.llm) {
+    const parts: string[] = [
+      "// @bdd2pw",
+      "lane=llm",
+      `provider=${prov.llm.provider}`,
+      `model=${prov.llm.model}`,
+      `cached=${prov.llm.cached ? "true" : "false"}`,
+      `governance=${prov.llm.governance}`,
+    ];
+    return parts.join(" ");
+  }
+  if (prov.source === "rule") {
+    const parts: string[] = ["// @bdd2pw", "lane=rule"];
+    if (prov.ruleId) parts.push(`rule=${prov.ruleId}`);
+    if (prov.pack) parts.push(`pack=${prov.pack}`);
+    return parts.join(" ");
+  }
+  return "// @bdd2pw lane=rule";
 }

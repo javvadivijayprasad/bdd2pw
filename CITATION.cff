@@ -13,8 +13,8 @@ abstract: >
   and LLM batching diagnostics.
 type: software
 license: MIT
-version: 4.4.0
-date-released: 2026-09-26
+version: 4.4.1
+date-released: 2026-10-11
 authors:
   - family-names: "Javvadi"
     given-names: "Vijay Prasad"

@@ -644,6 +644,9 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       // TestForge can opt into per-step hooks + boundary markers.
       stepHooks: opts.stepHooks === true,
       stepMarkers: opts.stepMarkers === true,
+      // v4.4.1 — provenance comments default ON. Users opt out via
+      // --no-provenance-comments or `provenanceComments: false`.
+      provenanceComments: opts.provenanceComments !== false,
     });
     reviewItems.push(...specEmit.warnings.map((w) => ({ ...w, file: specPath })));
     await fs.ensureDir(path.dirname(specPath));

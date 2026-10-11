@@ -44,6 +44,10 @@ program
     "--spec-name <stem>",
     "v4.4.0 — override the emitted spec filename stem. Writes `tests/<stem>.spec.ts` instead of the default POM-derived name (e.g. `login.spec.ts` from `LoginPage`). Useful when one feature file maps to one spec regardless of which POM it targets (attestqa, epic-per-feature layouts).",
   )
+  .option(
+    "--no-provenance-comments",
+    "v4.4.1 — suppress the per-step `// @bdd2pw lane=... [...]` provenance comments. Default: provenance comments are ON. Only disable for byte-stable pre-v4.4.1 output comparisons.",
+  )
   .option("--storage-state <path>", "Pre-authenticated storage state JSON")
   .option("--headed", "Show browser during MCP scan", false)
   .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
@@ -177,6 +181,9 @@ program
         pages: opts.pages?.split(",").map((s: string) => s.trim()),
         // v4.4.0 — attestqa integration: let the caller name the spec file.
         specName: typeof opts.specName === "string" ? opts.specName : undefined,
+        // v4.4.1 — attestqa provenance contract. Commander negates
+        // `--no-provenance-comments` into `opts.provenanceComments=false`.
+        provenanceComments: opts.provenanceComments !== false,
         storageState: opts.storageState,
         headed: opts.headed,
         llm: opts.llm,

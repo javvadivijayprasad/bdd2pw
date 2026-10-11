@@ -187,6 +187,14 @@ export interface ScaffoldOptions {
    * feature targets. Passing `--spec-name` from the CLI sets this.
    */
   specName?: string;
+  /**
+   * v4.4.1 — emit a `// @bdd2pw lane=... [...]` provenance comment
+   * above every binding statement inside each `test.step` body. The
+   * grammar is documented in `docs/PROVENANCE_CONTRACT.md` and
+   * SemVer-covered. Default: true. Opt-out by passing false here or
+   * `--no-provenance-comments` at the CLI.
+   */
+  provenanceComments?: boolean;
   storageState?: string;
   headed?: boolean;
   llm?: "anthropic" | "openai" | "gemini";

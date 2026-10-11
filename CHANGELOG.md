@@ -9,6 +9,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.4.1] — 2026-10-11
+
+### Theme: in-spec provenance comments + SemVer-covered contract
+
+v4.4.0 recorded per-step provenance in the `*.spec.meta.json` sidecar.
+v4.4.1 lifts that provenance into the emitted spec itself, so a reader
+can tell at a glance (or a `grep`) which lane bound each step without
+cross-referencing the sidecar.
+
+### Added — `// @bdd2pw` provenance comments
+
+Every emitted step gets exactly one provenance comment as the first
+line inside its `test.step` body:
+
+```typescript
+await test.step("When I enter my ssn", async () => {
+  // @bdd2pw lane=rule rule=domain-03 pack=banking
+  await loginPage.ssnField.fill("123-45-6789");
+});
+
+await test.step("When I confirm with my recovery phrase", async () => {
+  // @bdd2pw lane=llm provider=anthropic model=claude-sonnet-4-6 cached=false governance=sanitised
+  await loginPage.recoveryField.fill("...");
+});
+
+await test.step("Then I should see a success animation", async () => {
+  // @bdd2pw lane=todo
+  // TODO: no rule matched: "Then I should see a success animation"
+});
+```
+
+### Added — SemVer-covered grammar
+
+The grammar is documented as a public contract in the new
+`docs/PROVENANCE_CONTRACT.md`:
+
+- One line per step. `// @bdd2pw` always starts the comment.
+- Field order is fixed: `lane=` first, then (rule/pack) for the rule
+  lane, or (provider/model/cached/governance) for the llm lane.
+- Field keys never change spelling.
+- New fields may be appended at the end of their lane's block in a
+  minor release but never prepended or inserted.
+- Removing a field is a major-version change.
+- `cached` is lowercase `true`/`false`; `governance` is `sanitised`
+  (British spelling, matching the sidecar from v4.4.0).
+
+### Added — CLI + API
+
+- `--no-provenance-comments` CLI flag suppresses the comments for
+  byte-stable comparison against pre-v4.4.1 output. Default: comments
+  are on.
+- `ScaffoldOptions.provenanceComments?: boolean` programmatic
+  equivalent. Default: `true`.
+
+### Added — tests
+
+- 11-case vitest suite in `tests/unit/v441ProvenanceComments.test.ts`
+  pinning the grammar: rule / llm / todo lanes, field ordering,
+  opt-out, one-comment-per-step on multi-step scenarios, legacy
+  binding fallback.
+- 8-case Node.js smoke runner in `scripts/smoke-v441-provenance.mjs`.
+- The new `docs/PROVENANCE_CONTRACT.md` describes the identical
+  schema for the sidecar's `rule` + `llm` blocks so parsers have one
+  reference for both forms.
+
+### No breaking changes
+
+Additive-only. Scenarios scaffolded without `--llm` still emit
+`// @bdd2pw lane=rule rule=...` for each rule-bound step; no sidecar
+or spec-wide behaviour changes.
+
+Users targeting byte-stable pre-v4.4.1 output (bench harness diffs,
+golden file tests) pass `--no-provenance-comments` or
+`provenanceComments: false` to opt out.
+
+### Contract note for upstream consumers
+
+Per the attestqa integration reply dated 2026-10-11, the contents of
+`docs/PROVENANCE_CONTRACT.md` are the authoritative schema for both
+the in-spec comment and the `*.spec.meta.json` sidecar. Changes to
+either are reflected in that document and announced in CHANGELOG.
+
 ## [4.4.0] — 2026-09-26
 
 ### Theme: legible provenance — which lane, which rule, which pack
