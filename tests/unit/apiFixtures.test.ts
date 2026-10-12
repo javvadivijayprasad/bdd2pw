@@ -102,6 +102,11 @@ async function renderFeature(
     describeName: `Feature: ${feature.name}`,
     scenarios,
     pomImports: [],
+    // v4.4.1 — these snapshots pin the v3.0 API emission mechanics
+    // (page.request.* shape, apiResponse state threading). Keeping them
+    // byte-stable against pre-v4.4.1 output; provenance comments are
+    // exercised in their own suite (v441ProvenanceComments.test.ts).
+    provenanceComments: false,
   });
   return out.contents;
 }

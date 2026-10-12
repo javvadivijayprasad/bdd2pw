@@ -196,18 +196,67 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       });
       elements = parseSnapshot(capturedSnapshot);
     } catch (err) {
-      reviewItems.push({
-        severity: "warn",
-        message: `Page discovery failed: ${(err as Error).message.split("\n")[0]}. Continuing with empty element list — POM will be created with the synthesised goto() only, and field-referencing steps will fall to TODO.`,
-        suggestion: "Pass --snapshot-file <path.json> to use a captured snapshot, or --no-discovery to skip discovery silently.",
-      });
+      // v4.5.1 — Bug B. By default a discovery failure is HARD: scaffold()
+      // throws so no POM gets rewritten. Previously it warned, continued
+      // with an empty element list, and overwrote `pages/*.page.ts` —
+      // which blanked out hand-maintained real locators (attestqa run
+      // 2026-10-11T21:55Z: 12 real locators replaced with empties).
+      //
+      // Users who want the pre-v4.5.1 soft-fail (e.g. CI jobs that
+      // tolerate discovery outages and never re-scaffold important POMs)
+      // can pass `allowEmptyDiscovery: true` / `--allow-empty-discovery`.
+      const message = `Page discovery failed: ${(err as Error).message.split("\n")[0]}.`;
+      if (opts.allowEmptyDiscovery === true) {
+        reviewItems.push({
+          severity: "warn",
+          message:
+            message +
+            " Continuing with empty element list (--allow-empty-discovery was set). " +
+            "The POM augment path still refuses to overwrite non-empty locators (v4.5.1 Bug B defence).",
+          suggestion:
+            "Pass --snapshot-file <path.json> to use a captured snapshot, or --no-discovery to skip discovery silently.",
+        });
+      } else {
+        // Rethrow as a NotImplementedError-style typed throw so the CLI
+        // layer can map to exit code 4 (same code `analyze` uses on
+        // discovery failure). Attach the review items collected so far
+        // so BDD_REVIEW.md still records the context.
+        const e = new Error(
+          message +
+            " Scaffold aborted — refusing to overwrite the Page Object with an empty element list. " +
+            "Install the browser (`npx playwright install chrome` or `chromium`), fix the URL, OR pass --allow-empty-discovery to restore the pre-v4.5.1 soft-warn behaviour.",
+        );
+        (e as Error & { exitCode?: number }).exitCode = 4;
+        throw e;
+      }
     }
   }
-  const candidateChoices = dedupeLocators(elements.map((e) => pickLocator(e, elements)));
+  // v4.5.1 — count unresolved locators (pickLocator returned undefined
+  // because the element had no stable identifier) BEFORE dedup, so the
+  // warning count reflects reality rather than deduped group size.
+  const picked = elements.map((e) => pickLocator(e, elements));
+  const unresolvedCount = picked.filter((p) => p === undefined).length;
+  const candidateChoices = dedupeLocators(picked);
   reviewItems.push({
     severity: "info",
     message: `Discovered ${elements.length} element(s); picked ${candidateChoices.length} unique locator(s)`,
   });
+  if (unresolvedCount > 0) {
+    reviewItems.push({
+      severity: "warn",
+      message:
+        `${unresolvedCount} of ${elements.length} discovered element(s) had no stable identifier ` +
+        `(no role/label/placeholder/testId/text/cssSelector/xpath and no useful tag). ` +
+        `These fields are omitted from the Page Object instead of being emitted as unparseable \`locator("")\`.`,
+      suggestion:
+        "Add a data-testid, role, or aria-label to the affected elements, then re-scaffold. See BDD_REVIEW.md for the per-field list.",
+    });
+    // Also echo to stdout so CI logs catch it even when BDD_REVIEW.md
+    // isn't inspected.
+    process.stdout.write(
+      `[bdd2pw] ${unresolvedCount} of ${elements.length} fields unresolved — review BDD_REVIEW.md\n`,
+    );
+  }
 
   // 5) Resolve POM decision
   // Predict referenced fields by matching steps against a "POM with all candidates"
@@ -258,7 +307,31 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   });
 
   // 6) Build the final POM IR (existing fields + only the new ones we need)
-  const finalPom: PageObjectIR = buildFinalPom(decision, pageClassName, candidatePom, candidateChoices);
+  const finalPomRaw: PageObjectIR = buildFinalPom(decision, pageClassName, candidatePom, candidateChoices);
+  // v4.5.1 — attestqa Bug B defence (part 2). Strip any field whose
+  // confidence is "unparseable" BEFORE pw-emit sees the IR; pw-emit
+  // would otherwise rebuild them as `page.locator("")`. The source
+  // POM file retains these fields' original initialisers because the
+  // emitter writes a FRESH file — v5.0 will teach pw-emit to merge
+  // field blocks preserving unknown fields verbatim; for v4.5.1 we
+  // print a review warning so the user sees them disappear and can
+  // re-add them from git.
+  const unparseableThisClass = repoState.unparseableFieldNames.get(pageClassName) ?? [];
+  const finalPom: PageObjectIR = {
+    ...finalPomRaw,
+    fields: finalPomRaw.fields.filter((f) => f.confidence !== "unparseable"),
+  };
+  if (unparseableThisClass.length > 0 && !opts.dryRun) {
+    reviewItems.push({
+      severity: "warn",
+      message:
+        `${unparseableThisClass.length} field(s) on existing ${pageClassName} had initialisers bdd2pw's scanner can't parse ` +
+        `(custom factory, multi-line, wrapper): ${unparseableThisClass.join(", ")}. ` +
+        `These will NOT appear in the regenerated Page Object. Restore them from git if the re-scaffold overwrites your file.`,
+      suggestion:
+        "If these fields were intentionally wrapped (e.g. withSelfHealing, healOrThrow), either (a) drop the wrapper so bdd2pw can round-trip them, (b) move the wrapper outside the field declaration, or (c) skip the Page Object re-emit by passing --no-pom-overwrite.",
+    });
+  }
 
   // 6.5) Synthesise a `goto()` method so the spec's `await loginPage.goto()`
   //      actually navigates. Skipped if the POM already has one (e.g. on AUGMENT)
@@ -580,6 +653,38 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     }
   }
 
+  // v4.5.1 — attestqa Bug B defence (part 3). The repo scanner only reads
+  // locators from field DECLARATIONS (`readonly foo: Locator = page.getBy...`),
+  // not from constructor assignments (`this.foo = page.getBy...` — the shape
+  // bdd2pw itself emits). On AUGMENT, pw-emit regenerates the whole file
+  // from the IR, so any field whose initialiser lives in the constructor
+  // would be re-emitted as `page.locator("")`.
+  //
+  // Rather than ship a destructive rewrite, v4.5.1 refuses to overwrite
+  // an existing Page Object when the scanner found ANY unparseable
+  // field on it. Users opt back in to the overwrite via
+  // `--force-pom-overwrite` / `forcePomOverwrite: true`.
+  const existingUnparseableCount =
+    repoState.unparseableFieldNames.get(pageClassName)?.length ?? 0;
+  const shouldSkipPomEmit =
+    decision.decision === "AUGMENT" &&
+    existingUnparseableCount > 0 &&
+    opts.forcePomOverwrite !== true;
+  if (shouldSkipPomEmit) {
+    reviewItems.push({
+      severity: "warn",
+      message:
+        `Skipped overwriting ${pageClassName} — the existing Page Object has ${existingUnparseableCount} ` +
+        `field(s) whose initialiser bdd2pw's scanner can't round-trip (the common cause: locators ` +
+        `assigned in the constructor rather than at the declaration). Re-emitting would destroy them.`,
+      suggestion:
+        "If you intended to rewrite the Page Object, pass --force-pom-overwrite. Otherwise leave the existing file as-is; the spec file is written against its public interface.",
+    });
+    process.stdout.write(
+      `[bdd2pw] Skipped overwriting ${finalPom.filePath} to protect ${existingUnparseableCount} hand-maintained locator(s). Pass --force-pom-overwrite to override.\n`,
+    );
+  }
+
   if (!opts.dryRun) {
     // 8) Emit Page Object
     const pomEmitMode = decision.decision === "CREATE" ? "create" : "augment";
@@ -609,9 +714,14 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         buildDomHashHeader(currentDomHash, opts.url),
       );
     }
-    await fs.ensureDir(path.dirname(finalPom.filePath));
-    await fs.writeFile(finalPom.filePath, pomContents, "utf8");
-    filesWritten.push(finalPom.filePath);
+    // v4.5.1 — Bug B defence. Skip the write when the existing POM has
+    // unparseable fields the scanner can't round-trip. The warning +
+    // stdout notice were pushed above.
+    if (!shouldSkipPomEmit) {
+      await fs.ensureDir(path.dirname(finalPom.filePath));
+      await fs.writeFile(finalPom.filePath, pomContents, "utf8");
+      filesWritten.push(finalPom.filePath);
+    }
 
     // 9) Emit spec file. pageObjectFileName returns "login.page.ts"; strip
     //    the trailing ".ts" for both the spec file stem and the import path.

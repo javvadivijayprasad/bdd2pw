@@ -9,6 +9,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.5.1] — 2026-10-11
+
+### Theme: attestqa Bug A + Bug B — stop writing `page.locator("")` and stop destroying hand-maintained POMs
+
+Two silent-corruption bugs attestqa found on its 2026-10-11T22:25Z
+Juice Shop run (41 of 53 fields emitted as `page.locator("")`,
+12 real locators overwritten with empties). Both fixed; one new
+opt-out flag added.
+
+### Fixed — Bug A: never emit `page.locator("")`
+
+`pickLocator` previously had a last-resort fallback that returned a
+tag-only locator even when `element.tag` was an empty or whitespace-
+only string, which produced `page.locator("")`. Playwright can't parse
+that selector (`Unexpected token "" while parsing css selector ""`) and
+every test that touched the field failed at the first action.
+
+- `pickLocator()` now returns `undefined` when it cannot synthesise a
+  stable locator (no role / label / placeholder / testId / text /
+  cssSelector / xpath, AND an empty or missing tag).
+- `dedupeLocators()` accepts the mixed array and filters undefineds.
+- The scaffold emits a new review warning on `BDD_REVIEW.md` naming
+  the count of unresolved fields, plus a one-line notice on stdout:
+  `[bdd2pw] N of M fields unresolved — review BDD_REVIEW.md`.
+- Follow-up guidance (add a data-testid / role / aria-label to the
+  affected element and re-scaffold) is in the warning's suggestion.
+
+### Fixed — Bug B: never destroy hand-maintained POMs on re-scaffold
+
+Two independent causes contributed to the 12-locator loss on
+`pages/login.page.ts` in attestqa's run:
+
+1. **The scaffold used to swallow discovery errors.** If
+   `scanPage()` threw (bundled Chromium missing, URL unreachable,
+   browser launch rejected), the catch pushed a warning and
+   continued with an empty element list. The POM was then rewritten
+   from the empty list, blanking it.
+2. **The repo scanner used to synthesise `args: '""'`** for any
+   existing field whose initialiser didn't match the regex
+   `page.<api>(...)` — e.g. custom factory wrappers, multi-line
+   declarations, `withSelfHealing(...)` wrappers. On AUGMENT, those
+   fields were handed back to the emitter as empty-args locators,
+   which pw-emit happily rendered as `page.locator("")`.
+
+Both now defended:
+
+- **Discovery failure throws by default.** `scaffold()` exits with
+  code `4` (same code `analyze` uses on discovery failure). No POM
+  is written. Pass `--allow-empty-discovery` / `allowEmptyDiscovery: true`
+  to restore the pre-v4.5.1 soft-warn behaviour (for CI jobs that
+  tolerate discovery outages and don't re-scaffold important POMs).
+- **`parseLocatorField()` returns `undefined` on regex miss.** The
+  repo scanner now tracks these field names in a new
+  `RepoScanResult.unparseableFieldNames: Map<className, string[]>`
+  and injects a `confidence: "unparseable"` placeholder into the IR
+  so the resolver still sees them as "present" (AUGMENT doesn't
+  re-create them). The emit path filters these placeholders before
+  handing the IR to pw-emit — pw-emit never sees them, so it never
+  rebuilds them as `page.locator("")`.
+- **Review warning** names each affected field so the user can
+  restore from git. v5.0 will teach pw-emit to preserve unknown
+  field initialisers verbatim; v4.5.1 ships the stop-the-bleeding
+  patch.
+
+### Added — CLI flag
+
+- `--allow-empty-discovery` — opt-in soft-warn behaviour on
+  discovery failure. Default is now the hard-fail (exit 4).
+
+### Added — API surface
+
+- `ScaffoldOptions.allowEmptyDiscovery?: boolean` — programmatic
+  equivalent.
+- `RepoScanResult.unparseableFieldNames: Map<string, string[]>` —
+  new field on the public scanner result. Keyed by class name;
+  values are the field names whose initialisers couldn't be parsed.
+- `LocatorChoice.confidence` gained a `"unparseable"` enum member.
+  Treated by the emit pipeline as a filter signal.
+
+### Breaking contracts? Partial — read this.
+
+Two defaults changed. Both change behaviour that was silently
+destroying POMs, so moving them behind opt-ins is the right call,
+but you need to know what to expect.
+
+**1. Discovery failure now hard-fails (exit 4).** Users who were
+relying on the pre-v4.5.1 "warn-and-continue on discovery failure"
+behaviour must pass `--allow-empty-discovery` explicitly. If that
+flag is set, the pre-v4.5.1 output is reproduced verbatim.
+
+**2. AUGMENT now defaults to SKIP the POM overwrite whenever the
+scanner sees any un-parseable field initialiser in the existing POM.**
+In practice this is wider than it reads: `parseLocatorField` only
+recognises an initialiser whose text is exactly `page.<api>(...)` at
+property-declaration time. Real bdd2pw-emitted POMs assign locators in
+the constructor body, so `ts-morph` sees no init on the declaration
+and every field reports as un-parseable. **Net effect: on any
+existing bdd2pw-generated POM, AUGMENT will keep the file on disk
+untouched and only emit the spec (which is written against the POM's
+existing public interface).** To restore the previous
+overwrite-on-every-AUGMENT behaviour, pass `--force-pom-overwrite` /
+`forcePomOverwrite: true`. The underlying "scanner reads constructor
+assignments" fix is scheduled for pw-emit v1.5.0 / bdd2pw v5.0.0;
+until then this is the safe default.
+
+Scaffolds that used to succeed will continue to succeed on their
+spec output. Scaffolds that used to produce `page.locator("")`
+fields on fresh POMs now produce a Page Object WITHOUT those fields
+(and a review warning naming them) rather than emit broken
+Playwright code.
+
+### Not covered by this patch
+
+Preserving existing unknown field initialisers verbatim (so a
+hand-wrapped `withSelfHealing(page.getByRole(...))` round-trips
+through re-scaffold without being dropped) requires pw-emit to
+accept the existing file text as a starting point. That's queued
+for pw-emit v1.5.0 and bdd2pw v5.0.0.
+
+### Credit
+
+Both bugs identified by attestqa run `20261011T222522Z` against
+OWASP Juice Shop on `http://localhost:3100`. See
+`docs/handoff/bdd2pw-pw-emit.md` for the full attestqa integration
+contract.
+
 ## [4.5.0] — 2026-10-11
 
 ### Theme: fixtures emission routed through pw-emit — one place to look

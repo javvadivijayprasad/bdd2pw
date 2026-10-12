@@ -56,7 +56,16 @@ export interface LocatorChoice {
   /** camelCase TS field name (e.g. `submitButton`). */
   fieldName: string;
   source: ElementIR;
-  confidence: "unique" | "ambiguous" | "fallback";
+  /**
+   * v4.5.1 — `"unparseable"` is a sentinel used by the repo scanner for
+   * existing POM fields whose initialiser didn't match the expected
+   * `page.<api>(...)` shape. The resolver treats these as "present"
+   * (so AUGMENT doesn't synthesise a new field), but the emitter MUST
+   * NOT regenerate them from the IR — pw-emit would turn them into
+   * `page.locator("")`. The emit pipeline filters them before handing
+   * the IR to pw-emit. See attestqa Bug B.
+   */
+  confidence: "unique" | "ambiguous" | "fallback" | "unparseable";
 }
 
 // --- Page Object IR --------------------------------------------------------
@@ -195,6 +204,31 @@ export interface ScaffoldOptions {
    * `--no-provenance-comments` at the CLI.
    */
   provenanceComments?: boolean;
+  /**
+   * v4.5.1 — when true, a page-discovery failure (bundled Chromium not
+   * installed, URL unreachable, browser launch rejected) is NON-FATAL.
+   * The scaffold proceeds with an empty element list; the POM is
+   * emitted with the synthesised `goto()` only; field-referencing
+   * steps fall to TODO.
+   *
+   * Default: false (hard fail — the scaffold exits with code 4, same
+   * as `analyze`). The hard fail is the attestqa Bug B defence: it
+   * prevents destructive overwrites of hand-maintained Page Objects
+   * when a developer's local browser is temporarily unavailable.
+   */
+  allowEmptyDiscovery?: boolean;
+  /**
+   * v4.5.1 — opt in to overwriting a Page Object even when the scanner
+   * found fields whose initialisers it can't round-trip (typically
+   * because they live in the constructor, not at the declaration).
+   * By default such a POM is left on disk unchanged and a review
+   * warning is logged.
+   *
+   * Default: false (preserve existing POM when any unparseable field
+   * is present). The spec file is still written against the existing
+   * POM's interface.
+   */
+  forcePomOverwrite?: boolean;
   storageState?: string;
   headed?: boolean;
   llm?: "anthropic" | "openai" | "gemini";

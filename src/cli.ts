@@ -48,6 +48,16 @@ program
     "--no-provenance-comments",
     "v4.4.1 — suppress the per-step `// @bdd2pw lane=... [...]` provenance comments. Default: provenance comments are ON. Only disable for byte-stable pre-v4.4.1 output comparisons.",
   )
+  .option(
+    "--allow-empty-discovery",
+    "v4.5.1 — restore pre-v4.5.1 behaviour: on page-discovery failure (bundled Chromium not installed, URL unreachable), warn and continue with an empty element list instead of aborting. By default, discovery failure exits with code 4 to prevent destructive overwrites of hand-maintained Page Objects (attestqa Bug B).",
+    false,
+  )
+  .option(
+    "--force-pom-overwrite",
+    "v4.5.1 — overwrite an existing Page Object even when the scanner found hand-maintained fields it can't round-trip. By default the file is preserved and a review warning is logged (attestqa Bug B).",
+    false,
+  )
   .option("--storage-state <path>", "Pre-authenticated storage state JSON")
   .option("--headed", "Show browser during MCP scan", false)
   .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
@@ -184,6 +194,9 @@ program
         // v4.4.1 — attestqa provenance contract. Commander negates
         // `--no-provenance-comments` into `opts.provenanceComments=false`.
         provenanceComments: opts.provenanceComments !== false,
+        // v4.5.1 — attestqa Bug B defence.
+        allowEmptyDiscovery: opts.allowEmptyDiscovery === true,
+        forcePomOverwrite: opts.forcePomOverwrite === true,
         storageState: opts.storageState,
         headed: opts.headed,
         llm: opts.llm,
@@ -309,6 +322,11 @@ program
  * Map error → CLI exit code. See docs/ARCHITECTURE.md §7.
  */
 function exitCodeFor(err: unknown): number {
+  // v4.5.1 — honor an explicit exitCode on the error (used by the hard
+  // discovery-failure throw from scaffold() when --allow-empty-discovery
+  // is NOT set). Falls back to the historical name-based mapping.
+  const explicit = (err as { exitCode?: number })?.exitCode;
+  if (typeof explicit === "number" && explicit > 0) return explicit;
   const name = (err as { name?: string })?.name ?? "";
   switch (name) {
     case "GherkinParseError":

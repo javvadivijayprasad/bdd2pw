@@ -17,11 +17,18 @@ import { camelCase, toJsIdentifier } from "../utils/naming";
  * Pick the highest-priority unique locator for `element`. Uniqueness is
  * checked against `allElements` — if multiple elements would match the
  * candidate locator, we fall down the chain.
+ *
+ * v4.5.1 — returns `undefined` when NO stable locator can be synthesised
+ * (no role/label/placeholder/testId/text/cssSelector/xpath, AND an empty
+ * or missing tag). Previously the final fallback emitted a `locator("")`
+ * which Playwright can't parse. Call sites filter the undefineds and
+ * emit a review warning + stdout count. See attestqa Bug A dated
+ * 2026-10-11.
  */
 export function pickLocator(
   element: ElementIR,
   allElements: ElementIR[],
-): LocatorChoice {
+): LocatorChoice | undefined {
   const fieldName = synthFieldName(element);
 
   // 1. getByRole + accessible name — most stable
@@ -141,9 +148,18 @@ export function pickLocator(
   // testId / text / xpath), the tag-only fallback is the least-bad
   // option. It at least matches a visible DOM element rather than a
   // transient state class.
+  //
+  // v4.5.1 — but ONLY when `element.tag` itself resolves to a non-empty
+  // string. Prior to v4.5.1, an element with no selector affordances
+  // AND an empty/missing tag produced `locator("")` which Playwright
+  // can't parse (`Unexpected token "" while parsing css selector ""`).
+  // Return undefined so the caller can skip the field + emit a review
+  // warning instead of shipping broken code.
+  const tagLiteral = typeof element.tag === "string" ? element.tag.trim() : "";
+  if (tagLiteral.length === 0) return undefined;
   return {
     api: "locator",
-    args: JSON.stringify(element.tag),
+    args: JSON.stringify(tagLiteral),
     fieldName,
     source: element,
     confidence: "fallback",
@@ -427,10 +443,16 @@ function roleToSuffix(role?: string, tag?: string): string {
  *
  * Stable-sorted by input order otherwise.
  */
-export function dedupeLocators(choices: LocatorChoice[]): LocatorChoice[] {
+export function dedupeLocators(
+  choices: (LocatorChoice | undefined)[],
+): LocatorChoice[] {
+  // v4.5.1 — filter out undefineds (unresolved locators from pickLocator)
+  // up front. Callers count the drops before this filter runs so the
+  // review warning reports how many fields were skipped.
+  const filtered = choices.filter((c): c is LocatorChoice => c !== undefined);
   // Pass 1: collapse by locator identity. Picks the better field name.
   const byLocator = new Map<string, LocatorChoice>();
-  for (const c of choices) {
+  for (const c of filtered) {
     const key = `${c.api}::${c.args}`;
     const existing = byLocator.get(key);
     if (!existing) {

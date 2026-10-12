@@ -148,16 +148,25 @@ describe("v4.4.1 — // @bdd2pw provenance comment grammar", () => {
     expect(line?.trim()).toBe("// @bdd2pw lane=todo");
   });
 
-  it("provenance comment is the FIRST comment inside each test.step body", () => {
+  it("provenance comment appears INSIDE each test.step body (after `async () => {`)", () => {
     const b: StepBinding = {
       step: { keyword: "When", text: "I click something" },
       pomCall: rulePomCall,
       provenance: { source: "rule", ruleId: "rule-01" },
     };
     const out = build([b]).contents;
-    // Match: test.step(...) line, open brace, newline, provenance comment.
-    const re = /await test\.step\([^)]+\), async \(\) => \{\s*\/\/ @bdd2pw lane=rule rule=rule-01/;
-    expect(re.test(out)).toBe(true);
+    // Robust check: `async () => {` opens the step body, then the first
+    // thing that follows (allowing arbitrary whitespace / newlines) is
+    // the provenance comment. Works regardless of how pw-emit indents.
+    expect(out).toMatch(/async \(\) => \{\s*\/\/ @bdd2pw lane=rule rule=rule-01/);
+    // Negative: no other code line slips in between the opener and the
+    // provenance comment.
+    const openerIdx = out.indexOf("async () => {");
+    const provIdx = out.indexOf("// @bdd2pw lane=rule rule=rule-01");
+    expect(provIdx).toBeGreaterThan(openerIdx);
+    const between = out.slice(openerIdx, provIdx);
+    // Only whitespace / newlines between the opener and the comment.
+    expect(between.replace(/\s/g, "")).toBe("async()=>{");
   });
 });
 
