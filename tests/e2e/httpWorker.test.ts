@@ -127,7 +127,16 @@ describe("POST /scaffold worker → end-to-end", () => {
         url: "https://practicetestautomation.com/practice-test-login/",
         page: "LoginPage",
         repo: "/ignored-by-worker", // worker overrides with per-job tmpdir
-        options: { snapshotFile: fixtureSnapshot, noValidate: true },
+        options: {
+          snapshotFile: fixtureSnapshot,
+          noValidate: true,
+          // v4.5.1 — this e2e runs in CI without Playwright chromium
+          // installed, so page discovery WILL fail. The pre-v4.5.1
+          // soft-warn behaviour is what this test was built around
+          // (see "zero warnings" test below, which already tolerates
+          // the discovery-failure cascade). Opt in explicitly.
+          allowEmptyDiscovery: true,
+        },
       }),
     });
     expect(res.status).toBe(202);

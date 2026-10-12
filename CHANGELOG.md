@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.5.2] — 2026-10-12
+
+### Theme: v4.5.1 follow-up — HTTP worker now honours the new discovery flags
+
+v4.5.1 added `allowEmptyDiscovery` and `forcePomOverwrite` to
+`ScaffoldOptions` and to the CLI, but the HTTP worker
+(`src/http/routes.ts`) wasn't updated at the same time, so the two
+fields were silently dropped from `POST /scaffold` request bodies
+and callers couldn't opt in to the pre-v4.5.1 soft-warn behaviour
+over HTTP. The in-process e2e that scaffolds against the live
+practice site (no Playwright chromium installed on CI) therefore
+started hard-failing on discovery under v4.5.1 and tripped CI.
+
+### Fixed
+
+- **`src/http/schemas.ts`** — the zod `ScaffoldRequestSchema` now
+  declares `allowEmptyDiscovery`, `forcePomOverwrite`, `snapshotFile`,
+  and `noDiscovery` on `options`. Zod strips unknown keys by default,
+  so even once routes forwarded them, the fields were being dropped
+  at the HTTP boundary before the handler ever saw them.
+- **`src/http/routes.ts`** now forwards `body.options.allowEmptyDiscovery`
+  and `body.options.forcePomOverwrite` into the `ScaffoldOptions`
+  it hands to `scaffold()`. The HTTP contract is otherwise unchanged.
+- **`tests/e2e/httpWorker.test.ts`** now sets `allowEmptyDiscovery: true`
+  in the fixture request body — the test was built around the
+  soft-warn cascade and already tolerates it in its "zero warnings"
+  check; this makes that opt-in explicit now that it has to be.
+
+### No API or CLI changes
+
+Everything else from v4.5.1 is unchanged. If you're consuming
+bdd2pw purely via the CLI, upgrading from v4.5.1 → v4.5.2 is a
+no-op.
+
 ## [4.5.1] — 2026-10-11
 
 ### Theme: attestqa Bug A + Bug B — stop writing `page.locator("")` and stop destroying hand-maintained POMs

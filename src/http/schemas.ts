@@ -21,6 +21,12 @@ export const ScaffoldRequestSchema = z.object({
       telemetry: z.boolean().optional(),
       noValidate: z.boolean().optional(),
       force: z.boolean().optional(),
+      snapshotFile: z.string().optional(),
+      noDiscovery: z.boolean().optional(),
+      // v4.5.2 — v4.5.1 added these to ScaffoldOptions but the HTTP
+      // schema was never updated, so zod silently stripped them.
+      allowEmptyDiscovery: z.boolean().optional(),
+      forcePomOverwrite: z.boolean().optional(),
     })
     .optional(),
 });
