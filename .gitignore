@@ -24,9 +24,16 @@ Thumbs.db
 .vs/
 *.swp
 
-# v4.1 — bench artifacts (regenerated on every bench run)
+# v4.1+ bench artefacts (regenerated on every bench run)
 bench/.work/
 bench/results/results.json
 bench/results/results.md
 bench/results/results-*.json
 bench/results/results-*.md
+
+# v4.3+ self-healing runtime telemetry
+.pwheal/heal-events.jsonl
+
+# v4.4+ report outputs
+artefacts/quarantine-stats.json
+artefacts/coverage.json

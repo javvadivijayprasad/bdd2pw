@@ -329,7 +329,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         `(custom factory, multi-line, wrapper): ${unparseableThisClass.join(", ")}. ` +
         `These will NOT appear in the regenerated Page Object. Restore them from git if the re-scaffold overwrites your file.`,
       suggestion:
-        "If these fields were intentionally wrapped (e.g. withSelfHealing, healOrThrow), either (a) drop the wrapper so bdd2pw can round-trip them, (b) move the wrapper outside the field declaration, or (c) skip the Page Object re-emit by passing --no-pom-overwrite.",
+        "If these fields were intentionally wrapped (e.g. withSelfHealing, healOrThrow), either (a) drop the wrapper so bdd2pw can round-trip them, or (b) move the wrapper outside the field declaration. By default v4.5.1+ now SKIPS re-emitting the Page Object when any field is unparseable (the existing file is kept verbatim); pass --force-pom-overwrite to opt into the destructive re-emit.",
     });
   }
 
@@ -664,10 +664,21 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // an existing Page Object when the scanner found ANY unparseable
   // field on it. Users opt back in to the overwrite via
   // `--force-pom-overwrite` / `forcePomOverwrite: true`.
+  //
+  // v4.5.4 — attestqa 2026-10-16 reported the guard misfired for POMs
+  // where EVERY field was unparseable (the common case for POMs bdd2pw
+  // itself emitted — all locators live in the constructor). With no
+  // *missing* fields, the resolver returned decision=REUSE rather than
+  // AUGMENT, the AUGMENT-only guard didn't fire, and pw-emit regenerated
+  // the file from the "unparseable"-filtered IR — which had zero fields
+  // left — overwriting the POM with an empty class and breaking every
+  // call site in the spec. The guard now triggers on REUSE too, because
+  // REUSE in the "all fields unparseable" state is just AUGMENT with
+  // missingFields=[] — same destructive outcome if we re-emit.
   const existingUnparseableCount =
     repoState.unparseableFieldNames.get(pageClassName)?.length ?? 0;
   const shouldSkipPomEmit =
-    decision.decision === "AUGMENT" &&
+    (decision.decision === "AUGMENT" || decision.decision === "REUSE") &&
     existingUnparseableCount > 0 &&
     opts.forcePomOverwrite !== true;
   if (shouldSkipPomEmit) {

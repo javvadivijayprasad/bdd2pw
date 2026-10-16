@@ -9,6 +9,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.5.4] — 2026-10-16
+
+### Theme: v4.5.1 Bug B fix was incomplete — close the REUSE path and fix the misleading flag name
+
+attestqa reported a 2026-10-16 run where bdd2pw still destroyed a
+53-field hand-maintained Page Object despite the v4.5.1 guard. Three
+real defects:
+
+1. **Guard only fired on AUGMENT.** The common case for POMs bdd2pw
+   itself emitted is "every field unparseable" (all locators sit in
+   the constructor body, which the scanner can't parse). With no
+   missing fields, the resolver returned `REUSE` — my AUGMENT-only
+   guard didn't trigger, pw-emit regenerated from the IR after the
+   unparseable filter stripped every field, and the file was
+   overwritten with an empty class.
+2. **Suggestion message named a non-existent flag.** It read
+   "pass `--no-pom-overwrite`"; the only real flag is
+   `--force-pom-overwrite` (and its polarity is inverted — SKIP is
+   now the default).
+3. **Spec tsc gate let the broken file through.** Downstream of (1),
+   the spec file referenced 7 `loginPage.loginButton` call sites that
+   no longer existed on the emptied POM. Validation surfaced the
+   errors but the file had already landed. (1) is the only root
+   cause; fixing it removes the cascade.
+
+### Fixed
+
+- **`src/index.ts`** — `shouldSkipPomEmit` guard now triggers on
+  BOTH `decision === "AUGMENT"` and `decision === "REUSE"` when the
+  existing POM has unparseable fields. REUSE in the all-unparseable
+  state is semantically identical to AUGMENT with
+  `missingFields=[]` — same destructive outcome if we re-emit.
+- **`src/index.ts`** — the review warning's `suggestion` field now
+  references `--force-pom-overwrite` with the correct polarity ("the
+  default is to skip; pass this to opt into destruction") instead of
+  the non-existent `--no-pom-overwrite`.
+
+### Not a behaviour change for callers who were fine on v4.5.1
+
+If v4.5.1 was already protecting your POM (because the resolver was
+picking AUGMENT), v4.5.4 keeps protecting it the same way. The fix
+only catches the extra case where the resolver was picking REUSE
+because the unparseable placeholders made all missing fields
+"present".
+
+### Credit
+
+attestqa 2026-10-16 report naming the three defects above
+verbatim; see `docs/handoff/bdd2pw-pw-emit.md` for the integration
+contract.
+
+## [4.5.3] — 2026-10-12
+
+### Theme: repo hygiene — unblock CI, kill status-bar noise, drop long-lived publish token
+
+Clears four of the hygiene issues the v4.5+ roadmap tracked (#4–#7).
+No code changes to the library; purely CI, gitignore, and release
+machinery.
+
+### Changed
+
+- **npm publish is now OIDC Trusted Publishing.** `release.yml` no
+  longer references the `NPM_TOKEN` secret. The workflow uses the
+  `id-token: write` permission already granted and `npm publish
+  --provenance` validates against npm's registered trusted publisher
+  for this package. Maintainer-side setup: npmjs.com →
+  `@vijaypjavvadi/bdd2pw` → Settings → Trusted publishers → add
+  org `javvadivijayprasad`, repo `bdd2pw`, workflow `release.yml`,
+  environment blank. After that, tag pushes publish automatically;
+  the four manual publishes v4.4.0 → v4.5.2 did from the maintainer's
+  laptop can go back through CI. (closes v4.6-roadmap Issue #4)
+- **`.gitignore`** now also excludes `.pwheal/heal-events.jsonl`
+  (self-healing runtime telemetry), `artefacts/quarantine-stats.json`,
+  and `artefacts/coverage.json`. `git status` after a bench + healing
+  run is finally clean. (closes v4.6-roadmap Issue #6)
+
+### Already shipped (now closed via this entry)
+
+- **`.gitattributes`** was added in v4.4.0 along with the attestqa
+  `--spec-name` flag. Confirmed present with the full LF/CRLF/binary
+  matrix the issue called for. (closes v4.6-roadmap Issue #5)
+- **Dependabot PR #15** (`actions/setup-node`): the two blockers the
+  roadmap called out (ESLint src/ errors; missing NPM_TOKEN) are both
+  now resolved — the former by v4.3.1/v4.3.2 lint cleanup, the latter
+  by this release's Trusted Publishing switch. Rebase the PR and it
+  should go green. (closes v4.6-roadmap Issue #7)
+
 ## [4.5.2] — 2026-10-12
 
 ### Theme: v4.5.1 follow-up — HTTP worker now honours the new discovery flags

@@ -23,10 +23,17 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
-      - name: Publish to npm with provenance
+      # v4.5.3 — switched from NPM_TOKEN to npm Trusted Publishing (OIDC).
+      # The id-token: write permission above is what npm's OIDC validator
+      # reads; no NPM_TOKEN secret is used anywhere in this workflow.
+      # Trusted-publisher config lives on npmjs.com side:
+      #   npmjs.com → @vijaypjavvadi/bdd2pw → Settings → Trusted publishers
+      #   organization: javvadivijayprasad
+      #   repository:   bdd2pw
+      #   workflow:     release.yml
+      #   environment:  (blank)
+      - name: Publish to npm with provenance (OIDC)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
