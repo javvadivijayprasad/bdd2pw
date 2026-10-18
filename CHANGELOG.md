@@ -9,6 +9,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.5.5] — 2026-10-18
+
+### Theme: close the three remaining attestqa P0 defects in the v4.5.1→v4.5.4 chain + fix the `$`-mangling in emitted locators
+
+attestqa's 2026-10-16 handoff (`juice-shop/BDD_REVIEW.md` 18:32 UTC
+run) and 2026-10-18 Toolshop run `20261018T125846Z` named four
+real bugs. v4.5.4 landed one (REUSE+AUGMENT guard parity). v4.5.5
+lands the structural fixes for the other three.
+
+### Fixed — P0-1: never emit the Page Object on REUSE
+
+`REUSE` by its own definition means "the existing POM is good
+as-is; no new fields to append" — the emit path has nothing to do.
+Before v4.5.5, however, the REUSE branch still ran `emitPageObject`
+and wrote the file, which turned the v4.5.1 unparseable-field
+filter into a destructive rewrite: a POM whose 53 locators were
+all constructor-assigned (the shape bdd2pw itself emits) parsed as
+"all unparseable", the filter stripped them all, and REUSE wrote
+an empty class over the original. `src/index.ts` now short-circuits
+the POM emit when `decision.decision === "REUSE"`, pushes a
+`${pageClassName} reused as-is; not rewritten` info item, and lets
+the spec emit downstream proceed against the untouched POM.
+
+### Fixed — P0-3: unparseable fields no longer count as "present" in `resolvePom`
+
+Fields the scanner can't parse are placeholder entries carrying
+`confidence: "unparseable"`, not real locators the resolver can
+route steps to. v4.5.1 kept them in `found.fields` so AUGMENT
+wouldn't try to re-create them, but it also let them satisfy the
+"referenced field is present" check — which pushed the LoginPage
+case above into REUSE instead of AUGMENT, dodging the AUGMENT-only
+overwrite guard. `src/transformers/pomResolver.ts` now excludes
+`confidence === "unparseable"` entries when building
+`presentFieldNames`, so unparseable-but-referenced fields correctly
+surface as missing. Combined with the REUSE no-op above, the full
+Juice Shop regression fixture (all 53 fields unparseable, feature
+references all of them) now returns AUGMENT and is caught by the
+existing guard — the file on disk is byte-identical afterwards.
+
+### Fixed — Addendum: `$`-digit sequences inside emitted string literals got mangled
+
+Toolshop run surfaced `page.getByText("$14.15")` emitted as
+`page.getByText("$14._15")`, matching nothing. Root cause:
+`sanitizeLocatorReferences()` in `src/emitters/facade.ts` scans the
+whole emitted file for `.<digit>…` member-access patterns to prefix
+with `_` (a v2.2.5 safety net for cached LLM bindings whose field
+names start with a digit). The regex didn't skip string literals,
+so `"$14.15"` → `"$14._15"` as a drive-by rewrite. Fix: added a
+small source-code walker that identifies ranges inside single-quote,
+double-quote, backtick, and `//` / `/* */` comment contexts, and
+only applies the sanitize rewrite outside those ranges (template-
+literal `${…}` interpolations still get sanitized because they're
+real code). Covered by a seven-case node smoke that includes
+`"$14.15"`, `"Total: $1,234.50"`, backticked templates, legitimate
+`foo.0Of0` member access, and comments.
+
+### Not covered
+
+- **P0-4 (spec-reference safety net — refuse any write that drops a
+  property a spec still uses).** Needs design; filed for v4.6.0 so
+  the guard runs after a dry-emit and compares property sets rather
+  than textually scanning every `.spec.ts`.
+- **P1-1 (automatic rollback on tsc regression with `.bak` files).**
+  Needs design; filed for v4.6.0 together with P0-4.
+- **P2 (parse constructor-assigned locators in `repoScanner`).**
+  Still queued for v5.0 as planned. P0-1 and P0-3 together remove
+  the damage path; P2 removes the cause.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-pom-wipe-2026-10-16.md` naming
+P0-1, P0-3, P1-2, and the 2026-10-18 addendum verbatim.
+
 ## [4.5.4] — 2026-10-16
 
 ### Theme: v4.5.1 Bug B fix was incomplete — close the REUSE path and fix the misleading flag name

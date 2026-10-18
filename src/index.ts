@@ -696,6 +696,21 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     );
   }
 
+  // v4.5.5 — attestqa 2026-10-16 P0-1. REUSE means "the existing Page
+  // Object is good as-is; no new fields to append". emitPageObject +
+  // the file write below both become no-ops for REUSE: there's no new
+  // content to merge in, and the unparseable-filter step was turning
+  // an identity write into a destructive one when the existing file
+  // was already-correct bdd2pw output. The spec emit downstream still
+  // runs — it only reads the POM's public interface.
+  const isReuseNoop = decision.decision === "REUSE";
+  if (isReuseNoop) {
+    reviewItems.push({
+      severity: "info",
+      message: `${pageClassName} reused as-is; not rewritten (REUSE decision).`,
+    });
+  }
+
   if (!opts.dryRun) {
     // 8) Emit Page Object
     const pomEmitMode = decision.decision === "CREATE" ? "create" : "augment";
@@ -728,7 +743,8 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // v4.5.1 — Bug B defence. Skip the write when the existing POM has
     // unparseable fields the scanner can't round-trip. The warning +
     // stdout notice were pushed above.
-    if (!shouldSkipPomEmit) {
+    // v4.5.5 — also skip unconditionally on REUSE (P0-1 above).
+    if (!shouldSkipPomEmit && !isReuseNoop) {
       await fs.ensureDir(path.dirname(finalPom.filePath));
       await fs.writeFile(finalPom.filePath, pomContents, "utf8");
       filesWritten.push(finalPom.filePath);

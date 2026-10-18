@@ -41,7 +41,20 @@ export function resolvePom(input: ResolvePomInput): ResolvePomResult {
     };
   }
 
-  const presentFieldNames = new Set(found.fields.map((f) => f.fieldName));
+  // v4.5.5 — attestqa 2026-10-16 P0-3. Fields the scanner couldn't parse
+  // (confidence === "unparseable") are placeholder entries, not real
+  // locators the resolver can route steps to. Treating them as "present"
+  // was what pushed the all-constructor-assigned LoginPage case into
+  // REUSE instead of AUGMENT, which then dodged the overwrite guard
+  // (fixed in v4.5.4) and the resulting empty-filter POM write (now
+  // blocked unconditionally for REUSE at the emit site). Excluding them
+  // here is the structural fix: REUSE now only happens when every
+  // referenced field is REALLY present on the existing POM.
+  const presentFieldNames = new Set(
+    found.fields
+      .filter((f) => f.confidence !== "unparseable")
+      .map((f) => f.fieldName),
+  );
   const missingFields = [
     ...new Set(referencedFields.filter((f) => !presentFieldNames.has(f))),
   ];

@@ -46,16 +46,99 @@ import { flattenForComment } from "../utils/commentSafe";
  */
 export function sanitizeLocatorReferences(s: string): string {
   if (!s) return s;
-  // 1. `.<digit>` → `._<digit>` for member access
-  let out = s.replace(/(\.)([0-9][A-Za-z0-9_$,]*)/g, (_, dot, ident) => {
-    return dot + "_" + ident.replace(/,/g, "_");
-  });
-  // 2. Strip stray commas from identifier-shaped runs after a dot we
-  //    already prefixed (handled above) and from bracket-property names.
-  out = out.replace(/\[([0-9][A-Za-z0-9_$,]*)\]/g, (_, ident) => {
-    return "[_" + ident.replace(/,/g, "_") + "]";
-  });
-  return out;
+  // v4.5.5 — attestqa 2026-10-18 addendum. This rewrite is for member
+  // access in CODE (`foo.0Of0` → `foo._0Of0`), but the old implementation
+  // ran over the whole emitted file, so it also hit the `.NN` inside
+  // string literals like `getByText("$14.15")` and turned them into
+  // `"$14._15"`. The locator then matched nothing. Fix: walk the source
+  // and skip ranges that are inside quoted strings (single, double,
+  // backtick) and line/block comments. Everything outside those ranges
+  // still gets the two rewrites below.
+  const transform = (code: string): string => {
+    // 1. `.<digit>` → `._<digit>` for member access
+    let out = code.replace(/(\.)([0-9][A-Za-z0-9_$,]*)/g, (_, dot, ident) => {
+      return dot + "_" + ident.replace(/,/g, "_");
+    });
+    // 2. `[<digit>…]` → `[_<digit>…]` for computed-property identifiers
+    out = out.replace(/\[([0-9][A-Za-z0-9_$,]*)\]/g, (_, ident) => {
+      return "[_" + ident.replace(/,/g, "_") + "]";
+    });
+    return out;
+  };
+
+  // Scan the source left-to-right. Carry a flag for the current state:
+  // "code", "s" (single-quote), "d" (double-quote), "t" (template), "lc"
+  // (line comment), "bc" (block comment). Collect the code spans, apply
+  // transform() to each, keep literal spans verbatim.
+  const parts: string[] = [];
+  let i = 0;
+  let codeStart = 0;
+  const flushCode = (end: number): void => {
+    if (end > codeStart) parts.push(transform(s.slice(codeStart, end)));
+  };
+  while (i < s.length) {
+    const c = s[i];
+    const next = s[i + 1];
+    if (c === "/" && next === "/") {
+      flushCode(i);
+      const eol = s.indexOf("\n", i);
+      const end = eol === -1 ? s.length : eol;
+      parts.push(s.slice(i, end));
+      i = end;
+      codeStart = i;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      flushCode(i);
+      const end = s.indexOf("*/", i + 2);
+      const stop = end === -1 ? s.length : end + 2;
+      parts.push(s.slice(i, stop));
+      i = stop;
+      codeStart = i;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      flushCode(i);
+      let j = i + 1;
+      while (j < s.length) {
+        const ch = s[j];
+        if (ch === "\\") { j += 2; continue; }
+        if (ch === quote) { j += 1; break; }
+        // Template-literal `${...}`: step over balanced braces so a `.15`
+        // inside an expression (code!) still gets sanitized — but a plain
+        // template without interpolation stays verbatim.
+        if (quote === "`" && ch === "$" && s[j + 1] === "{") {
+          // Emit the template chunk so far, then re-enter code mode until
+          // the matching `}`.
+          parts.push(s.slice(i, j));
+          parts.push("${");
+          j += 2;
+          let depth = 1;
+          let exprStart = j;
+          while (j < s.length && depth > 0) {
+            const cc = s[j];
+            if (cc === "{") depth++;
+            else if (cc === "}") depth--;
+            if (depth === 0) break;
+            j += 1;
+          }
+          parts.push(transform(s.slice(exprStart, j)));
+          if (s[j] === "}") { parts.push("}"); j += 1; }
+          i = j;
+          continue;
+        }
+        j += 1;
+      }
+      parts.push(s.slice(i, j));
+      i = j;
+      codeStart = i;
+      continue;
+    }
+    i += 1;
+  }
+  flushCode(s.length);
+  return parts.join("");
 }
 
 export class EmitterConsistencyError extends Error {
