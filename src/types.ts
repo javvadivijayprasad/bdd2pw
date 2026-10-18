@@ -231,6 +231,25 @@ export interface ScaffoldOptions {
   forcePomOverwrite?: boolean;
   storageState?: string;
   headed?: boolean;
+  /**
+   * v4.6.0 — attestqa Request C. Playwright launch channel for page
+   * discovery. "chrome" = stable Google Chrome, "msedge" = Microsoft
+   * Edge, "chromium" = bundled Chromium (default). When undefined,
+   * BDD2PW_BROWSER_CHANNEL env is consulted; if that's also unset,
+   * Playwright's bundled Chromium is launched.
+   */
+  browserChannel?: "chrome" | "msedge" | "chromium";
+  /**
+   * v4.6.0 — attestqa P1-1 tsc-regression rollback. When set, bdd2pw
+   * snapshots every file it's about to overwrite BEFORE emit, runs tsc
+   * after emit, and if tsc reports ANY error on a newly-written file,
+   * restores all pre-emit snapshots (deleting files that didn't exist
+   * before) and exits non-zero. The scaffold log reports what was
+   * rolled back. Default: false (preserve pre-v4.6.0 behaviour — files
+   * stay on disk even on tsc errors so CI tooling that inspects the
+   * output still runs).
+   */
+  rollbackOnTscErrors?: boolean;
   llm?: "anthropic" | "openai" | "gemini";
   governanceUrl?: string;
   templates?: string;
@@ -492,6 +511,7 @@ export interface AnalyzeOptions {
   url: string;
   storageState?: string;
   headed?: boolean;
+  browserChannel?: "chrome" | "msedge" | "chromium";
 }
 
 export interface AnalyzeResult {
@@ -507,6 +527,7 @@ export interface UpdatePomOptions {
   repo: string;
   storageState?: string;
   headed?: boolean;
+  browserChannel?: "chrome" | "msedge" | "chromium";
   templates?: string;
 }
 

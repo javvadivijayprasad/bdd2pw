@@ -27,6 +27,9 @@ export const ScaffoldRequestSchema = z.object({
       // schema was never updated, so zod silently stripped them.
       allowEmptyDiscovery: z.boolean().optional(),
       forcePomOverwrite: z.boolean().optional(),
+      // v4.6.0 — attestqa Request C + P1-1.
+      browserChannel: z.enum(["chrome", "msedge", "chromium"]).optional(),
+      rollbackOnTscErrors: z.boolean().optional(),
     })
     .optional(),
 });

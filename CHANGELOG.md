@@ -9,6 +9,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.0] — 2026-10-18
+
+### Theme: attestqa continuity — browser-channel flag, spec-reference safety net, tsc-regression rollback
+
+Closes the three attestqa continuity asks the v4.5.x releases had
+left queued: Request C (`--browser-channel`), P0-4 (spec-reference
+safety net), P1-1 (tsc-regression auto-rollback). Minor bump
+because the three are backward-compatible additions — defaults are
+chosen so a v4.5.5 → v4.6.0 upgrade with no new flags behaves
+identically.
+
+### Added — `--browser-channel {chrome|msedge|chromium}` (attestqa Request C)
+
+bdd2pw's page discovery used to always launch Playwright's bundled
+Chromium. attestqa needed to drive discovery against the Chrome
+stable channel it already runs its real tests under (so cookie
+banners, consent walls, and user-agent-sniffing sites behave the
+same way). v4.6.0 adds a launch-channel knob with three sources,
+checked in order:
+
+1. `--browser-channel` CLI flag.
+2. `BDD2PW_BROWSER_CHANNEL` env var.
+3. Default — Playwright's bundled Chromium (unchanged behaviour).
+
+Accepted values: `chrome`, `msedge`, `chromium`. The flag is wired
+through the HTTP worker's `POST /scaffold` body (`options.browserChannel`)
+and the `ScaffoldOptions` + `AnalyzeOptions` + `UpdatePomOptions`
+API surfaces. Launch failures that cite a specific channel now
+include an actionable hint (`npx playwright install chrome`).
+
+### Added — spec-reference safety net (attestqa P0-4)
+
+Before writing any Page Object, bdd2pw now scans
+`${repo}/tests/**/*.spec.ts` for `<pomVar>.<member>` references
+(where `<pomVar>` is `camelCase(pageClassName)`) and refuses the
+write if the new POM would omit any member a spec still uses. The
+check is lexical with a `//` / `/* */` / string-literal strip, so
+references in comments or inside quoted strings don't count. The
+`.page` member is explicitly skipped (every POM exposes
+`.page: Page` via the base class).
+
+Default: refuse (push an `error` review item, emit the
+`[bdd2pw] Refused to overwrite ${path}...` stdout notice, leave
+the existing file untouched). Opt into the destructive overwrite
+with `--force-pom-overwrite` (the same flag the Bug B guard uses).
+
+This is the general safety net the handoff asked for: it catches
+the Bug B class, the P0-1 / P0-3 class, and any future "candidate
+POM lost a method a spec relies on" shape with one check regardless
+of the resolver's decision path.
+
+### Added — `--rollback-on-tsc-errors` (attestqa P1-1)
+
+Opt-in flag that snapshots every file bdd2pw is about to overwrite
+BEFORE emit, runs tsc after emit, and if tsc reports any error on
+the scaffold output, restores all pre-emit snapshots (deleting
+files that didn't exist before) and logs what was rolled back.
+`filesWritten` in the result reflects what's actually on disk
+after the rollback. Default: `false` — pre-v4.6.0 behaviour kept so
+CI tooling that inspects the output on tsc errors still runs. The
+HTTP body option is `options.rollbackOnTscErrors`.
+
+### Added — API surface
+
+- `ScaffoldOptions.browserChannel?: "chrome" | "msedge" | "chromium"`
+- `ScaffoldOptions.rollbackOnTscErrors?: boolean`
+- `AnalyzeOptions.browserChannel?`, `UpdatePomOptions.browserChannel?`
+- `src/http/schemas.ts` — `options.browserChannel`, `options.rollbackOnTscErrors`
+- `src/http/routes.ts` — forwards both new fields into ScaffoldOptions
+
+### Changed — nothing without opt-in
+
+A v4.5.5 → v4.6.0 upgrade with no CLI flags behaves identically:
+bundled Chromium still launches, the spec-reference check still
+refuses destructive writes (same opt-out via `--force-pom-overwrite`
+as Bug B), and the rollback is dormant until the flag is set.
+
+### Not yet done
+
+- **P2** (parse constructor-assigned locators in `repoScanner`) still
+  queued for v5.0. v4.5.5's P0-1 + P0-3 + v4.6.0's P0-4 together
+  remove the damage; P2 removes the cause.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-pom-wipe-2026-10-16.md` naming
+P0-4 and P1-1 verbatim; v4.5.0 Request C ask.
+
 ## [4.5.5] — 2026-10-18
 
 ### Theme: close the three remaining attestqa P0 defects in the v4.5.1→v4.5.4 chain + fix the `$`-mangling in emitted locators

@@ -191,6 +191,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       capturedSnapshot = await scanPage({
         url: opts.url,
         storageState: opts.storageState,
+        browserChannel: opts.browserChannel,
         headed: opts.headed,
         snapshotFile: opts.snapshotFile,
       });
@@ -615,6 +616,20 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   }
 
   const filesWritten: string[] = [...scaffoldResult.filesWritten];
+  // v4.6.0 — attestqa P1-1 tsc-regression rollback. Keyed by abs path;
+  // value is the pre-emit file contents, or null if the file didn't
+  // exist before this scaffold run. Populated from the write sites
+  // below, consumed after tsc validation.
+  const preEmitSnapshots = new Map<string, string | null>();
+  const snapshotBeforeWrite = async (filePath: string): Promise<void> => {
+    if (preEmitSnapshots.has(filePath)) return; // first-write wins
+    try {
+      const prior = await fs.readFile(filePath, "utf8");
+      preEmitSnapshots.set(filePath, prior);
+    } catch {
+      preEmitSnapshots.set(filePath, null);
+    }
+  };
 
   // v4.2.0 — drift detection. Runs BEFORE the emit so a warning lands
   // even if the emit itself fails partway through. `driftDetected` is
@@ -744,8 +759,54 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // unparseable fields the scanner can't round-trip. The warning +
     // stdout notice were pushed above.
     // v4.5.5 — also skip unconditionally on REUSE (P0-1 above).
-    if (!shouldSkipPomEmit && !isReuseNoop) {
+    // v4.6.0 — attestqa P0-4 spec-reference safety net. Even when the
+    // other guards would allow the write, refuse it if the new POM
+    // would drop a property name that any existing spec file still
+    // uses. This is the general safety net — it catches the Bug B
+    // class, the P0-1/P0-3 class, and any future "candidate POM lost
+    // a method the specs rely on" shape, with one check regardless of
+    // the resolver's decision.
+    const specReferenceCheck = !isReuseNoop && !shouldSkipPomEmit
+      ? await findMembersStillUsedInSpecs({
+          repoDir: opts.repo,
+          pageClassName,
+          newMembers: new Set<string>([
+            ...finalPom.fields.map((f) => f.fieldName),
+            ...finalPom.methods.map((m) => m.name),
+          ]),
+        })
+      : { stillUsed: [] as Array<{ member: string; file: string; line: number }> };
+
+    const blockedByStillUsed =
+      specReferenceCheck.stillUsed.length > 0 && opts.forcePomOverwrite !== true;
+    if (specReferenceCheck.stillUsed.length > 0) {
+      const summary = specReferenceCheck.stillUsed
+        .slice(0, 10)
+        .map((u) => `${u.member} (${path.relative(opts.repo, u.file)}:${u.line})`)
+        .join("; ");
+      const extra =
+        specReferenceCheck.stillUsed.length > 10
+          ? ` (+${specReferenceCheck.stillUsed.length - 10} more)`
+          : "";
+      reviewItems.push({
+        severity: blockedByStillUsed ? "error" : "warn",
+        message:
+          `Refusing to overwrite ${pageClassName}: the new Page Object would remove ${specReferenceCheck.stillUsed.length} ` +
+          `member(s) still referenced by existing specs — ${summary}${extra}.`,
+        suggestion:
+          "Add the missing members to the Page Object (either by annotating the page element so bdd2pw discovers it, or hand-authoring the field), " +
+          "or pass --force-pom-overwrite to acknowledge the breaking change.",
+      });
+      if (blockedByStillUsed) {
+        process.stdout.write(
+          `[bdd2pw] Refused to overwrite ${finalPom.filePath}: ${specReferenceCheck.stillUsed.length} member(s) still used by specs. Pass --force-pom-overwrite to override.\n`,
+        );
+      }
+    }
+
+    if (!shouldSkipPomEmit && !isReuseNoop && !blockedByStillUsed) {
       await fs.ensureDir(path.dirname(finalPom.filePath));
+      await snapshotBeforeWrite(finalPom.filePath);
       await fs.writeFile(finalPom.filePath, pomContents, "utf8");
       filesWritten.push(finalPom.filePath);
     }
@@ -827,6 +888,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         }
       }
     }
+    await snapshotBeforeWrite(specPath);
     await fs.writeFile(specPath, finalSpec, "utf8");
     filesWritten.push(specPath);
 
@@ -855,6 +917,48 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     const tscResult = await tscValidate(opts.repo);
     tscErrorCount = tscResult.errorCount;
     reviewItems.push(...tscResult.items);
+  }
+
+  // 10b) v4.6.0 — attestqa P1-1 tsc-regression rollback. If opted in,
+  // and tsc reported ANY error, restore every pre-emit snapshot for the
+  // files we just wrote. Files that didn't exist before are deleted.
+  // Reports what was rolled back so the caller can see what happened.
+  let rolledBack: string[] = [];
+  if (
+    opts.rollbackOnTscErrors === true &&
+    tscErrorCount > 0 &&
+    !opts.dryRun &&
+    !opts.noValidate
+  ) {
+    for (const [filePath, prior] of preEmitSnapshots.entries()) {
+      try {
+        if (prior === null) {
+          await fs.remove(filePath);
+        } else {
+          await fs.writeFile(filePath, prior, "utf8");
+        }
+        rolledBack.push(filePath);
+      } catch (err) {
+        logger.error({ filePath, err }, "rollback failed for file");
+      }
+    }
+    // Drop rolled-back entries from filesWritten so the caller's report
+    // reflects what's actually on disk.
+    const rolledSet = new Set(rolledBack);
+    for (let i = filesWritten.length - 1; i >= 0; i--) {
+      if (rolledSet.has(filesWritten[i])) filesWritten.splice(i, 1);
+    }
+    reviewItems.push({
+      severity: "error",
+      message:
+        `Rolled back ${rolledBack.length} file(s) because tsc reported ${tscErrorCount} error(s) on the scaffold output. ` +
+        `Rolled: ${rolledBack.slice(0, 5).map((f) => path.relative(opts.repo, f)).join(", ")}${rolledBack.length > 5 ? ` (+${rolledBack.length - 5} more)` : ""}.`,
+      suggestion:
+        "Fix the tsc errors (either by annotating the page elements bdd2pw couldn't resolve, hand-authoring the missing locators, or dropping --rollback-on-tsc-errors to accept the partial output).",
+    });
+    process.stdout.write(
+      `[bdd2pw] Rolled back ${rolledBack.length} file(s): tsc reported ${tscErrorCount} error(s). Original contents restored.\n`,
+    );
   }
 
   // 11) Review report
@@ -937,6 +1041,7 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalyzeResult> {
     url: opts.url,
     storageState: opts.storageState,
     headed: opts.headed,
+    browserChannel: (opts as AnalyzeOptions & { browserChannel?: "chrome" | "msedge" | "chromium" }).browserChannel,
     snapshotFile,
   });
   const elements = parseSnapshot(snapshot);
@@ -1011,6 +1116,7 @@ export async function updatePom(opts: UpdatePomOptions): Promise<UpdatePomResult
       const snapshot = await scanPage({
         url: opts.url,
         storageState: opts.storageState,
+        browserChannel: opts.browserChannel,
         headed: opts.headed,
         snapshotFile,
       });
@@ -1128,4 +1234,123 @@ export async function updatePom(opts: UpdatePomOptions): Promise<UpdatePomResult
     filePath: existing.filePath,
     reviewItems,
   };
+}
+
+/**
+ * v4.6.0 — attestqa P0-4 spec-reference safety net.
+ *
+ * Scan every `${repoDir}/tests/**\/*.spec.ts` for `<pomVar>.<member>`
+ * references, where `<pomVar>` is `camelCase(pageClassName)` (the
+ * convention bdd2pw itself emits — `new LoginPage(page)` → `loginPage`).
+ * Any `.<member>` the spec reaches for that is NOT in `newMembers`
+ * would break at run time; return the file+line of each such use so
+ * the caller can refuse the write.
+ *
+ * Design notes:
+ *   • Lexical scan with a comment+string skip (shares the same
+ *     stance as `sanitizeLocatorReferences`): we don't want to count
+ *     references that only appear in `//` comments or inside string
+ *     literals (test descriptions, `getByText("loginPage.X")`).
+ *   • Catches both direct member access (`loginPage.loginButton`)
+ *     and method calls (`loginPage.goto()`). The two share one dot-
+ *     identifier pattern.
+ *   • Only looks at the one `pageClassName`; sibling POMs on the same
+ *     spec are out of scope here (they'd each run through this check
+ *     when they get scaffolded).
+ */
+async function findMembersStillUsedInSpecs(input: {
+  repoDir: string;
+  pageClassName: string;
+  newMembers: Set<string>;
+}): Promise<{ stillUsed: Array<{ member: string; file: string; line: number }> }> {
+  const { repoDir, pageClassName, newMembers } = input;
+  const testsDir = path.join(repoDir, "tests");
+  if (!(await fs.pathExists(testsDir))) return { stillUsed: [] };
+
+  const pomVar = camelCase(pageClassName);
+  const stillUsed: Array<{ member: string; file: string; line: number }> = [];
+
+  const walk = async (dir: string): Promise<string[]> => {
+    const out: string[] = [];
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        out.push(...(await walk(full)));
+      } else if (entry.isFile() && entry.name.endsWith(".spec.ts")) {
+        out.push(full);
+      }
+    }
+    return out;
+  };
+
+  const files = await walk(testsDir).catch(() => []);
+  // Pattern: `<pomVar>.<member>` where `<member>` is a JS identifier.
+  // Escape pomVar for regex (it's always a safe identifier but be
+  // paranoid). Word-boundary before ensures `otherLoginPage.X` isn't
+  // mistaken for `loginPage.X`.
+  const escaped = pomVar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const refRe = new RegExp(`\\b${escaped}\\.([A-Za-z_$][\\w$]*)`, "g");
+
+  const stripNonCode = (src: string): string => {
+    // Replace string/template/comment ranges with same-length spaces so
+    // the final line numbers stay stable when we scan the result.
+    const chars = src.split("");
+    const space = (lo: number, hi: number) => {
+      for (let k = lo; k < hi && k < chars.length; k++) {
+        if (chars[k] !== "\n") chars[k] = " ";
+      }
+    };
+    let i = 0;
+    while (i < src.length) {
+      const c = src[i];
+      const next = src[i + 1];
+      if (c === "/" && next === "/") {
+        const eol = src.indexOf("\n", i);
+        space(i, eol === -1 ? src.length : eol);
+        i = eol === -1 ? src.length : eol;
+        continue;
+      }
+      if (c === "/" && next === "*") {
+        const end = src.indexOf("*/", i + 2);
+        const stop = end === -1 ? src.length : end + 2;
+        space(i, stop);
+        i = stop;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === "`") {
+        const quote = c;
+        let j = i + 1;
+        while (j < src.length) {
+          const ch = src[j];
+          if (ch === "\\") { j += 2; continue; }
+          if (ch === quote) { j += 1; break; }
+          j += 1;
+        }
+        space(i, j);
+        i = j;
+        continue;
+      }
+      i += 1;
+    }
+    return chars.join("");
+  };
+
+  for (const file of files) {
+    const raw = await fs.readFile(file, "utf8").catch(() => "");
+    if (!raw.includes(pomVar)) continue;
+    const code = stripNonCode(raw);
+    refRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = refRe.exec(code)) !== null) {
+      const member = m[1];
+      // Skip Playwright base-page helpers that live on every POM via
+      // `this.page`: `loginPage.page.getByText(...)` is always fine.
+      if (member === "page") continue;
+      if (newMembers.has(member)) continue;
+      const line = code.slice(0, m.index).split("\n").length;
+      stillUsed.push({ member, file, line });
+    }
+  }
+
+  return { stillUsed };
 }

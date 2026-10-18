@@ -45,6 +45,13 @@ export interface ScanPageOptions {
   /** Show the browser window. Default: headless. */
   headed?: boolean;
   /**
+   * v4.6.0 — attestqa Request C. Playwright launch channel. Accepts
+   * "chrome" (stable Google Chrome), "msedge" (Microsoft Edge),
+   * "chromium" (bundled Chromium). When undefined, Playwright uses its
+   * bundled Chromium. CLI: --browser-channel; env: BDD2PW_BROWSER_CHANNEL.
+   */
+  browserChannel?: "chrome" | "msedge" | "chromium";
+  /**
    * If set, read snapshot from this JSON file instead of launching a
    * browser. Used by tests, CI without network, and pinned-fixture runs.
    */
@@ -106,12 +113,32 @@ async function scanPageWithBrowser(opts: ScanPageOptions): Promise<PageSnapshot>
     );
   }
 
+  // v4.6.0 — attestqa Request C. Resolve the launch channel:
+  //   1. explicit opts.browserChannel (set from CLI --browser-channel)
+  //   2. BDD2PW_BROWSER_CHANNEL env var
+  //   3. undefined → Playwright's bundled Chromium
+  const envChannel = process.env.BDD2PW_BROWSER_CHANNEL;
+  const resolvedChannel =
+    opts.browserChannel ??
+    (envChannel === "chrome" || envChannel === "msedge" || envChannel === "chromium"
+      ? (envChannel as "chrome" | "msedge" | "chromium")
+      : undefined);
+
   let browser: any;
   try {
-    browser = await chromium.launch({ headless: !opts.headed });
+    const launchArgs: Record<string, unknown> = { headless: !opts.headed };
+    // "chromium" is the default engine — only pass a channel for chrome/msedge
+    // so the bundled binary path keeps working when nothing is specified.
+    if (resolvedChannel === "chrome" || resolvedChannel === "msedge") {
+      launchArgs.channel = resolvedChannel;
+    }
+    browser = await chromium.launch(launchArgs);
   } catch (err) {
+    const hint = resolvedChannel && resolvedChannel !== "chromium"
+      ? ` Install the ${resolvedChannel} channel with \`npx playwright install ${resolvedChannel}\`, or drop --browser-channel to use bundled Chromium.`
+      : " Did you run `npx playwright install chromium`?";
     throw new McpError(
-      "Could not launch chromium. Did you run `npx playwright install chromium`?",
+      "Could not launch " + (resolvedChannel ?? "chromium") + "." + hint,
       err,
     );
   }

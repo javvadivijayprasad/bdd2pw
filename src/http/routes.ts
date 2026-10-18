@@ -169,6 +169,8 @@ async function runScaffoldWorker(
       noDiscovery: body.options?.noDiscovery,
       allowEmptyDiscovery: body.options?.allowEmptyDiscovery,
       forcePomOverwrite: body.options?.forcePomOverwrite,
+      browserChannel: body.options?.browserChannel,
+      rollbackOnTscErrors: body.options?.rollbackOnTscErrors,
     };
     updateJob(jobId, { stage: "emitting", progress: 0.5 });
     const result = await scaffold(opts);

@@ -60,6 +60,15 @@ program
   )
   .option("--storage-state <path>", "Pre-authenticated storage state JSON")
   .option("--headed", "Show browser during MCP scan", false)
+  .option(
+    "--browser-channel <channel>",
+    "v4.6.0 — Playwright launch channel: 'chrome' (stable Google Chrome), 'msedge', or 'chromium' (bundled, default). Env fallback: BDD2PW_BROWSER_CHANNEL. attestqa Request C.",
+  )
+  .option(
+    "--rollback-on-tsc-errors",
+    "v4.6.0 — if tsc reports ANY error on the scaffold output, restore every file this run would overwrite (and delete new files it created). attestqa P1-1 safety net.",
+    false,
+  )
   .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
   .option(
     "--no-discovery",
@@ -199,6 +208,10 @@ program
         forcePomOverwrite: opts.forcePomOverwrite === true,
         storageState: opts.storageState,
         headed: opts.headed,
+        // v4.6.0 — attestqa Request C
+        browserChannel: typeof opts.browserChannel === "string" ? opts.browserChannel : undefined,
+        // v4.6.0 — attestqa P1-1
+        rollbackOnTscErrors: opts.rollbackOnTscErrors === true,
         llm: opts.llm,
         llmConfig,
         governanceUrl: opts.governanceUrl,
