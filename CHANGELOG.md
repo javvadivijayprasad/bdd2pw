@@ -9,6 +9,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.1] — 2026-10-19
+
+### Theme: attestqa 2026-10-19 Toolshop run — three generation mistakes in one scaffold
+
+attestqa reported three independent defects from a single Toolshop
+run (`20261019T144404Z-82c5035b`, TOOL-6): a pagination step
+silently binding to `goto()`, the LLM lane generating against the
+wrong axe API, and a fabricated locator. v4.6.1 fixes 1 and 2
+structurally in the rule lane, and tightens the LLM prompt for 3.
+
+### Fixed — rule 1 (navigation) now vetoes pagination phrases
+
+`When I navigate to page 2` used to match the generic navigation
+rule and bind to `goto()`, which opens the home page. The next
+assertion then compared page 1 with page 1 — tests passed for the
+wrong reason. The rule now inspects the whole step text (not just
+the captured target, since the inner `(?:.+?\s+)?` sub-pattern
+could swallow "next " and leave the target as a bland "page"):
+if the text matches `\bpage \d+\b` or `\b(next|previous|prev|last|first) page\b`,
+the step emits a `warning` TODO naming the pagination control
+the user should bind it to (e.g. `Page-${N}`). Legitimate
+`navigate to /checkout`, `navigate to the login page`, and URL
+forms are unchanged.
+
+### Added — rule for `the <X> passes axe accessibility checks`
+
+Previously handled only by the LLM lane, which generated the wrong
+API in production: `const { checkA11y, injectAxe } = await import('@axe-core/playwright')`
+→ `TypeError: injectAxe is not a function` at runtime, because
+those exports belong to the sibling `axe-playwright` package.
+`@axe-core/playwright` exports `AxeBuilder` and nothing else.
+
+v4.6.1 adds `src/transformers/stepMatcher.ts` rule N4c, which
+matches both `the page passes axe accessibility checks` and the
+scoped `the <subject> (region)? passes axe accessibility checks`
+forms, and emits the correct AxeBuilder incantation inline (no
+top-of-file import changes needed — uses dynamic `import()`):
+
+```ts
+const { default: AxeBuilder } = await import("@axe-core/playwright");
+const axeResults = await new AxeBuilder({ page: productCataloguePage.page })
+  .withTags(["wcag2a", "wcag2aa"])
+  .analyze();
+expect(axeResults.violations.map((v) => v.id).sort(), `axe violations: ${JSON.stringify(axeResults.violations, null, 2)}`).toEqual([]);
+```
+
+Scope: always page-wide. `AxeBuilder.include()` needs a CSS
+selector string and bdd2pw cannot synthesise one reliably from a
+POM Locator; scoped forms emit the page-wide shape plus a review
+warning naming how to tighten it. This is the honest trade-off
+until a selector-source field is added to `LocatorChoice`.
+
+### Changed — LLM prompt tightening (v4.6.1 additions in `src/llm/prompt.ts`)
+
+Three new instructions targeted at the attestqa failure modes:
+
+1. **No fabricated locator text.** Spelled out: a locator like
+   `page.getByRole("link", { name: /ABCDE/ })` where no element
+   on the page contains "ABCDE" is a hallucination. If a real
+   locator can't be found, emit a `warning` rather than guess.
+2. **No LLM-generated axe bindings.** bdd2pw has a built-in rule
+   for the axe shape as of this release; the LLM should emit a
+   `warning` naming the step if it ever sees "passes axe
+   accessibility checks" without a rule-lane binding, rather
+   than reaching for `@axe-core/playwright` or `axe-playwright`
+   APIs (both have been generated wrong in production — the
+   prompt names the specific wrong exports).
+3. **Pagination phrases are not navigation targets.** Explicit
+   list ("page 2", "page N", "next/previous/last/first page").
+   Bind to a pagination control from the POM if one exists;
+   otherwise emit a `warning`.
+
+### Not covered
+
+- **Minor from the handoff — `aria-current="page"` on the Toolshop
+  active page button.** Correct observation that Toolshop uses the
+  `active` class on `li.page-item` rather than aria-current; this
+  is an application-specific DOM detail the LLM can't know from
+  step text alone. attestqa's agent repairs it downstream, which is
+  the right layer. Not an upstream fix.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-pom-wipe-2026-10-19.md` naming
+the three defects verbatim, with the Toolshop run reproduction
+pointer.
+
 ## [4.6.0] — 2026-10-18
 
 ### Theme: attestqa continuity — browser-channel flag, spec-reference safety net, tsc-regression rollback

@@ -59,7 +59,12 @@ v2.2.2 — additional constraints from production:
 v2.2.3 — Playwright API allowlist (STRICT):
 - The ONLY valid \`page.getBy*\` methods are: getByAltText, getByLabel, getByPlaceholder, getByRole, getByTestId, getByText, getByTitle. NEVER invent others. In particular, \`page.getByURL\` DOES NOT EXIST — for URL assertions use toHaveURL on the page, not a getByURL locator.
 - Other valid page-level locator factories: page.locator(...), page.frameLocator(...). Anything else (page.getByURL, page.getByPath, page.getByHref, page.findByText, etc.) is HALLUCINATED — do not emit it.
-- For URL assertions (toHaveURL / not.toHaveURL) and title assertions (toHaveTitle), set assertion.locator to the literal string "page" — not an empty string, not a getByURL call. The renderer emits expect(page).toHaveURL(...). Example assertion JSON: {"locator": "page", "matcher": "toHaveURL", "expected": "new RegExp('/dashboard')"}.`;
+- For URL assertions (toHaveURL / not.toHaveURL) and title assertions (toHaveTitle), set assertion.locator to the literal string "page" — not an empty string, not a getByURL call. The renderer emits expect(page).toHaveURL(...). Example assertion JSON: {"locator": "page", "matcher": "toHaveURL", "expected": "new RegExp('/dashboard')"}.
+
+v4.6.1 — further prompt tightening from the attestqa 2026-10-19 Toolshop run:
+- NEVER invent locator text that does not appear in the step, in the POM field names/labels/placeholders, or in the DOM snapshot you were given. A locator like page.getByRole("link", { name: /ABCDE/ }) when no element on the page has "ABCDE" in it is a hallucination. If you can't find a real locator for the referenced subject, emit a "warning" instead of guessing.
+- For axe / accessibility checks, DO NOT emit any axe binding. bdd2pw has a built-in rule for "<X> passes axe accessibility checks" that uses the correct AxeBuilder API from @axe-core/playwright. If a rule-lane binding wasn't offered to you, emit a "warning" naming the step rather than reaching for @axe-core/playwright or axe-playwright APIs — both have been generated wrong in the field (injectAxe is NOT a function on @axe-core/playwright; checkA11y is NOT exported from @axe-core/playwright).
+- Pagination phrases ("page 2", "page N", "next page", "previous page", "last page", "first page") are NOT navigation targets. Do not bind them to goto(). Bind to a click on a pagination control if one exists in the POM (common names: nextButton, pageTwoButton, paginationNext, pageLink2). Otherwise emit a "warning" explaining there's no pagination control in the POM.`;
 
 /**
  * Build the user-side message for one step. Includes:

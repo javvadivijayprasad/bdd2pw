@@ -373,6 +373,28 @@ const RULES: Rule[] = [
       //   "I navigate to the login page"        → m[1] = "login"
       //   "User navigate to Login Page for Admin \"https://x.com/login\"" → m[1] = "https://x.com/login"
       const target = m[1].trim();
+      // v4.6.1 — attestqa 2026-10-19 Toolshop run surfaced
+      // "When I navigate to page 2" silently binding to `goto()` (which
+      // opens the HOME page), making paginated-view tests pass or fail
+      // for the wrong reason. Pagination phrases are not navigation
+      // targets. Veto by inspecting the WHOLE step text (not just m[1])
+      // because the preceding `(?:.+?\s+)?` can swallow "next " and
+      // leave m[1]="page", which looks innocuous on its own. Match on
+      // the step text catches every variant: "page N", "next page",
+      // "previous page", "last page", "first page".
+      const stepTextLc = step.text.toLowerCase();
+      const paginationHit =
+        /\bpage\s+\d+\b/.test(stepTextLc) ||
+        /\b(?:next|previous|prev|last|first)\s+page\b/.test(stepTextLc) ||
+        /^(?:page\s+\d+|\d+)$/i.test(target);
+      if (paginationHit) {
+        const digit = step.text.match(/\d+/)?.[0] ?? "N";
+        return {
+          step,
+          warning:
+            `Navigation target in "${step.text}" looks like a pagination phrase, not a URL or page object; emitting TODO so the user can bind it to a real pagination control (e.g. a 'Page-${digit}' button).`,
+        };
+      }
       const hasGoto = pom.methods.some((mm) => mm.name === "goto");
       if (hasGoto) {
         return {
@@ -812,6 +834,57 @@ const RULES: Rule[] = [
       step,
       customBody: `// intentionally left empty: ${stripUiSuffix(m[1])}`,
     }),
+  },
+
+  // N4c. v4.6.1 — Accessibility (axe) rule. attestqa 2026-10-19 Toolshop
+  //      run surfaced the LLM lane generating `@axe-core/playwright`
+  //      code against the wrong API: it reached for `injectAxe` +
+  //      `checkA11y` (which live on the `axe-playwright` package) and
+  //      `TypeError: injectAxe is not a function` fired at runtime.
+  //      The one correct form is `AxeBuilder` from `@axe-core/playwright`.
+  //      A rule-lane binding is more honest than the LLM lane here: the
+  //      shape is identical every time, so cache it as a rule and never
+  //      roll the LLM dice.
+  //
+  //      Matched step shapes (quoted or unquoted subject):
+  //        "the <X> passes axe accessibility checks"
+  //        "the page passes axe accessibility checks"
+  //        "<X> passes axe accessibility checks"
+  //        "the <X> region passes axe accessibility checks"
+  //
+  //      The subject is resolved to a POM field when it names one;
+  //      otherwise falls back to `${pageVar}.page` (whole-page scope).
+  //      Dynamic `import("@axe-core/playwright")` keeps the top-of-file
+  //      imports untouched so the rule works even when the project
+  //      doesn't have the package yet (the import then errors with the
+  //      right actionable message rather than a silent wrong-API shape).
+  {
+    pattern:
+      /^(?:the\s+)?(.+?)\s+(?:region\s+)?passes?\s+axe(?:\s+accessibility)?\s+checks?$/i,
+    build: (m, step, _pom, pageVar) => {
+      const subject = (m[1] ?? "").trim();
+      const isWholePage = /^(?:page|whole page|the page)$/i.test(subject);
+      // Scoped assertions need a CSS selector string for AxeBuilder.include(),
+      // and we can't synthesise one from a POM Locator reliably. Page-scope
+      // is the only honest shape without extra context. For scoped subjects
+      // we emit the page-scope assertion with a review warning so the user
+      // sees what to tighten.
+      const customBody =
+        `const { default: AxeBuilder } = await import("@axe-core/playwright");\n` +
+        `const axeResults = await new AxeBuilder({ page: ${pageVar}.page })\n` +
+        `  .withTags(["wcag2a", "wcag2aa"])\n` +
+        `  .analyze();\n` +
+        `expect(axeResults.violations.map((v) => v.id).sort(), \`axe violations: \${JSON.stringify(axeResults.violations, null, 2)}\`).toEqual([]);`;
+      if (isWholePage) {
+        return { step, customBody };
+      }
+      return {
+        step,
+        customBody,
+        warning:
+          `Axe check for "${subject}" was emitted as a page-wide scan — AxeBuilder.include() needs a CSS selector string, which bdd2pw can't synthesise from a Locator. Tighten by replacing \`new AxeBuilder({ page: ${pageVar}.page })\` with \`.include("<css-for-${subject}>")\` if the scoped assertion matters.`,
+      };
+    },
   },
 
   // N5b. Page-level text assertion — "the page (displays|contains|shows) [the message] 'X'"
