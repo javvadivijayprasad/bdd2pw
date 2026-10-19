@@ -66,6 +66,17 @@ export interface LocatorChoice {
    * the IR to pw-emit. See attestqa Bug B.
    */
   confidence: "unique" | "ambiguous" | "fallback" | "unparseable";
+  /**
+   * v4.6.5 — attestqa handoff 2026-10-19 "repeated elements never become
+   * fields". When >1 element in the scanned snapshot collapsed to the
+   * same `(api, args)` pair (e.g. 9 product cards each with
+   * `data-test="product-name"`), `dedupeLocators` records the count
+   * here. The emitter renders the field with a plural name (`productName`
+   * → `productNames`) and step rules can treat it as a Playwright
+   * multi-match locator (`.first()`, `.count()`, `.all()`, `.nth(n)`).
+   * `undefined` or `1` means a singleton field.
+   */
+  multiplicity?: number;
 }
 
 // --- Page Object IR --------------------------------------------------------
@@ -250,6 +261,19 @@ export interface ScaffoldOptions {
    * output still runs).
    */
   rollbackOnTscErrors?: boolean;
+  /**
+   * v4.6.4 — attestqa 2026-10-19 empty-step bug. What to emit for a
+   * step the matcher couldn't bind:
+   *   - "skip" (default): emit `test.fixme(true, "<reason>")` at the
+   *     top of any test with ≥1 unbound step. Playwright reports it
+   *     as *skipped* with the reason.
+   *   - "throw": each unbound step throws
+   *     `Error("TODO (bdd2pw): <warning>")`. Test fails at the first
+   *     unbound step. Louder.
+   *   - "none": pre-v4.6.4 silent-pass behaviour — the step body is a
+   *     bare `// TODO:` comment, no runtime signal. Not recommended.
+   */
+  todoStepHandling?: "skip" | "throw" | "none";
   llm?: "anthropic" | "openai" | "gemini";
   governanceUrl?: string;
   templates?: string;

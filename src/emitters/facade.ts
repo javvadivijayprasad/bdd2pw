@@ -198,6 +198,26 @@ export interface EmitTestFileInput {
    * See TestForge handoff Issue 5.
    */
   stepMarkers?: boolean;
+  /**
+   * v4.6.4 — attestqa 2026-10-19 empty-step bug. Controls what the
+   * emitter writes for a step the matcher couldn't bind (no pomCall,
+   * no assertion, no customBody — "TODO lane").
+   *
+   *   - "skip"  (DEFAULT, v4.6.4+): if ANY binding in a scenario is
+   *     TODO, prepend `test.fixme(true, "bdd2pw: N step(s) not
+   *     bound: ...")` to the test body. Playwright reports the test
+   *     as *skipped* (not passed), with the reason. The TODO step
+   *     bodies stay as `// TODO: ...` comments — fixme short-circuits
+   *     before they run.
+   *   - "throw": each TODO step throws
+   *     `Error("TODO (bdd2pw): <warning>")`. Playwright reports the
+   *     test as *failed* at the first unbound step. Louder than
+   *     "skip" — attestqa handoff's option 2.
+   *   - "none": pre-v4.6.4 behaviour — empty step body, test passes
+   *     silently. Only choose this if you have a downstream consumer
+   *     that greps the `[SKIPPED]` prefix and marks the step itself.
+   */
+  todoStepHandling?: "skip" | "throw" | "none";
 }
 
 export type { EmitResult };
@@ -279,6 +299,10 @@ export function emitTestFile(input: EmitTestFileInput): EmitResult {
     // v4.4.1 — provenance comments default ON. Callers that need
     // byte-stable pre-v4.4.1 output pass `false`.
     provenanceComments: input.provenanceComments !== false,
+    // v4.6.4 — attestqa handoff. Default "skip" marks any scenario
+    // with ≥1 unbound step as `test.fixme()` so Playwright reports
+    // "skipped" rather than a silent pass.
+    todoStepHandling: input.todoStepHandling ?? "skip",
   };
   const ir: TestSpecIR = {
     describeName: input.describeName,
@@ -366,12 +390,43 @@ function bindingsToBody(
      * SemVer-covered grammar.
      */
     provenanceComments?: boolean;
+    /** v4.6.4 — see EmitTestFileInput.todoStepHandling. */
+    todoStepHandling?: "skip" | "throw" | "none";
   } = {},
 ): string {
   const fixtureNames =
     options.fixtures && options.fixtures.length > 0 ? options.fixtures : ["page"];
   const fixturesLit = `{ ${fixtureNames.join(", ")} }`;
+  const todoMode = options.todoStepHandling ?? "skip";
   const lines: string[] = [];
+
+  // v4.6.4 — attestqa 2026-10-19 empty-step bug. Pre-scan bindings for
+  // TODO (unbound) steps. If any are found and the mode is "skip",
+  // prepend `test.fixme(true, <reason>)` BEFORE the prelude so the
+  // whole test is marked skipped by Playwright's reporter. The TODO
+  // step bodies stay as `// TODO: ...` — fixme short-circuits before
+  // they execute. "throw" mode leaves this hook silent; each TODO body
+  // throws later.
+  const todoBindings = bindings.filter(
+    (b) => !b.customBody && !b.pomCall && !b.assertion,
+  );
+  if (todoMode === "skip" && todoBindings.length > 0) {
+    const titles = todoBindings
+      .slice(0, 3)
+      .map((b) => {
+        const kw = (b.step.keyword ?? "").trim();
+        const tx = (b.step.text ?? "").trim();
+        return (kw ? `${kw} ${tx}` : tx).trim();
+      })
+      .join(" | ");
+    const more = todoBindings.length > 3 ? ` (+${todoBindings.length - 3} more)` : "";
+    const reason = `bdd2pw: ${todoBindings.length} step(s) not bound — ${titles}${more}`;
+    // Use flattenForComment to collapse any newlines in step titles so
+    // the resulting fixme literal is a single safe JS string.
+    const safeReason = flattenForComment(reason).replace(/^\/\/\s*/, "");
+    lines.push(`test.fixme(true, ${JSON.stringify(safeReason)});`);
+  }
+
   if (prelude.length > 0) {
     lines.push(...prelude);
     lines.push("");
@@ -451,7 +506,19 @@ function bindingsToBody(
       const safeWarning = flattenForComment(
         b.warning ?? "no rule matched this step",
       );
-      bodyLines.push(`// TODO: ${safeWarning}`);
+      // v4.6.4 — attestqa handoff. "throw" mode: raise an error inside
+      // the step so Playwright reports the test as failed at this step.
+      // "skip" and "none" leave the body as a comment: for "skip", a
+      // `test.fixme()` at the top of the test short-circuits execution
+      // before this body runs; "none" is the pre-v4.6.4 silent-pass
+      // behaviour kept for byte-stable rollback.
+      if (todoMode === "throw") {
+        bodyLines.push(
+          `throw new Error(${JSON.stringify(`TODO (bdd2pw): step not implemented — ${safeWarning.replace(/^\/\/\s*/, "")}`)});`,
+        );
+      } else {
+        bodyLines.push(`// TODO: ${safeWarning}`);
+      }
     }
 
     // v3.1.0 + v3.3.0 — opt-in step hook callouts. v3.3.0 extends the

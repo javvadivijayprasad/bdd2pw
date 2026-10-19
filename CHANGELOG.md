@@ -9,6 +9,198 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.5] — 2026-10-19
+
+### Theme: unbound steps + repeated elements + negative pagination assertion
+
+attestqa handoff `bdd2pw-handoff-empty-todo-steps-2026-10-19.md`
+had three items that landed before v4.6.4 shipped to npm. Rolling
+them all into v4.6.5 for a single publish.
+
+### Added — list-field detection in `dedupeLocators` (attestqa item 2)
+
+`dedupeLocators` previously collapsed N raw picks with the same
+`(api, args)` pair into one SINGULAR field, which hid the fact
+that N elements on the live page matched the same stable
+locator. For a Toolshop scan with 9 product cards each carrying
+`data-test="product-name"`, the dedupe pass kept one
+`productName` field and dropped the information that it was a
+list — so a step like "each product card shows a name" had no
+field to point at and fell to TODO under the no-invented-locator
+rule.
+
+v4.6.5 counts the collisions in `src/transformers/locatorPicker.ts`
+and, when > 1:
+
+1. Pluralises the kept field name (`productName` → `productNames`,
+   `productPrice` → `productPrices`, `category` → `categories`,
+   `box` → `boxes`, `match` → `matches`, …). Already-plural names
+   are left alone.
+2. Stamps `LocatorChoice.multiplicity` with the real raw count.
+
+Playwright locators resolve lazily, so the single
+`this.page.getByTestId("product-name")` already matches all 9
+cards at runtime — `.first()`, `.count()`, `.all()`, `.nth(n)`
+all work. The POM gets the semantically correct plural identifier
+and the step-matcher can bind list assertions.
+
+### Added — rules N4e / N4f (list assertions)
+
+Two new rules in `src/transformers/stepMatcher.ts` cover the step
+shapes the handoff named:
+
+- **N4e** — `(each|every) <item> (shows|has|have|displays|contains) (a|an|the) <part>`.
+  Looks up the POM field by trying `<item><Part>`, its plural, and
+  a part-first alias. On a match, emits
+  `await expect(pom.<field>.first()).toBeVisible(); expect(await pom.<field>.count(), "…").toBeGreaterThan(0);`.
+  On no match, emits a `warning` TODO naming the candidates it
+  tried — honest signal, no silent pass.
+- **N4f** — `the <items> list is not empty` / `at least one <item>
+  is shown` / `some <items> are displayed`. Same emit as N4e for
+  the found field; same honest TODO on miss.
+
+Alternation order inside N4e (`an|a|the` not `a|an|the`) with a
+`\b` tail stops "an image" from being consumed as just "a" with
+"n image" left over.
+
+### Added — `stripUiSuffix` tolerates collection-item suffixes
+
+Widened to also strip `card`, `row`, `tile`, `item`, `entry`,
+`cell`, `line`, `record` so N4e can map "product card" → "product"
+and find `productNames`. Rule authors elsewhere that call
+`stripUiSuffix` get the widening too, which is the honest
+semantics (these words name a container, not a locator).
+
+### Added — rule N4d-neg (negative active-page assertion)
+
+Needed by paged tests like Toolshop AC-3 (after clicking Page-2,
+page 1 should stop being marked current). Shares N4d's locator
+and three-marker OR; the poll callback returns true when ALL
+three markers are ABSENT. Accepts the same step-shape variants
+as N4d plus `not`:
+
+- `page N is not active|current|highlighted|selected`
+- `the "Page-N" (button|link|control|item) is not (marked as)? active|current|...`
+- `the page N (button|link|control|item) is not (marked as)? active|current|...`
+
+Same `expect.poll()` wrap as N4d so Angular/React apps that
+clear the `active` class asynchronously don't race the DOM.
+
+### Changed — unbound-step emission (attestqa item 1)
+
+(Carried over from the v4.6.4 scope; v4.6.4 never published.)
+
+A step bdd2pw can't bind no longer passes silently. Any test
+with ≥1 TODO binding gets `test.fixme(true, "bdd2pw: N step(s)
+not bound — <titles>")` at the top of its body. Playwright
+reports the test as *skipped* with the reason. Opt out via
+`--todo-step-handling throw` (louder; test fails at the TODO
+step) or `--todo-step-handling none` (pre-v4.6.5 silent-pass,
+only for consumers like attestqa's cucumber adapter that rewrite
+the status downstream). The `[SKIPPED]` step-title prefix is
+retained in all three modes as a reader's hint.
+
+### Added — API surface
+
+- `LocatorChoice.multiplicity?: number`
+- `ScaffoldOptions.todoStepHandling?: "skip" | "throw" | "none"`
+- `EmitTestFileInput.todoStepHandling?`
+- `src/http/schemas.ts` — `options.todoStepHandling`
+- `src/http/routes.ts` — forwards the new field
+
+### Breaking change
+
+CI that treated a green bdd2pw suite as proof of coverage despite
+TODO steps now sees skipped tests when any step is unbound. Fix:
+either bind the step (annotate the element so bdd2pw discovers
+it, hand-author the locator, or let v4.6.5's list-field rules
+cover it) or pass `--todo-step-handling none`.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-empty-todo-steps-2026-10-19.md`
+naming the three items; run `20261019T171551Z-fd33c2d4` for the
+Toolshop reproduction.
+
+## [4.6.4] — 2026-10-19 (not published)
+
+### Theme: an unbound step must not pass
+
+attestqa handoff `bdd2pw-handoff-empty-todo-steps-2026-10-19.md`
+reported run `20261019T171551Z-fd33c2d4` where the Toolshop scaffold
+left 6 of 10 assertion steps unbound. Each unbound step emitted
+only a `// TODO:` comment inside an otherwise-empty `test.step`
+block, which Playwright reports as **passed**. The suite summary
+read "4 passed, 0 failed, 0 skipped" even though three of the four
+tests tested nothing and the fourth checked only one of its two
+expectations. Any consumer of bdd2pw outside attestqa's own
+agent — including a developer running `npx playwright test` — saw
+a green suite that proved nothing.
+
+### Changed — default emission for unbound steps now marks the test skipped
+
+A step that lands in the TODO lane (no `pomCall`, no `assertion`,
+no `customBody`) now triggers `test.fixme(true, "<reason>")` at
+the top of its enclosing test. Playwright reports the test as
+*skipped* with the reason, which includes the first three unbound
+step titles and the total count. The step bodies stay as
+`// TODO:` comments — fixme short-circuits execution before any
+of them run.
+
+Rationale: silent pass is wrong; the handoff asked for either
+`test.fixme` (option 1, "skipped") or `throw` (option 2, "failed").
+`test.fixme` is the handoff's preferred option because it keeps
+the test as "not implemented" rather than mixing bdd2pw's own
+guesswork into the failure signal. v4.6.4 adopts it as the
+default.
+
+### Added — `--todo-step-handling <mode>`
+
+Opt into one of three modes:
+
+- **`skip`** (default) — `test.fixme(true, "bdd2pw: N step(s) not
+  bound — <titles>")` on any test with ≥1 TODO binding. Playwright
+  reports it as *skipped*.
+- **`throw`** — each TODO step body throws
+  `Error("TODO (bdd2pw): step not implemented — <warning>")`.
+  Playwright reports the test as *failed* at the first unbound
+  step. Louder, closer to the handoff's option 2.
+- **`none`** — pre-v4.6.4 silent-pass behaviour. The step body is
+  a `// TODO:` comment, no runtime signal. Only choose this if a
+  downstream consumer greps the `[SKIPPED]` step prefix and
+  rewrites the status itself (attestqa's cucumber adapter does
+  this; it's the only reason the pre-v4.6.4 behaviour was ever
+  defensible).
+
+The HTTP body option is `options.todoStepHandling`. The
+`[SKIPPED]` prefix on the step title is retained in all three
+modes as a reader's hint — it is no longer the only signal.
+
+### Added — API surface
+
+- `ScaffoldOptions.todoStepHandling?: "skip" | "throw" | "none"`
+- `EmitTestFileInput.todoStepHandling?` (threaded into
+  `bindingsToBody` via a new entry on its stepOpts param)
+- `src/http/schemas.ts` — `options.todoStepHandling` enum
+- `src/http/routes.ts` — forwards the field into ScaffoldOptions
+
+### Breaking change for callers who were depending on silent pass
+
+If you had CI tooling that treated a green bdd2pw suite as proof
+of coverage despite TODO steps, that pattern breaks on v4.6.4: a
+run with any unbound step now reports some skipped tests. The
+fix is to either bind the step (annotate the page element so
+bdd2pw's discovery picks it up, hand-author the locator) or
+accept the pre-v4.6.4 behaviour explicitly with
+`--todo-step-handling none`. The one-liner `test.fixme` is also
+inside the test body, so merge-mode spec edits that preserve
+`// bdd2pw:user-block` sections keep working.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-empty-todo-steps-2026-10-19.md`
+and run `20261019T171551Z-fd33c2d4` for the reproduction.
+
 ## [4.6.3] — 2026-10-19
 
 ### Theme: rule N4d review — fix the race, the bare-N label, strict-mode, two new step shapes, and a bad regex escape

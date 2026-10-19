@@ -69,6 +69,11 @@ program
     "v4.6.0 — if tsc reports ANY error on the scaffold output, restore every file this run would overwrite (and delete new files it created). attestqa P1-1 safety net.",
     false,
   )
+  .option(
+    "--todo-step-handling <mode>",
+    "v4.6.4 — what to emit for unbound steps: 'skip' (default — test.fixme so Playwright reports 'skipped'), 'throw' (test fails at the unbound step), or 'none' (pre-v4.6.4 silent-pass). attestqa handoff 2026-10-19.",
+    "skip",
+  )
   .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
   .option(
     "--no-discovery",
@@ -212,6 +217,13 @@ program
         browserChannel: typeof opts.browserChannel === "string" ? opts.browserChannel : undefined,
         // v4.6.0 — attestqa P1-1
         rollbackOnTscErrors: opts.rollbackOnTscErrors === true,
+        // v4.6.4 — attestqa 2026-10-19 handoff
+        todoStepHandling:
+          opts.todoStepHandling === "skip" ||
+          opts.todoStepHandling === "throw" ||
+          opts.todoStepHandling === "none"
+            ? (opts.todoStepHandling as "skip" | "throw" | "none")
+            : "skip",
         llm: opts.llm,
         llmConfig,
         governanceUrl: opts.governanceUrl,

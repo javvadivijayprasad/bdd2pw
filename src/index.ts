@@ -845,6 +845,10 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       // v4.4.1 — provenance comments default ON. Users opt out via
       // --no-provenance-comments or `provenanceComments: false`.
       provenanceComments: opts.provenanceComments !== false,
+      // v4.6.4 — attestqa handoff. Default "skip" marks tests with any
+      // unbound step as test.fixme() so Playwright reports them skipped
+      // rather than silently passed.
+      todoStepHandling: opts.todoStepHandling ?? "skip",
     });
     reviewItems.push(...specEmit.warnings.map((w) => ({ ...w, file: specPath })));
     await fs.ensureDir(path.dirname(specPath));

@@ -30,6 +30,8 @@ export const ScaffoldRequestSchema = z.object({
       // v4.6.0 — attestqa Request C + P1-1.
       browserChannel: z.enum(["chrome", "msedge", "chromium"]).optional(),
       rollbackOnTscErrors: z.boolean().optional(),
+      // v4.6.4 — attestqa handoff 2026-10-19 (unbound steps).
+      todoStepHandling: z.enum(["skip", "throw", "none"]).optional(),
     })
     .optional(),
 });

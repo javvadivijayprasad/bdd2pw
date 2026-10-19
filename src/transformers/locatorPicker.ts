@@ -443,6 +443,42 @@ function roleToSuffix(role?: string, tag?: string): string {
  *
  * Stable-sorted by input order otherwise.
  */
+/**
+ * v4.6.5 — pluralise a camelCase field name using a small English
+ * rule set. Good enough for the common cases on test-ids:
+ *   productName  → productNames
+ *   productPrice → productPrices
+ *   searchResult → searchResults
+ *   address      → addresses       (ends in -ss)
+ *   match        → matches         (ends in -ch)
+ *   category     → categories      (consonant + -y)
+ *   box          → boxes           (ends in -x)
+ *   bus          → buses           (ends in -s)
+ *   quiz         → quizzes         (ends in -z)
+ * Already-plural (`items`, `products`, `addresses`) is a no-op — if the
+ * caller already named it plural we don't double-pluralise.
+ * Never produces an invalid identifier.
+ */
+function pluraliseFieldName(name: string): string {
+  if (!name) return name;
+  // Already plural? Common endings on test-ids. Keep as-is.
+  if (/(?:s|xes|zes|ches|shes|ies|us|is)$/i.test(name)) {
+    // Guard against ending exactly in "s" where the base word is
+    // short/singular (`bus` → still "bus"). We're conservative: only
+    // treat as plural if the preceding char is also a letter and the
+    // whole thing isn't 3 chars or fewer.
+    if (/s$/i.test(name) && name.length > 3 && !/[sxz]s$/i.test(name)) {
+      return name;
+    }
+  }
+  // consonant + y → ies
+  if (/[^aeiou]y$/i.test(name)) return name.slice(0, -1) + "ies";
+  // ends in s/x/z/ch/sh → es
+  if (/(?:s|x|z|ch|sh)$/i.test(name)) return name + "es";
+  // default → s
+  return name + "s";
+}
+
 export function dedupeLocators(
   choices: (LocatorChoice | undefined)[],
 ): LocatorChoice[] {
@@ -451,9 +487,16 @@ export function dedupeLocators(
   // review warning reports how many fields were skipped.
   const filtered = choices.filter((c): c is LocatorChoice => c !== undefined);
   // Pass 1: collapse by locator identity. Picks the better field name.
+  // v4.6.5 — also count how many raw picks collapsed to each key. When
+  // >1, the kept entry is a LIST locator (the same `getByTestId(X)` call
+  // matches multiple elements on the live page), and we record the
+  // multiplicity + pluralise the field name so the step-matcher's list
+  // rules can bind "each X shows a Y" against it.
   const byLocator = new Map<string, LocatorChoice>();
+  const counts = new Map<string, number>();
   for (const c of filtered) {
     const key = `${c.api}::${c.args}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
     const existing = byLocator.get(key);
     if (!existing) {
       byLocator.set(key, c);
@@ -464,7 +507,15 @@ export function dedupeLocators(
       byLocator.set(key, c);
     }
   }
-  const collapsed = Array.from(byLocator.values());
+  const collapsed = Array.from(byLocator.entries()).map(([key, c]) => {
+    const n = counts.get(key) ?? 1;
+    if (n <= 1) return c;
+    return {
+      ...c,
+      fieldName: pluraliseFieldName(c.fieldName),
+      multiplicity: n,
+    };
+  });
 
   // Pass 2: resolve any remaining fieldName collisions with a numeric suffix.
   const seen = new Map<string, number>();

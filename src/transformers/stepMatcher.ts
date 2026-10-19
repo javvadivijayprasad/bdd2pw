@@ -836,6 +836,145 @@ const RULES: Rule[] = [
     }),
   },
 
+  // N4d-neg. v4.6.5 — Negative of N4d. "page N is not active|current|...".
+  //           Needed by paged tests like AC-3 (after clicking Page-2,
+  //           page 1 should stop being marked current). Same OR of three
+  //           markers (aria-current, class on self, class on parent),
+  //           all three must be ABSENT; poll until that holds.
+  {
+    pattern:
+      /^(?:(?:(?:the\s+)?page\s+(\d+)\s+(?:is|appears)\s+not\s+(?:(?:the\s+)?(?:active|current|highlighted|selected|marked\s+as\s+(?:(?:the\s+)?(?:current|active)(?:\s+page)?))))|(?:(?:the\s+)?["']?page[-\s]?(\d+)["']?\s+(?:button|link|control|item)\s+(?:is\s+)?not\s+(?:marked\s+as\s+)?(?:(?:the\s+)?(?:active|current|highlighted|selected)(?:\s+page)?))|(?:(?:the\s+)?page\s+(\d+)\s+(?:button|link|control|item)\s+(?:is\s+)?not\s+(?:marked\s+as\s+)?(?:(?:the\s+)?(?:active|current|highlighted|selected)(?:\s+page)?)))\s*$/i,
+    build: (m, step, _pom, pageVar) => {
+      const n = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+      if (!/^\d+$/.test(n)) return null;
+      // Same locator/OR structure as N4d but every branch MUST be false.
+      // The poll's callback returns true when all three markers are
+      // absent — which, when true, is what we want to assert.
+      const customBody =
+        `const inactiveN = ${JSON.stringify(n)};\n` +
+        `const inactiveNameRe = new RegExp(\`^(?:(?:go to\\\\s+)?page[-\\\\s]?)?\${inactiveN}$\`, "i");\n` +
+        `const inactiveBtn = ${pageVar}.page.getByRole("button", { name: inactiveNameRe })\n` +
+        `  .or(${pageVar}.page.getByRole("link", { name: inactiveNameRe }))\n` +
+        `  .first();\n` +
+        `const lastObserved = { ariaCurrent: null as string | null, selfClass: null as string | null, parentClass: null as string | null };\n` +
+        `await expect\n` +
+        `  .poll(async () => {\n` +
+        `    const [ariaCurrent, selfClass, parentClass] = await Promise.all([\n` +
+        `      inactiveBtn.getAttribute("aria-current"),\n` +
+        `      inactiveBtn.getAttribute("class"),\n` +
+        `      inactiveBtn.locator("xpath=..").getAttribute("class"),\n` +
+        `    ]);\n` +
+        `    lastObserved.ariaCurrent = ariaCurrent;\n` +
+        `    lastObserved.selfClass = selfClass;\n` +
+        `    lastObserved.parentClass = parentClass;\n` +
+        `    return (\n` +
+        `      ariaCurrent !== "page" &&\n` +
+        `      !/\\bactive\\b/i.test(selfClass ?? "") &&\n` +
+        `      !/\\bactive\\b/i.test(parentClass ?? "")\n` +
+        `    );\n` +
+        `  }, {\n` +
+        `    message: \`page \${inactiveN} should NOT be marked active (aria-current must not be "page" AND class must not contain "active" on the control or its parent). Last observed: aria-current=\${JSON.stringify(lastObserved.ariaCurrent)}, selfClass=\${JSON.stringify(lastObserved.selfClass)}, parentClass=\${JSON.stringify(lastObserved.parentClass)}.\`,\n` +
+        `  })\n` +
+        `  .toBe(true);`;
+      return { step, customBody };
+    },
+  },
+
+  // N4e. v4.6.5 — List-field assertion. attestqa 2026-10-19 "repeated
+  //      elements never become fields". When the scanner collapses
+  //      multiple matches into one plural field (dedupeLocators sets
+  //      multiplicity > 1 and pluralises the field name), these step
+  //      shapes bind against that plural field:
+  //
+  //        each <item> shows a <part>
+  //        each <item> has a <part>
+  //        every <item> shows a <part>
+  //        every <item> displays a <part>
+  //
+  //      Field lookup: tries `<item><Part>` (singular, like
+  //      `productName`), its plural (`productNames`), and the
+  //      part-first alias (`namesOfProduct`). First match wins. On no
+  //      match returns a warning TODO so the step doesn't silently
+  //      pass.
+  {
+    // v4.6.5 — alternation order: `an` BEFORE `a` so "an image" eats
+    // the whole article rather than just the leading "a". `\b` on the
+    // tail stops partial-word matches regardless of future edits.
+    pattern:
+      /^(?:each|every)\s+(.+?)\s+(?:shows?|has|have|displays?|contains?)\s+(?:(?:an|a|the)\b\s*)?(.+?)\s*$/i,
+    build: (m, step, pom, pageVar) => {
+      const itemRaw = m[1].trim();
+      const partRaw = m[2].trim();
+      if (!itemRaw || !partRaw) return null;
+      // Singular / stripped UI-suffix forms.
+      const item = stripUiSuffix(itemRaw).replace(/\s+/g, "");
+      const part = stripUiSuffix(partRaw).replace(/\s+/g, "");
+      const candidates = [
+        `${item}${capitalize(part)}`,            // productName
+        `${item}${capitalize(part)}s`,           // productNames (plural)
+        `${pluraliseLower(item)}${capitalize(part)}`, // productsName
+        `${pluraliseLower(item)}${capitalize(part)}s`, // productsNames
+        `${camelCase(partRaw)}${capitalize(item)}`,   // nameProduct (reverse)
+      ];
+      const field = candidates
+        .map((name) => pom.fields.find((f) => f.fieldName === name))
+        .find((f): f is NonNullable<typeof f> => f !== undefined);
+      if (!field) {
+        return {
+          step,
+          warning:
+            `No POM field maps to "${itemRaw} ${partRaw}" (tried: ${candidates.join(", ")}). Annotate the element with data-test="${camelCase(itemRaw)}-${camelCase(partRaw)}" or hand-author a list field so bdd2pw can bind this step.`,
+        };
+      }
+      // Emit a visible+count>0 assertion against the (list) locator.
+      // Playwright locators resolve lazily, so `.first()` works whether
+      // the field is singular or plural; `.count()` reports the real
+      // match count. The `>` 0 check is the "list is populated" signal.
+      const customBody =
+        `await expect(${pageVar}.${field.fieldName}.first()).toBeVisible();\n` +
+        `expect(await ${pageVar}.${field.fieldName}.count(), \`expected at least one ${itemRaw} with a ${partRaw}\`).toBeGreaterThan(0);`;
+      return { step, customBody };
+    },
+  },
+
+  // N4f. v4.6.5 — list emptiness assertions. Positive and "not empty"
+  //       forms both bind to the same locator's `.first()` visibility.
+  //
+  //         the <items> list is not empty
+  //         at least one <item> is shown
+  //         the <items> are displayed
+  //         some <items> are shown
+  {
+    pattern:
+      /^(?:(?:the\s+)?(.+?)\s+list\s+is\s+not\s+empty|at\s+least\s+one\s+(.+?)\s+is\s+(?:shown|displayed|visible|present)|(?:some|several)\s+(.+?)\s+are\s+(?:shown|displayed|visible))\s*$/i,
+    build: (m, step, pom, pageVar) => {
+      const subject = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+      if (!subject) return null;
+      const base = stripUiSuffix(subject).replace(/\s+/g, "");
+      const candidates = [
+        base,
+        pluraliseLower(base),
+        `${base}s`,
+        `${base}Items`,
+        `${base}List`,
+      ];
+      const field = candidates
+        .map((n) => pom.fields.find((f) => f.fieldName === n))
+        .find((f): f is NonNullable<typeof f> => f !== undefined);
+      if (!field) {
+        return {
+          step,
+          warning:
+            `No POM field maps to "${subject}" (tried: ${candidates.join(", ")}). Annotate the collection container or hand-author a list field so bdd2pw can bind this step.`,
+        };
+      }
+      const customBody =
+        `await expect(${pageVar}.${field.fieldName}.first()).toBeVisible();\n` +
+        `expect(await ${pageVar}.${field.fieldName}.count(), \`expected at least one ${subject}\`).toBeGreaterThan(0);`;
+      return { step, customBody };
+    },
+  },
+
   // N4d. v4.6.2 — Active-page assertion. attestqa 2026-10-19 Toolshop
   //      run surfaced the LLM lane asserting `aria-current="page"` on
   //      the active pagination button, which fails on apps (Toolshop,
@@ -1471,6 +1610,19 @@ function capitalize(s: string): string {
 }
 
 /**
+ * v4.6.5 — mirrors the pluralise rules in `locatorPicker.pluraliseFieldName`
+ * but operates on an already-lowercased identifier. Used by N4e / N4f to
+ * try plural variants of a step-text subject when hunting for a POM
+ * field.
+ */
+function pluraliseLower(name: string): string {
+  if (!name) return name;
+  if (/[^aeiou]y$/i.test(name)) return name.slice(0, -1) + "ies";
+  if (/(?:s|x|z|ch|sh)$/i.test(name)) return name + "es";
+  return name + "s";
+}
+
+/**
  * Strip trailing UI-element words from a description so findField sees the
  * core noun. "username input field" → "username", "Log out button" → "Log out",
  * "error message" → "error message" (we leave compound nouns alone — the
@@ -1483,7 +1635,11 @@ function capitalize(s: string): string {
 function stripUiSuffix(desc: string): string {
   return desc
     .replace(
-      /\s+(?:input\s+field|text\s+box|input|field|box|element|control|textbox)\s*$/i,
+      // v4.6.5 — also strip collection-item suffixes so N4e list rule
+      // can map "product card" → "product" and look up `productName` /
+      // `productNames` in the POM. Without this, "each product card
+      // shows a name" couldn't find a field.
+      /\s+(?:input\s+field|text\s+box|input|field|box|element|control|textbox|card|row|tile|item|entry|cell|line|record)\s*$/i,
       "",
     )
     .trim();
