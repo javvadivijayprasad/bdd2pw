@@ -9,6 +9,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.2] — 2026-10-19
+
+### Theme: active-page assertion rule — tolerate both `aria-current="page"` and `.active`-class pagination conventions
+
+Follow-up to the attestqa 2026-10-19 Toolshop handoff. The handoff's
+"Minor, for information" section observed that the LLM lane asserts
+`aria-current="page"` on the active pagination button, which fails
+on apps (Toolshop, Bootstrap, Angular Material) that mark the
+active state with an `active` class on the parent `<li.page-item>`
+instead. The LLM can't know the DOM convention from step text
+alone, so v4.6.1 called this "the right layer is attestqa's agent".
+v4.6.2 reconsiders: a rule-lane binding that tolerates BOTH shapes
+is more honest than the LLM's guess, works on every app regardless
+of its pagination widget, and removes one more guess-based failure
+mode from the LLM lane's responsibility.
+
+### Added — rule N4d (active-page assertion)
+
+Matched step shapes:
+
+- `page 2 is active`
+- `page 2 is the active page`
+- `page 2 is highlighted`
+- `page 3 is selected`
+- `the active page is 2`
+- `the current page is page 2`
+
+The emitted assertion is a `customBody` block that:
+
+1. Locates the pagination button or link by role, matching labels
+   `Page-2`, `Page 2`, `Go to page 2`, and the bare `2` (case-
+   insensitive, hyphen-or-space-tolerant).
+2. Reads `aria-current`, the button's own `class`, and the parent
+   element's `class` in parallel.
+3. Resolves `true` if ANY of: `aria-current === "page"`, the
+   button has an `active` class on itself, or the parent (the
+   common `<li.page-item>` wrapper) has an `active` class.
+4. `expect(..., message).toBe(true)` with a diagnostic message
+   that includes all three observed values, so when it fails the
+   user sees which shape was off.
+
+Scope: numeric page targets only. `"the login page is active"`
+falls through so the login-page semantics aren't accidentally
+hijacked.
+
+### Not changed
+
+- Everything else from v4.6.1. The LLM prompt still forbids
+  LLM-generated axe bindings and guards against pagination
+  `goto()` and locator fabrication.
+- `aria-current` remains the ARIA-compliant default; apps that use
+  it keep working through branch (1) of the OR.
+
+### Credit
+
+attestqa handoff `bdd2pw-handoff-pom-wipe-2026-10-19.md`
+"Minor, for information" section.
+
 ## [4.6.1] — 2026-10-19
 
 ### Theme: attestqa 2026-10-19 Toolshop run — three generation mistakes in one scaffold

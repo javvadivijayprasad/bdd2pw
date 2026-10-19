@@ -13,7 +13,7 @@ abstract: >
   and LLM batching diagnostics.
 type: software
 license: MIT
-version: 4.6.1
+version: 4.6.2
 date-released: 2026-10-19
 authors:
   - family-names: "Javvadi"

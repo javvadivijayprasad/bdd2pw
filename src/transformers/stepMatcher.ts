@@ -836,6 +836,61 @@ const RULES: Rule[] = [
     }),
   },
 
+  // N4d. v4.6.2 — Active-page assertion. attestqa 2026-10-19 Toolshop
+  //      run surfaced the LLM lane asserting `aria-current="page"` on
+  //      the active pagination button, which fails on apps (Toolshop,
+  //      Bootstrap, Angular Material pagination) that mark the active
+  //      state with an `active` class on the parent `<li>` instead.
+  //      The LLM can't know the DOM convention from step text alone;
+  //      a rule-lane binding that tolerates BOTH shapes is the honest
+  //      fix.
+  //
+  //      Matched step shapes:
+  //        "page 2 is active"
+  //        "page 2 is the active page"
+  //        "page 2 is highlighted"
+  //        "page 2 is selected"
+  //        "page 2 is marked as current"
+  //        "the active page is 2"
+  //        "the current page is page 2"
+  //
+  //      Emitted assertion checks any of:
+  //        a) the button has aria-current="page" (ARIA-compliant), OR
+  //        b) the button has an "active" class on itself, OR
+  //        c) the button's parent (common wrapper: <li.page-item>)
+  //           has an "active" class.
+  //      All three are read via Playwright `getAttribute`; the final
+  //      expect() is on a boolean, so the failure message says which
+  //      shape was looked for.
+  {
+    pattern:
+      /^(?:(?:the\s+)?(?:current|active|selected|highlighted)\s+page\s+is\s+(?:page\s+)?(\d+)|(?:the\s+)?page\s+(\d+)\s+(?:is|appears)\s+(?:(?:the\s+)?(?:active|current|highlighted|selected|marked\s+as\s+(?:current|active)))(?:\s+page)?)\s*$/i,
+    build: (m, step, _pom, pageVar) => {
+      const n = (m[1] ?? m[2] ?? "").trim();
+      if (!/^\d+$/.test(n)) return null;
+      // Label patterns commonly emitted by pagination widgets:
+      //   "Page-2", "Page 2", "Go to page 2", "2".
+      const customBody =
+        `const activeN = ${JSON.stringify(n)};\n` +
+        `const activeBtn = ${pageVar}.page.getByRole("button", { name: new RegExp(\`^(?:go to\\\\s+)?page[-\\\\s]?\${activeN}$\`, "i") })\n` +
+        `  .or(${pageVar}.page.getByRole("link", { name: new RegExp(\`^(?:go to\\\\s+)?page[-\\\\s]?\${activeN}$\`, "i") }));\n` +
+        `const [ariaCurrent, selfClass, parentClass] = await Promise.all([\n` +
+        `  activeBtn.getAttribute("aria-current"),\n` +
+        `  activeBtn.getAttribute("class"),\n` +
+        `  activeBtn.locator("xpath=..").getAttribute("class"),\n` +
+        `]);\n` +
+        `const isActive =\n` +
+        `  ariaCurrent === "page" ||\n` +
+        `  /\\bactive\\b/i.test(selfClass ?? "") ||\n` +
+        `  /\\bactive\\b/i.test(parentClass ?? "");\n` +
+        `expect(\n` +
+        `  isActive,\n` +
+        `  \`page \${activeN} should be marked active (aria-current="page" OR class contains "active" on the button or its parent); got aria-current=\${JSON.stringify(ariaCurrent)}, selfClass=\${JSON.stringify(selfClass)}, parentClass=\${JSON.stringify(parentClass)}\`,\n` +
+        `).toBe(true);`;
+      return { step, customBody };
+    },
+  },
+
   // N4c. v4.6.1 — Accessibility (axe) rule. attestqa 2026-10-19 Toolshop
   //      run surfaced the LLM lane generating `@axe-core/playwright`
   //      code against the wrong API: it reached for `injectAxe` +
