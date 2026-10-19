@@ -9,6 +9,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.3] — 2026-10-19
+
+### Theme: rule N4d review — fix the race, the bare-N label, strict-mode, two new step shapes, and a bad regex escape
+
+attestqa reviewed v4.6.2's rule N4d before adopting it and named
+three real defects plus two step shapes it emits in practice.
+v4.6.3 lands all five changes in `src/transformers/stepMatcher.ts`.
+The published tag v4.6.2 was never promoted on npm (`npm view`
+still ends at v4.6.1 at review time), so this picks up the chain
+cleanly.
+
+### Fixed — the attribute reads raced the DOM (critical)
+
+v4.6.2 read `aria-current` + the two `class` attributes once with
+`Promise.all` and asserted on a plain boolean. Playwright does not
+retry `expect(boolean)`, so a `click("Page-2")` → `page 2 is
+active` sequence against Toolshop (Angular, updates `active` on
+data-arrival) hit the three reads before the state transition and
+failed, which attestqa then surfaced as three false "page 2 shows
+page-1 products" bug proposals in run `20261019T155404Z`.
+
+The emitted body now wraps the OR check in `expect.poll()`:
+Playwright re-runs the callback until it returns `true` or the
+poll budget expires. A `lastObserved` object inside the closure
+captures the real last values each iteration so the failure
+message carries live diagnostics rather than the stale first
+read.
+
+### Fixed — bare `N` label (e.g. `"2"`) now matched
+
+The release note for v4.6.2 claimed "bare N" was accepted, but the
+emitted regex was `^(?:go to\s+)?page[-\s]?N$` — the `page`
+prefix was mandatory. Bootstrap pagination (accessible name `"2"`)
+and Material pagination (accessible name `"Page 2"`) both failed
+to locate.
+
+The regex now reads
+`^(?:(?:go to\s+)?page[-\s]?)?${activeN}$`, with the entire
+`page[-\s]?` prefix optional. Both Bootstrap's `"2"`, Material's
+`"Page 2"`, and Toolshop's `"Page-2"` match.
+
+### Fixed — strict-mode violation on multi-match
+
+`getByRole("button").or(getByRole("link"))` resolves to >1 node
+whenever an app renders pagination above AND below a list (common
+pattern) or offers both a button and a link form. The
+`.getAttribute()` call then threw a strict-mode violation that
+looked like a locator bug.
+
+The combined locator now ends with `.first()`.
+
+### Added — two new step shapes attestqa emits in practice
+
+- `the "Page-N" (button|link|control|item) is (marked as)? (active|current|highlighted|selected)(?: page)?`
+- `the page N (button|link|control|item) is (marked as)? (active|current|highlighted|selected)(?: page)?`
+
+Both forms were going to the LLM lane; now covered by the rule
+lane with the same deterministic emission as the bare `page N
+is active` shape.
+
+### Fixed — regex escape bug in the emission template
+
+The template literal that produces the emitted code used
+`/\\\\bactive\\\\b/i`, which rendered as `/\\bactive\\b/i` in
+the spec. That regex matches the literal two-character sequence
+`\b` + `active` + `\b`, not a word boundary. Fixed to
+`/\\bactive\\b/i` in the source → emits `/\bactive\b/i` → real
+word-boundary semantics. Caught by rendering the body and inspecting it.
+
+### Not changed
+
+- The rule still vetoes non-numeric targets (`"the login page is
+  active"` is unchanged behaviour, falls through to other rules).
+- The `activeN` sentinel keeps the number verbatim — leading
+  zeros preserved for widgets that render `"Page-02"`.
+
+### Credit
+
+attestqa handoff reviewing commit `4cecf83` (tag v4.6.2); flaky
+runs tracked under attestqa run `20261019T155404Z`.
+
 ## [4.6.2] — 2026-10-19
 
 ### Theme: active-page assertion rule — tolerate both `aria-current="page"` and `.active`-class pagination conventions

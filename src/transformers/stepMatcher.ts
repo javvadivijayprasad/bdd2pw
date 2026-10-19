@@ -863,30 +863,62 @@ const RULES: Rule[] = [
   //      expect() is on a boolean, so the failure message says which
   //      shape was looked for.
   {
+    // v4.6.3 — pattern widened per attestqa 2026-10-19 review:
+    //   a) `page N is active|...` and `the active page is N` (as before)
+    //   b) `the "Page-N" button|link|control is (marked as)? active|...`
+    //   c) `the page N control|button|link is (marked as)? the current page`
+    // Group (1) captures N for shape (a); groups (2), (3) for the two
+    // quoted/unquoted shapes of (b)/(c). The build() picks whichever
+    // group fired.
     pattern:
-      /^(?:(?:the\s+)?(?:current|active|selected|highlighted)\s+page\s+is\s+(?:page\s+)?(\d+)|(?:the\s+)?page\s+(\d+)\s+(?:is|appears)\s+(?:(?:the\s+)?(?:active|current|highlighted|selected|marked\s+as\s+(?:current|active)))(?:\s+page)?)\s*$/i,
+      /^(?:(?:(?:the\s+)?(?:current|active|selected|highlighted)\s+page\s+is\s+(?:page\s+)?(\d+))|(?:(?:the\s+)?page\s+(\d+)\s+(?:is|appears)\s+(?:(?:the\s+)?(?:active|current|highlighted|selected|marked\s+as\s+(?:(?:the\s+)?(?:current|active)(?:\s+page)?))))|(?:(?:the\s+)?["']?page[-\s]?(\d+)["']?\s+(?:button|link|control|item)\s+(?:is\s+)?(?:marked\s+as\s+)?(?:(?:the\s+)?(?:active|current|highlighted|selected)(?:\s+page)?))|(?:(?:the\s+)?page\s+(\d+)\s+(?:button|link|control|item)\s+(?:is\s+)?(?:marked\s+as\s+)?(?:(?:the\s+)?(?:active|current|highlighted|selected)(?:\s+page)?)))\s*$/i,
     build: (m, step, _pom, pageVar) => {
-      const n = (m[1] ?? m[2] ?? "").trim();
+      const n = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").trim();
       if (!/^\d+$/.test(n)) return null;
-      // Label patterns commonly emitted by pagination widgets:
-      //   "Page-2", "Page 2", "Go to page 2", "2".
+      // v4.6.3 — attestqa 2026-10-19 review, three defects fixed:
+      //   1. (critical) The old emission read attributes ONCE and
+      //      asserted on a plain boolean. Playwright does not retry
+      //      `expect(boolean)`, so a click→check sequence against
+      //      Angular/React apps that update the `active` class
+      //      asynchronously raced the DOM and failed on fast runs.
+      //      Fixed by wrapping the OR check in `expect.poll()`.
+      //   2. Bare numeric label (just "2") was never matched because
+      //      the regex required `page` prefix. Fixed to accept
+      //      `^(?:(?:go to\s+)?page[-\s]?)?N$`.
+      //   3. `.or()` without `.first()` can resolve to >1 node when a
+      //      pagination widget is rendered above AND below a list,
+      //      triggering a strict-mode violation that reads like a
+      //      locator bug. Fixed with `.first()` on the combined locator.
+      //
+      // Also stores the last observed values in a `last` object so the
+      // failure message carries real diagnostics rather than the stale
+      // first read.
       const customBody =
         `const activeN = ${JSON.stringify(n)};\n` +
-        `const activeBtn = ${pageVar}.page.getByRole("button", { name: new RegExp(\`^(?:go to\\\\s+)?page[-\\\\s]?\${activeN}$\`, "i") })\n` +
-        `  .or(${pageVar}.page.getByRole("link", { name: new RegExp(\`^(?:go to\\\\s+)?page[-\\\\s]?\${activeN}$\`, "i") }));\n` +
-        `const [ariaCurrent, selfClass, parentClass] = await Promise.all([\n` +
-        `  activeBtn.getAttribute("aria-current"),\n` +
-        `  activeBtn.getAttribute("class"),\n` +
-        `  activeBtn.locator("xpath=..").getAttribute("class"),\n` +
-        `]);\n` +
-        `const isActive =\n` +
-        `  ariaCurrent === "page" ||\n` +
-        `  /\\bactive\\b/i.test(selfClass ?? "") ||\n` +
-        `  /\\bactive\\b/i.test(parentClass ?? "");\n` +
-        `expect(\n` +
-        `  isActive,\n` +
-        `  \`page \${activeN} should be marked active (aria-current="page" OR class contains "active" on the button or its parent); got aria-current=\${JSON.stringify(ariaCurrent)}, selfClass=\${JSON.stringify(selfClass)}, parentClass=\${JSON.stringify(parentClass)}\`,\n` +
-        `).toBe(true);`;
+        `const activeNameRe = new RegExp(\`^(?:(?:go to\\\\s+)?page[-\\\\s]?)?\${activeN}$\`, "i");\n` +
+        `const activeBtn = ${pageVar}.page.getByRole("button", { name: activeNameRe })\n` +
+        `  .or(${pageVar}.page.getByRole("link", { name: activeNameRe }))\n` +
+        `  .first();\n` +
+        `const lastObserved = { ariaCurrent: null as string | null, selfClass: null as string | null, parentClass: null as string | null };\n` +
+        `await expect\n` +
+        `  .poll(async () => {\n` +
+        `    const [ariaCurrent, selfClass, parentClass] = await Promise.all([\n` +
+        `      activeBtn.getAttribute("aria-current"),\n` +
+        `      activeBtn.getAttribute("class"),\n` +
+        `      activeBtn.locator("xpath=..").getAttribute("class"),\n` +
+        `    ]);\n` +
+        `    lastObserved.ariaCurrent = ariaCurrent;\n` +
+        `    lastObserved.selfClass = selfClass;\n` +
+        `    lastObserved.parentClass = parentClass;\n` +
+        `    return (\n` +
+        `      ariaCurrent === "page" ||\n` +
+        `      /\\bactive\\b/i.test(selfClass ?? "") ||\n` +
+        `      /\\bactive\\b/i.test(parentClass ?? "")\n` +
+        `    );\n` +
+        `  }, {\n` +
+        `    message: \`page \${activeN} should be marked active (aria-current="page" OR class contains "active" on the control or its parent). Last observed: aria-current=\${JSON.stringify(lastObserved.ariaCurrent)}, selfClass=\${JSON.stringify(lastObserved.selfClass)}, parentClass=\${JSON.stringify(lastObserved.parentClass)}.\`,\n` +
+        `  })\n` +
+        `  .toBe(true);`;
       return { step, customBody };
     },
   },
