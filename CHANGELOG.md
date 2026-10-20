@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+- docs: add Examples section to README landing (closes gap flagged in vitalets/playwright-bdd#405)
 
 ## [4.6.5] — 2026-10-19
 

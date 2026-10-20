@@ -104,6 +104,46 @@ npx playwright test
 
 That's it. `./my-tests` now has `pages/login.page.ts`, `tests/login.spec.ts`, `playwright.config.ts`, `package.json`, `tsconfig.json`, `.gitignore`, and `BDD_REVIEW.md`.
 
+## Examples
+
+Two end-to-end fixtures live under `examples/` — each has the input `.feature`,
+the live-page snapshot, and (via `tests/e2e/*.test.ts`) regression guards that
+pin the exact `pages/<name>.page.ts` + `tests/<name>.spec.ts` the pipeline must
+emit:
+
+- [`examples/practice-test-login`](examples/practice-test-login) — login flow on
+  practicetestautomation.com (6 scenarios: positive + negative + outline + security)
+- [`examples/cms-login`](examples/cms-login) — login flow on a real OSS CMS demo
+  (third-person Cucumber dialect, compound input steps)
+
+### What bdd2pw emits
+
+Given a `.feature` file plus a live URL, `scaffold()` writes two files per
+feature into your target repo:
+
+```
+pages/<name>.page.ts   ← POM class with locators picked from the live DOM
+tests/<name>.spec.ts   ← Playwright test spec that imports and uses the POM
+```
+
+**Locator picker preference order:**
+`getByRole` → `getByLabel` → `getByTestId` → `locator("#id")`
+
+The picker falls back to the next option only when the a11y snapshot carries no
+accessible name/role for the element. For the `practice-test-login` fixture, this
+means `submitButton` picks `getByRole("button", { name: "Submit" })` while the
+inputs land on `locator("#username")` / `locator("#password")` (the demo site's
+inputs have no `<label>` association).
+
+See [`tests/e2e/practiceTestLogin.test.ts`](tests/e2e/practiceTestLogin.test.ts)
+for the full assertion of what the emitted POM + spec must contain.
+
+> **Note on Phase 1a vs 1b.** The fixtures under `examples/` use hand-authored
+> a11y snapshots (Phase 1a regression fixtures). The real `@playwright/mcp`
+> integration (Phase 1b) captures the live DOM at scaffold time and eliminates
+> the hand-authoring. The Phase 1b path lives in `src/` and is documented in
+> the SoftwareX paper (DOI [10.1016/j.softx.2026.102933](https://doi.org/10.1016/j.softx.2026.102933)).
+
 ## LLM fallback (v2.0+)
 
 When a Gherkin step doesn't match any of bdd2pw's 30 deterministic rules, you can opt-in to an Anthropic-backed LLM fallback that produces the binding instead of dropping to `// TODO`. Off by default.
@@ -452,10 +492,6 @@ Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains
 | [`CHANGELOG.md`](./CHANGELOG.md) | Full version history |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Local dev, branching, PR conventions |
 
-## Examples
-
-- [`examples/practice-test-login/`](./examples/practice-test-login/) — first-person dialect, `Scenario Outline + Examples`, security scenarios. Validated 7/7 green against a live public site.
-- [`examples/cms-login/`](./examples/cms-login/) — third-person dialect, compound input, `is redirected`. From a real OSS Selenium codebase.
 ## Citation
 
 If you use `@vijaypjavvadi/bdd2pw` in academic work, please cite:
