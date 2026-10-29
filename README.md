@@ -490,7 +490,17 @@ Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains
 | [`docs/PHASE_0_PLAN.md`](./docs/PHASE_0_PLAN.md) | The pw-emit extraction plan (mostly historical now — it shipped) |
 | [`docs/STATUS.md`](./docs/STATUS.md) | Verified state right now — what works, what's pending, what's deferred |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Full version history |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Local dev, branching, PR conventions |
+
+## Community & project health
+
+| Doc | Purpose |
+|---|---|
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Local dev, branching, PR conventions, your first contribution guide |
+| [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 — community standards + enforcement |
+| [`SECURITY.md`](./SECURITY.md) | Supported-versions matrix, private vulnerability-reporting flow |
+| [`SUPPORT.md`](./SUPPORT.md) | Where to ask different kinds of questions (bug / feature / discussion / security / consulting) |
+| [`good first issue`](https://github.com/javvadivijayprasad/bdd2pw/labels/good%20first%20issue) | Scoped work a newcomer can land in a single session |
+| [`help wanted`](https://github.com/javvadivijayprasad/bdd2pw/labels/help%20wanted) | Mid-size features the maintainer welcomes outside PRs on |
 
 ## Citation
 

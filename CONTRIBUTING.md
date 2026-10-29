@@ -2,6 +2,41 @@
 
 Thanks for the interest. `bdd2pw` is a sibling tool to [`sel2pw`](https://github.com/javvadivijayprasad/sel2pw) in the same automation platform; the contribution workflow mirrors that repo.
 
+By participating in this project you agree to abide by the
+[Code of Conduct](./CODE_OF_CONDUCT.md). Security issues follow a
+private flow — see [`SECURITY.md`](./SECURITY.md). For help picking a
+channel for a question see [`SUPPORT.md`](./SUPPORT.md).
+
+## Your first contribution
+
+New to bdd2pw? Start here.
+
+1. **Pick a scoped issue.** Browse
+   [`good first issue`](https://github.com/javvadivijayprasad/bdd2pw/labels/good%20first%20issue)
+   or
+   [`help wanted`](https://github.com/javvadivijayprasad/bdd2pw/labels/help%20wanted).
+   Comment on the one you want so nobody doubles up.
+2. **Get the repo running.** The *Setup* section below has the three
+   commands. If `npm install` or `npm test` fails on your machine,
+   open an issue — a setup bug is itself a contribution.
+3. **Make the change on a branch.** `git checkout -b <type>/<short-name>`
+   where `<type>` is `feat`, `fix`, `docs`, `chore`, etc.
+4. **Add a test.** For a new step rule, add a case in
+   `tests/snapshot/stepMatcher.test.ts`. For a bug fix, add the
+   regression first and watch it fail before you fix it.
+5. **Run the local checks.** `npm run lint && npm test` — both must
+   be green.
+6. **Open a PR.** The template prompts for the before/after and the
+   change type. Short PRs that do one thing merge faster than long
+   ones that do several.
+7. **Expect review within a week.** This project is solo-maintained;
+   if a week passes without a response, nudge the PR with a comment.
+
+What "done" looks like for a first PR: one commit, a Conventional
+Commits-style message (`feat: ...` or `fix: ...`), a test that
+exercises the change, and a one-line `CHANGELOG.md` entry under
+`[Unreleased]`.
+
 ## Setup
 
 ```bash

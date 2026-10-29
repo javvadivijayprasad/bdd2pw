@@ -1,0 +1,86 @@
+name: Feature request
+description: Propose a new step rule, a new CLI flag, a new emission shape, or a broader feature.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. The strongest feature requests include
+        a real-world `.feature` file (or HTTP request, or CI command) that
+        motivates the gap — "I keep hand-writing X and bdd2pw doesn't match"
+        is the clearest signal.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the gap in your words. What are you currently working around?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivating-example
+    attributes:
+      label: Motivating example
+      description: Paste the `.feature` snippet, the current emission (if any), and what you'd like it to emit instead.
+      render: markdown
+      placeholder: |
+        **Input step:**
+        ```gherkin
+        Then each product shows a name
+        ```
+
+        **Current behaviour (v4.6.5):**
+        — binds to TODO (no POM list field)
+
+        **Desired behaviour:**
+        — bind to `expect(pom.productNames.first()).toBeVisible()` + `.count() > 0`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What kind of feature is this?
+      multiple: true
+      options:
+        - New step-matcher rule
+        - New CLI flag
+        - New emission shape (POM / spec)
+        - New discovery / scanning capability
+        - New HTTP endpoint
+        - LLM-lane prompt improvement
+        - Documentation
+        - Developer-experience / tooling
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Workarounds, other tools, waiting, forking. Why aren't they enough?
+
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Would you be willing to contribute this?
+      description: Honest answer helps triage. "No" is fine.
+      options:
+        - "Yes, I can open a PR."
+        - "Yes, with guidance on the approach."
+        - "No, I'm filing this for the maintainer to consider."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I have searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I've read the project's [README](https://github.com/javvadivijayprasad/bdd2pw/blob/main/README.md) and the feature isn't already available.
+          required: true

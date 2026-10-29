@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/javvadivijayprasad/bdd2pw/discussions
+    about: Ask a question, share an idea, or discuss an approach before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/javvadivijayprasad/bdd2pw/security/advisories/new
+    about: Report a security issue privately. Do NOT open a public issue for security.
+  - name: Support & how-to help
+    url: https://github.com/javvadivijayprasad/bdd2pw/blob/main/SUPPORT.md
+    about: Where to ask different kinds of questions (bug / feature / discussion / security / consulting).

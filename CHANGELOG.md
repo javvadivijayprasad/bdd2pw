@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - docs: add Examples section to README landing (closes gap flagged in vitalets/playwright-bdd#405)
+- docs: add `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1)
+- docs: add `SECURITY.md` with supported-versions matrix + private reporting flow
+- docs: add `SUPPORT.md` routing table for different question types
+- docs: add `.github/ISSUE_TEMPLATE/bug_report.yml` + `feature_request.yml` + `config.yml`
+- docs: add `.github/PULL_REQUEST_TEMPLATE.md`
+- docs: add "Your first contribution" section to `CONTRIBUTING.md` with link to the new templates and labels
 
 ## [4.6.5] — 2026-10-19
 

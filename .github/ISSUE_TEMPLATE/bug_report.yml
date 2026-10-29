@@ -1,0 +1,114 @@
+name: Bug report
+description: Something bdd2pw emits is wrong, breaks, or regresses from a prior version.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. The more of the fields below you can fill in,
+        the faster the fix lands. If it's security-sensitive, close this and use
+        the private flow in [SECURITY.md](https://github.com/javvadivijayprasad/bdd2pw/blob/main/SECURITY.md) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: bdd2pw version
+      description: Output of `npx bdd2pw --version`.
+      placeholder: "4.6.5"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+      placeholder: "v20.11.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (please specify in description)
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature
+    attributes:
+      label: The `.feature` input (minimal reproduction)
+      description: Paste the smallest `.feature` file that reproduces the issue. Redact anything confidential.
+      render: gherkin
+      placeholder: |
+        Feature: Login
+          Scenario: Successful login
+            Given I am on the login page
+            When I enter "alice" into the username field
+            ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact `bdd2pw` invocation (or the HTTP body if using the service).
+      render: bash
+      placeholder: |
+        npx bdd2pw scaffold ./login.feature --url https://example.com/login --page LoginPage --repo /tmp/out
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead? Include the generated POM / spec snippet if that's where the issue is, and the relevant `BDD_REVIEW.md` section.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: If applicable, paste the pino JSON log output or the stack trace.
+      render: shell
+
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Which lane produced the bad output? (optional)
+      description: The provenance comment above the step (`// @bdd2pw lane=...`) names it.
+      options:
+        - rule
+        - llm
+        - todo
+        - don't know
+        - not applicable
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have verified this reproduces on the latest bdd2pw version (`npm view @vijaypjavvadi/bdd2pw version`).
+          required: true
+        - label: This is not a security vulnerability (those go through [SECURITY.md](https://github.com/javvadivijayprasad/bdd2pw/blob/main/SECURITY.md)).
+          required: true
