@@ -20,10 +20,7 @@ export async function streamArtifactZip(
   jobId: string,
 ): Promise<void> {
   res.setHeader("Content-Type", "application/zip");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="bdd2pw-${jobId}.zip"`,
-  );
+  res.setHeader("Content-Disposition", `attachment; filename="bdd2pw-${jobId}.zip"`);
 
   return new Promise((resolve, reject) => {
     const archive = archiver("zip", { zlib: { level: 6 } });

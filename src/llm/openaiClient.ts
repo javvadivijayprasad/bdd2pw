@@ -41,12 +41,7 @@
 import type { BindingCache } from "./cache";
 import { openSqliteCache } from "./cache";
 import { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
-import {
-  SYSTEM_PROMPT,
-  buildBatchUserPrompt,
-  buildUserPrompt,
-  cacheKey,
-} from "./prompt";
+import { SYSTEM_PROMPT, buildBatchUserPrompt, buildUserPrompt, cacheKey } from "./prompt";
 import { parseBindingJson } from "./anthropicClient";
 import type {
   GenerateBindingInput,
@@ -85,8 +80,7 @@ export class OpenAILLMClient implements LLMClient {
     this.maxCalls = opts.maxCalls ?? DEFAULT_MAX_CALLS;
     this.skipGovernance = opts.skipGovernance ?? false;
     this.log = opts.log ?? (() => {});
-    this.providerTimeoutMs =
-      opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+    this.providerTimeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.governance = new GovernanceClient(
       opts.governanceUrl ?? DEFAULT_GOVERNANCE_URL,
       opts.governanceTimeoutMs ?? DEFAULT_GOVERNANCE_TIMEOUT_MS,
@@ -138,9 +132,7 @@ export class OpenAILLMClient implements LLMClient {
    * Single-step generation. Cache → governance → OpenAI → parse.
    * Mirrors `AnthropicLLMClient.generateBinding` end-to-end.
    */
-  async generateBinding(
-    input: GenerateBindingInput,
-  ): Promise<GenerateBindingResult> {
+  async generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult> {
     const start = Date.now();
     const key = cacheKey(input, this.model);
     const cache = await this.ensureCache();
@@ -288,9 +280,7 @@ export class OpenAILLMClient implements LLMClient {
     const start = Date.now();
     const cache = await this.ensureCache();
 
-    const results: (GenerateBindingResult | undefined)[] = new Array(
-      inputs.length,
-    );
+    const results: (GenerateBindingResult | undefined)[] = new Array(inputs.length);
     const missIndexes: number[] = [];
     const missInputs: GenerateBindingInput[] = [];
     const missKeys: string[] = [];

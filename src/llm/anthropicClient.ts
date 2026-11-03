@@ -26,21 +26,9 @@ import type {
   LLMClientOptions,
   LLMLogEvent,
 } from "./types";
-import {
-  SYSTEM_PROMPT,
-  buildBatchUserPrompt,
-  buildUserPrompt,
-  cacheKey,
-} from "./prompt";
-import {
-  GovernanceClient,
-  GovernanceUnreachableError,
-} from "./governanceClient";
-import {
-  type BindingCache,
-  InMemoryCache,
-  openSqliteCache,
-} from "./cache";
+import { SYSTEM_PROMPT, buildBatchUserPrompt, buildUserPrompt, cacheKey } from "./prompt";
+import { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
+import { type BindingCache, InMemoryCache, openSqliteCache } from "./cache";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_GOVERNANCE_URL = "http://localhost:4900";
@@ -84,8 +72,7 @@ export class AnthropicLLMClient implements LLMClient {
     this.skipGovernance = opts.skipGovernance ?? false;
     this.log = opts.log ?? (() => {});
     this.stepTimeoutMs = opts.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
-    this.providerTimeoutMs =
-      opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+    this.providerTimeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.governance = new GovernanceClient(
       opts.governanceUrl ?? DEFAULT_GOVERNANCE_URL,
       opts.governanceTimeoutMs ?? DEFAULT_GOVERNANCE_TIMEOUT_MS,
@@ -162,9 +149,7 @@ export class AnthropicLLMClient implements LLMClient {
     return this.cacheFallbackReason;
   }
 
-  async generateBinding(
-    input: GenerateBindingInput,
-  ): Promise<GenerateBindingResult> {
+  async generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult> {
     const start = Date.now();
     const key = cacheKey(input, this.model);
     const cache = await this.ensureCache();
@@ -207,8 +192,7 @@ export class AnthropicLLMClient implements LLMClient {
         });
       } catch (err) {
         const isUnreachable = err instanceof GovernanceUnreachableError;
-        const message =
-          err instanceof Error ? err.message : String(err);
+        const message = err instanceof Error ? err.message : String(err);
         this.log({
           kind: "error",
           phase: "governance",
@@ -226,16 +210,14 @@ export class AnthropicLLMClient implements LLMClient {
     // 4) Anthropic call
     if (!this.apiKey) {
       return {
-        error:
-          "ANTHROPIC_API_KEY is not set; pass apiKey or set the env var.",
+        error: "ANTHROPIC_API_KEY is not set; pass apiKey or set the env var.",
         fromCache: false,
       };
     }
     const anthropic = await this.lazyClient();
     if (!anthropic) {
       return {
-        error:
-          "@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk",
+        error: "@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk",
         fromCache: false,
       };
     }
@@ -346,9 +328,7 @@ export class AnthropicLLMClient implements LLMClient {
 
     // 1) Per-step cache lookup. Collect hits at their original
     //    indexes; queue misses for the batch prompt.
-    const results: (GenerateBindingResult | undefined)[] = new Array(
-      inputs.length,
-    );
+    const results: (GenerateBindingResult | undefined)[] = new Array(inputs.length);
     const missIndexes: number[] = [];
     const missInputs: GenerateBindingInput[] = [];
     const missKeys: string[] = [];
@@ -606,7 +586,9 @@ export class AnthropicLLMClient implements LLMClient {
     }
     const anthropic = await this.lazyClient();
     if (!anthropic) {
-      return { error: "@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk" };
+      return {
+        error: "@anthropic-ai/sdk not installed. Run: npm install @anthropic-ai/sdk",
+      };
     }
 
     this.attemptsCounter += 1;
@@ -822,8 +804,7 @@ export function parseBindingJson(
       // Empty/missing locator always becomes "page" — `expect()` is never
       // legal, and for page-level matchers (toHaveURL / toHaveTitle and
       // their .not variants) `expect(page)` is the right call anyway.
-      const resolvedLoc =
-        trimmedLoc === "" ? "page" : rewriteBareContext(rawLoc);
+      const resolvedLoc = trimmedLoc === "" ? "page" : rewriteBareContext(rawLoc);
       // v4.1.0 — Page-matcher validation gate.
       // `expect(page).<matcher>` only supports a small set (toHaveURL,
       // toHaveTitle, toHaveScreenshot, plus their .not variants). The
@@ -834,11 +815,7 @@ export function parseBindingJson(
       // of shipping a spec that fails to compile.
       const isPageResolved = resolvedLoc === "page";
       const strippedMatcher = matcher.replace(/^not\./, "");
-      const pageValidMatchers = new Set([
-        "toHaveURL",
-        "toHaveTitle",
-        "toHaveScreenshot",
-      ]);
+      const pageValidMatchers = new Set(["toHaveURL", "toHaveTitle", "toHaveScreenshot"]);
       if (isPageResolved && !pageValidMatchers.has(strippedMatcher)) {
         // Skip assignment — falls through to the "empty binding" check
         // below and lands as TODO with a `warning` if the LLM provided
@@ -847,8 +824,7 @@ export function parseBindingJson(
         out.assertion = {
           locator: resolvedLoc,
           matcher,
-          expected:
-            typeof a.expected === "string" ? a.expected : undefined,
+          expected: typeof a.expected === "string" ? a.expected : undefined,
         };
       }
     }
@@ -866,12 +842,7 @@ export function parseBindingJson(
 
   // At least one of the four must be set; otherwise the LLM produced an
   // empty binding which we reject.
-  if (
-    !out.pomCall &&
-    !out.assertion &&
-    !out.customBody &&
-    !out.warning
-  ) {
+  if (!out.pomCall && !out.assertion && !out.customBody && !out.warning) {
     return undefined;
   }
 
@@ -915,11 +886,7 @@ export function parseBindingJson(
   // customBody or assertion locator strings.
   const pomHits = new Set<string>();
   for (const field of checkFields) {
-    for (const hit of detectHallucinatedPomMethods(
-      field,
-      input.pageVar,
-      knownIds,
-    )) {
+    for (const hit of detectHallucinatedPomMethods(field, input.pageVar, knownIds)) {
       pomHits.add(hit);
     }
   }
@@ -1027,12 +994,7 @@ export function parseBindingJson(
   // in particular) can nuke the last surviving field. If after all
   // rewrites there's nothing to emit, drop the binding so the step
   // lands as TODO.
-  if (
-    !out.pomCall &&
-    !out.assertion &&
-    !out.customBody &&
-    !out.warning
-  ) {
+  if (!out.pomCall && !out.assertion && !out.customBody && !out.warning) {
     return undefined;
   }
 
@@ -1245,7 +1207,10 @@ export function tryPromotePomCallCssSelectorToCustomBody(
   // Strip surrounding quotes if already quoted (LLM sometimes emits
   // `"input[name='email']"`, sometimes bare `input[name='email']`).
   let sel = trimmed;
-  if ((sel.startsWith('"') && sel.endsWith('"')) || (sel.startsWith("'") && sel.endsWith("'"))) {
+  if (
+    (sel.startsWith('"') && sel.endsWith('"')) ||
+    (sel.startsWith("'") && sel.endsWith("'"))
+  ) {
     sel = sel.slice(1, -1);
   }
   const restArgs = args.slice(1).map(wrapAsStringLiteralIfNeeded);

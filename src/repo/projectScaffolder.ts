@@ -187,11 +187,7 @@ async function emitPwSelfHealScaffold(
       if (mutated) {
         // Preserve trailing newline convention.
         const trailer = pkgRaw.endsWith("\n") ? "\n" : "";
-        await fs.writeFile(
-          pkgPath,
-          JSON.stringify(pkg, null, 2) + trailer,
-          "utf8",
-        );
+        await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + trailer, "utf8");
       }
     } catch {
       warnings.push({
@@ -269,15 +265,14 @@ async function emitLegacyHealingScaffold(
       tsconfig.compilerOptions = tsconfig.compilerOptions ?? {};
       tsconfig.compilerOptions.baseUrl = tsconfig.compilerOptions.baseUrl ?? ".";
       tsconfig.compilerOptions.paths = tsconfig.compilerOptions.paths ?? {};
-      const existingMapping = tsconfig.compilerOptions.paths["@platform/sdk-self-healing"];
+      const existingMapping =
+        tsconfig.compilerOptions.paths["@platform/sdk-self-healing"];
       if (
         !existingMapping ||
         !Array.isArray(existingMapping) ||
         !existingMapping.includes("./lib/heal")
       ) {
-        tsconfig.compilerOptions.paths["@platform/sdk-self-healing"] = [
-          "./lib/heal",
-        ];
+        tsconfig.compilerOptions.paths["@platform/sdk-self-healing"] = ["./lib/heal"];
         // Make sure lib/ is included in compilation
         if (Array.isArray(tsconfig.include)) {
           if (!tsconfig.include.some((p: string) => p.startsWith("lib/"))) {

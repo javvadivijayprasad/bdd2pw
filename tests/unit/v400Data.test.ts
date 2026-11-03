@@ -160,10 +160,7 @@ describe("v4.0.0 — DataLoader validateColumnsForPlaceholders", () => {
 
   it("returns missing names", () => {
     const rows: DataRow[] = [{ a: "1" }];
-    expect(validateColumnsForPlaceholders(rows, ["a", "b", "c"])).toEqual([
-      "b",
-      "c",
-    ]);
+    expect(validateColumnsForPlaceholders(rows, ["a", "b", "c"])).toEqual(["b", "c"]);
   });
 
   it("returns all placeholders when rows is empty", () => {
@@ -239,9 +236,9 @@ describe("v4.0.0 — SynthGenerator", () => {
   });
 
   it("throws on rows <= 0", async () => {
-    await expect(
-      generateSyntheticRows({ a: "x" }, { rows: 0 }),
-    ).rejects.toThrow(/rows must be >= 1/);
+    await expect(generateSyntheticRows({ a: "x" }, { rows: 0 })).rejects.toThrow(
+      /rows must be >= 1/,
+    );
   });
 });
 
@@ -275,9 +272,7 @@ function makeFeature(scenarios: ScenarioIR[]): FeatureIR {
 
 describe("v4.0.0 — ExamplesInjector extractPlaceholders", () => {
   it("finds <name> placeholders in step text", () => {
-    const s = makeOutlineScenario(
-      "login with <username> and <password>",
-    );
+    const s = makeOutlineScenario("login with <username> and <password>");
     s.examples = undefined;
     expect(extractPlaceholders(s)).toEqual(["password", "username"]);
   });
@@ -296,9 +291,7 @@ describe("v4.0.0 — ExamplesInjector extractPlaceholders", () => {
 describe("v4.0.0 — ExamplesInjector.injectExamples", () => {
   it("swaps examples on matching Scenario Outlines", () => {
     const feature = makeFeature([
-      makeOutlineScenario(
-        "login as <username> with <password>",
-      ),
+      makeOutlineScenario("login as <username> with <password>"),
     ]);
     const rows: DataRow[] = [
       { username: "alice", password: "p1" },
@@ -319,16 +312,12 @@ describe("v4.0.0 — ExamplesInjector.injectExamples", () => {
 
   it("keeps inline Examples and warns when columns are missing", () => {
     const feature = makeFeature([
-      makeOutlineScenario(
-        "login as <username> with <password>",
-      ),
+      makeOutlineScenario("login as <username> with <password>"),
     ]);
     const rows: DataRow[] = [{ username: "alice" }]; // password missing
     const report = injectExamples(feature, rows);
     expect(report.swappedScenarios).toBe(0);
-    expect(report.skippedScenarios[0].reason).toMatch(
-      /missing column.*password/,
-    );
+    expect(report.skippedScenarios[0].reason).toMatch(/missing column.*password/);
     // Inline examples MUST survive.
     expect(feature.scenarios[0].examples).toEqual([
       { username: "inline_user", password: "inline_pass" },
@@ -353,9 +342,7 @@ describe("v4.0.0 — ExamplesInjector.injectExamples", () => {
   });
 
   it("handles zero rows gracefully", () => {
-    const feature = makeFeature([
-      makeOutlineScenario("login as <username>"),
-    ]);
+    const feature = makeFeature([makeOutlineScenario("login as <username>")]);
     const report = injectExamples(feature, []);
     expect(report.swappedScenarios).toBe(0);
     expect(report.skippedScenarios[0].reason).toMatch(/zero rows/);

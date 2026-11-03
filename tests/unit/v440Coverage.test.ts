@@ -180,9 +180,7 @@ describe("v4.4.0 Slice 2 — acceptance", () => {
     await writeSidecar(repo, "legacy", [
       {
         name: "Rule caught up",
-        bindings: [
-          ruleBinding("legacy phrasing that used to need LLM", "rule-42"),
-        ],
+        bindings: [ruleBinding("legacy phrasing that used to need LLM", "rule-42")],
       },
     ]);
     const { coverage } = await analyseCoverage({
@@ -214,10 +212,7 @@ describe("v4.4.0 Slice 2 — acceptance", () => {
       },
       {
         name: "S2",
-        bindings: [
-          ruleBinding("first", "rule-01"),
-          ruleBinding("second", "rule-02"),
-        ],
+        bindings: [ruleBinding("first", "rule-01"), ruleBinding("second", "rule-02")],
       },
     ]);
     const { stats } = await analyseQuarantineStats({ repo, version: "4.4.0" });

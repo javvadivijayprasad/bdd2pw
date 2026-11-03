@@ -6,8 +6,20 @@ const existingLogin: PageObjectIR = {
   className: "LoginPage",
   filePath: "pages/login.page.ts",
   fields: [
-    { api: "getByLabel", args: "'Username'", fieldName: "usernameInput", source: { tag: "" }, confidence: "unique" },
-    { api: "getByRole", args: "'button'", fieldName: "loginButton", source: { tag: "" }, confidence: "unique" },
+    {
+      api: "getByLabel",
+      args: "'Username'",
+      fieldName: "usernameInput",
+      source: { tag: "" },
+      confidence: "unique",
+    },
+    {
+      api: "getByRole",
+      args: "'button'",
+      fieldName: "loginButton",
+      source: { tag: "" },
+      confidence: "unique",
+    },
   ],
   methods: [],
   exists: true,

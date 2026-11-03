@@ -81,10 +81,7 @@ export function extractUserBlocks(existing: string): Map<string, string> {
  * a user edits a spec under merge, the markers they added live
  * forever inside the spec until they remove them.
  */
-export function mergeUserBlocks(
-  next: string,
-  preserved: Map<string, string>,
-): string {
+export function mergeUserBlocks(next: string, preserved: Map<string, string>): string {
   if (preserved.size === 0) return next;
 
   // For each preserved id, replace any matching open/close marker in

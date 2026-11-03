@@ -44,12 +44,16 @@ export function toJsIdentifier(input: string): string {
 
 /** Convert any case to kebab-case. */
 export function kebabCase(input: string): string {
-  return splitWords(input).map((w) => w.toLowerCase()).join("-");
+  return splitWords(input)
+    .map((w) => w.toLowerCase())
+    .join("-");
 }
 
 /** Convert any case to snake_case. */
 export function snakeCase(input: string): string {
-  return splitWords(input).map((w) => w.toLowerCase()).join("_");
+  return splitWords(input)
+    .map((w) => w.toLowerCase())
+    .join("_");
 }
 
 /**

@@ -77,11 +77,7 @@ export interface HealStatsResult {
 /** One event line in heal-events.jsonl. Shape tracks `templates/heal.ts.tmpl`. */
 interface HealEvent {
   ts: string;
-  event:
-    | "register"
-    | "heal_attempt"
-    | "healed"
-    | "heal_unavailable";
+  event: "register" | "heal_attempt" | "healed" | "heal_unavailable";
   page: string;
   name: string;
   scenario_name?: string | null;
@@ -124,9 +120,7 @@ export interface HealStats {
 const PACKAGE_VERSION = "3.10.0";
 
 /** Public entry point. */
-export async function analyseHealStats(
-  opts: HealStatsOptions,
-): Promise<HealStatsResult> {
+export async function analyseHealStats(opts: HealStatsOptions): Promise<HealStatsResult> {
   const jsonlPath = await resolveJsonlPath(opts.inputPath);
   const events = await readEvents(jsonlPath);
   const summary = aggregate(events, jsonlPath, opts.topN ?? 10);
@@ -146,11 +140,7 @@ export async function analyseHealStats(
  * function — no I/O. Used both by the public CLI entry and the unit
  * tests.
  */
-export function aggregate(
-  events: HealEvent[],
-  source: string,
-  topN: number,
-): HealStats {
+export function aggregate(events: HealEvent[], source: string, topN: number): HealStats {
   const fieldKey = (e: HealEvent) => `${e.page}::${e.name}`;
   const fieldAttempts = new Map<
     string,
@@ -161,10 +151,7 @@ export function aggregate(
     string,
     { promotions: number; confidenceSum: number; confidenceCount: number }
   >();
-  const scenarioStats = new Map<
-    string,
-    { attempts: number; healed: number }
-  >();
+  const scenarioStats = new Map<string, { attempts: number; healed: number }>();
   const uniquePages = new Set<string>();
   const uniqueFields = new Set<string>();
   const retryLatencies: number[] = [];
@@ -176,8 +163,7 @@ export function aggregate(
    * serially per test.
    */
   const openAttempts = new Map<string, number>();
-  const attemptKey = (e: HealEvent) =>
-    `${e.page}::${e.name}::${e.method ?? ""}`;
+  const attemptKey = (e: HealEvent) => `${e.page}::${e.name}::${e.method ?? ""}`;
 
   let registrations = 0;
   let healAttempts = 0;
@@ -300,9 +286,7 @@ export function aggregate(
       p50: percentile(latenciesSorted, 0.5),
       p95: percentile(latenciesSorted, 0.95),
       min: latenciesSorted.length ? latenciesSorted[0] : 0,
-      max: latenciesSorted.length
-        ? latenciesSorted[latenciesSorted.length - 1]
-        : 0,
+      max: latenciesSorted.length ? latenciesSorted[latenciesSorted.length - 1] : 0,
     },
     perScenario: sortedScenarios,
   };

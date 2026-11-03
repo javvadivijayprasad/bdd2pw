@@ -19,8 +19,7 @@ interface Rule {
   ): StepBinding | null;
 }
 
-const SUBJ =
-  "(?:I|user|User|the user|the User|the applicant|the citizen|the caseworker)";
+const SUBJ = "(?:I|user|User|the user|the User|the applicant|the citizen|the caseworker)";
 const MONEY = `\\$?["']?\\$?([\\d,]+(?:\\.\\d{1,2})?)["']?`;
 
 export const GOV_RULES: Rule[] = [
@@ -53,8 +52,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:03 — `the applicant is "eligible"` / `"ineligible"` / `"pending review"`
   {
-    pattern:
-      /^(?:the )?(?:applicant|claimant|household) is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:applicant|claimant|household) is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='eligibility-status']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -93,8 +91,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:07 — `the document type is "passport"` / `"driver's license"` / `"birth certificate"`
   {
-    pattern:
-      /^(?:the )?(?:document|ID) type is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:document|ID) type is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='document-type'], [data-testid='id-type']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -103,10 +100,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:08 — `I upload "passport.pdf"` (file upload)
   {
-    pattern: new RegExp(
-      `^(?:${SUBJ}\\s+)?upload(?:s)? ["']([^"']+)["']$`,
-      "i",
-    ),
+    pattern: new RegExp(`^(?:${SUBJ}\\s+)?upload(?:s)? ["']([^"']+)["']$`, "i"),
     build: (m, step) => ({
       step,
       customBody: [
@@ -129,8 +123,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:10 — `the response is "redacted"` / `"released"` / `"denied"`
   {
-    pattern:
-      /^(?:the )?(?:FOIA )?response is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:FOIA )?response is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='foia-response']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -148,8 +141,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:12 — `the agency is "..."` / `the assigned agency is "..."`
   {
-    pattern:
-      /^(?:the )?(?:assigned )?agency is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:assigned )?agency is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='agency-name']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -158,8 +150,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:13 — `the program is "SNAP"` / `"Medicaid"` / `"unemployment"`
   {
-    pattern:
-      /^(?:the )?(?:benefit )?program is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:benefit )?program is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='program-name']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -178,8 +169,7 @@ export const GOV_RULES: Rule[] = [
 
   // GOV:15 — `the application is "approved"` / `"denied"` / `"pending"` / `"appealed"`
   {
-    pattern:
-      /^(?:the )?application is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?application is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='application-status']").first()).toContainText(${JSON.stringify(m[1])});`,

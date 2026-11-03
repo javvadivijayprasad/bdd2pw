@@ -47,7 +47,9 @@ export async function writeReviewReport(input: WriteReviewInput): Promise<string
   emitSection(lines, "Info", "info", input.items);
 
   if (input.items.length === 0) {
-    lines.push("Nothing to review — everything mapped cleanly. Run `npx playwright test` to verify.");
+    lines.push(
+      "Nothing to review — everything mapped cleanly. Run `npx playwright test` to verify.",
+    );
     lines.push("");
   }
 

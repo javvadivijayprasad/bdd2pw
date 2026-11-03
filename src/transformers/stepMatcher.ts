@@ -15,12 +15,7 @@
  * through to a `// TODO` warning. See docs/ARCHITECTURE.md §2 (LLM branch).
  */
 
-import type {
-  PageObjectIR,
-  ScenarioIR,
-  StepBinding,
-  StepIR,
-} from "../types";
+import type { PageObjectIR, ScenarioIR, StepBinding, StepIR } from "../types";
 import { camelCase } from "../utils/naming";
 import { looksLikeProse } from "./stepNormalizer";
 import { normalizeStepText } from "./stepNormalizer";
@@ -143,11 +138,7 @@ export async function matchSteps(input: MatchStepsInput): Promise<StepBinding[][
  * Try every rule in priority order; return the first match.
  * Falls through to a warning binding when nothing matches.
  */
-export function matchStep(
-  step: StepIR,
-  pom: PageObjectIR,
-  pageVar: string,
-): StepBinding {
+export function matchStep(step: StepIR, pom: PageObjectIR, pageVar: string): StepBinding {
   // Belt-and-suspenders normalisation (Block 2 #7). Apply BEFORE the rule
   // table runs so common LLM phrasing drift ("in the field" vs "into the
   // field", smart curly quotes from copy-paste, trailing parentheticals,
@@ -157,17 +148,14 @@ export function matchStep(
   // local copy so the original Gherkin text is preserved for warnings,
   // test.step labels, and downstream review reports.
   const normalisedText = normalizeStepText(step.text);
-  const normalisedStep: StepIR = normalisedText === step.text
-    ? step
-    : { ...step, text: normalisedText };
+  const normalisedStep: StepIR =
+    normalisedText === step.text ? step : { ...step, text: normalisedText };
 
   // v3.4.0 — domain rule packs run after API + visibility but BEFORE
   // the UI/URL-slug rules. Built as [domain, then registry] so the
   // domain patterns intercept ambiguous prose first when active.
   const effectiveRules =
-    activeDomainRules.length > 0
-      ? [...activeDomainRules, ...RULES]
-      : RULES;
+    activeDomainRules.length > 0 ? [...activeDomainRules, ...RULES] : RULES;
   const domainCount = activeDomainRules.length;
   for (let idx = 0; idx < effectiveRules.length; idx++) {
     const rule = effectiveRules[idx];
@@ -252,13 +240,9 @@ export function diagnoseStep(
     normalised === step.text ? step : { ...step, text: normalised };
 
   const effectiveRules =
-    activeDomainRules.length > 0
-      ? [...activeDomainRules, ...RULES]
-      : RULES;
+    activeDomainRules.length > 0 ? [...activeDomainRules, ...RULES] : RULES;
 
-  const stepTokens = new Set(
-    normalised.toLowerCase().split(/\s+/).filter(Boolean),
-  );
+  const stepTokens = new Set(normalised.toLowerCase().split(/\s+/).filter(Boolean));
 
   const declined: RuleTraceEntry[] = [];
   const noMatchEntries: { entry: RuleTraceEntry; score: number }[] = [];
@@ -301,9 +285,7 @@ export function diagnoseStep(
   noMatchEntries.sort((a, b) => b.score - a.score);
   return [
     ...declined,
-    ...noMatchEntries.slice(0, Math.max(0, topN - declined.length)).map(
-      (x) => x.entry,
-    ),
+    ...noMatchEntries.slice(0, Math.max(0, topN - declined.length)).map((x) => x.entry),
   ].slice(0, topN);
 }
 
@@ -366,7 +348,10 @@ const RULES: Rule[] = [
 
   // 1. Navigation: "I am on the login page" / "I navigate to /foo"
   {
-    pattern: new RegExp(`^(?:${SUBJ} )?(?:am on|navigate to|navigates? to|open|opens?|visit|visits?|go to|goes? to|am at|is at) (?:the )?(?:.+?\\s+)?["']?([^"']+?)["']?(?: page)?$`, "i"),
+    pattern: new RegExp(
+      `^(?:${SUBJ} )?(?:am on|navigate to|navigates? to|open|opens?|visit|visits?|go to|goes? to|am at|is at) (?:the )?(?:.+?\\s+)?["']?([^"']+?)["']?(?: page)?$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       // The non-greedy `(?:.+?\s+)?` before the captured target lets us
       // handle both shapes:
@@ -391,8 +376,7 @@ const RULES: Rule[] = [
         const digit = step.text.match(/\d+/)?.[0] ?? "N";
         return {
           step,
-          warning:
-            `Navigation target in "${step.text}" looks like a pagination phrase, not a URL or page object; emitting TODO so the user can bind it to a real pagination control (e.g. a 'Page-${digit}' button).`,
+          warning: `Navigation target in "${step.text}" looks like a pagination phrase, not a URL or page object; emitting TODO so the user can bind it to a real pagination control (e.g. a 'Page-${digit}' button).`,
         };
       }
       const hasGoto = pom.methods.some((mm) => mm.name === "goto");
@@ -419,8 +403,12 @@ const RULES: Rule[] = [
   //     Both prepositions accepted: `in`, `into`, `in to`. The user-facing
   //     prompt now says "into" is canonical, but the rule stays tolerant.
   {
-    pattern: new RegExp(`^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) ["']([^"']*)["'] (?:in|into|in to) (?:the )?(.+?)(?: field| input| box)?$`, "i"),
-    build: (m, step, pom, pageVar) => fillFieldBinding(step, pom, pageVar, m[2].trim(), m[1]),
+    pattern: new RegExp(
+      `^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) ["']([^"']*)["'] (?:in|into|in to) (?:the )?(.+?)(?: field| input| box)?$`,
+      "i",
+    ),
+    build: (m, step, pom, pageVar) =>
+      fillFieldBinding(step, pom, pageVar, m[2].trim(), m[1]),
   },
 
   // 2c. Compound input: 'user enter email "X" password "Y"'.
@@ -474,7 +462,10 @@ const RULES: Rule[] = [
   //       'enters password "Password123"'       ← v1.1.5 subject-less
   //     Also handles empty values: `I enter username ""` / `enters password ""`.
   {
-    pattern: new RegExp(`^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`, "i"),
+    pattern: new RegExp(
+      `^(?:${SUBJ}\\s+)?(?:enter|enters|type|types|fill|fills) (?:the )?(.+?) ["']([^"']*)["']$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       // If the captured "field" is itself a quoted value already handled by 2a,
       // skip — but 2a's pattern wouldn't end here so 2b is safe.
@@ -488,13 +479,14 @@ const RULES: Rule[] = [
   //    "click the login button" would match `testLoginHeading` via the
   //    generic substring fallback.
   {
-    pattern: new RegExp(`^(?:${SUBJ} )?(?:click|clicks|press|presses|tap|taps)(?: on)? (?:the )?["']?([^"']+?)["']?(?:\\s+(button|link|icon|tab))?$`, "i"),
+    pattern: new RegExp(
+      `^(?:${SUBJ} )?(?:click|clicks|press|presses|tap|taps)(?: on)? (?:the )?["']?([^"']+?)["']?(?:\\s+(button|link|icon|tab))?$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const hint = m[1].trim();
       const explicitRole = m[2]; // 'button' | 'link' | 'icon' | 'tab' | undefined
-      const suffixes = explicitRole
-        ? [capitalize(explicitRole)]
-        : ["Button", "Link"];
+      const suffixes = explicitRole ? [capitalize(explicitRole)] : ["Button", "Link"];
       const field = findField(pom, hint, suffixes);
       if (!field) return null;
       const method = findOrSynthMethod(pom, `click${capitalize(field.fieldName)}`, []);
@@ -510,7 +502,10 @@ const RULES: Rule[] = [
 
   // 4. Selection: 'I select "USA" from (the) country dropdown'
   {
-    pattern: new RegExp(`^${SUBJ} (?:select|selects) ["']([^"']+)["'] from (?:the )?(.+?)(?: dropdown| select)?$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} (?:select|selects) ["']([^"']+)["'] from (?:the )?(.+?)(?: dropdown| select)?$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const value = m[1];
       const hint = m[2].trim();
@@ -529,7 +524,10 @@ const RULES: Rule[] = [
 
   // 5. Check / uncheck checkbox
   {
-    pattern: new RegExp(`^${SUBJ} (check|checks|uncheck|unchecks) (?:the )?(.+?)(?: checkbox)?$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} (check|checks|uncheck|unchecks) (?:the )?(.+?)(?: checkbox)?$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const verb = m[1].toLowerCase() === "check" ? "check" : "uncheck";
       const hint = m[2].trim();
@@ -544,7 +542,10 @@ const RULES: Rule[] = [
 
   // 6. Visibility: "I (should) see <X>" — assertion
   {
-    pattern: new RegExp(`^${SUBJ} (?:should )?(?:see|sees) (?:the )?["']?([^"']+?)["']?$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} (?:should )?(?:see|sees) (?:the )?["']?([^"']+?)["']?$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const hint = m[1].trim();
       const field = findField(pom, hint, []);
@@ -581,7 +582,10 @@ const RULES: Rule[] = [
   //    The locator preference order goes Alert > Error > Message — when the
   //    page has a dedicated alert/error field, use it instead of generic text.
   {
-    pattern: new RegExp(`^${SUBJ} should see (?:the|an|a) error(?: message)? ["']([^"']+)["']$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} should see (?:the|an|a) error(?: message)? ["']([^"']+)["']$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const expected = m[1];
       const field =
@@ -634,7 +638,10 @@ const RULES: Rule[] = [
   //     Strict toHaveText — the entire element text must equal the expected
   //     value. Use rule 9a above for substring semantics.
   {
-    pattern: new RegExp(`^${SUBJ} should see (?:the |a |an )?(.+?) ["']([^"']+)["']$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} should see (?:the |a |an )?(.+?) ["']([^"']+)["']$`,
+      "i",
+    ),
     build: (m, step, pom, pageVar) => {
       const hint = m[1].trim();
       const expected = m[2];
@@ -657,7 +664,10 @@ const RULES: Rule[] = [
   //     Both forms — "should remain" (modal) and "remains" (present-tense narrative,
   //     common in LLM-generated Gherkin) match.
   {
-    pattern: new RegExp(`^${SUBJ} (?:should remain|remain|remains) on (?:the )?(.+?)(?: page)?$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} (?:should remain|remain|remains) on (?:the )?(.+?)(?: page)?$`,
+      "i",
+    ),
     build: (m, step, _pom, pageVar) => {
       // v1.1.4: strip articles so "remain on a login page" → slug "login",
       // not "a[-_/]?login" which wouldn't match real URLs.
@@ -671,8 +681,7 @@ const RULES: Rule[] = [
       if (looksLikeProse(target)) {
         return {
           step,
-          warning:
-            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+          warning: `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
         };
       }
       return {
@@ -700,7 +709,8 @@ const RULES: Rule[] = [
   //      "current URL contains a path segment 'X'" — production bug
   //      where bdd2pw emitted toContainText on getByText instead of toHaveURL.
   {
-    pattern: /^.*?\b(?:URL|url)\s+contains\s+(?:(?:a|the)\s+)?(?:path\s+|url\s+)?(?:segment\s+|fragment\s+|part\s+)?["']([^"']+)["']/i,
+    pattern:
+      /^.*?\b(?:URL|url)\s+contains\s+(?:(?:a|the)\s+)?(?:path\s+|url\s+)?(?:segment\s+|fragment\s+|part\s+)?["']([^"']+)["']/i,
     build: (m, step, _pom, pageVar) => {
       const fragment = m[1];
       // Escape regex metacharacters so the URL fragment matches literally.
@@ -721,7 +731,10 @@ const RULES: Rule[] = [
   //      Asserts URL changed away from the previous page. Best-effort: regex
   //      matches the target token in the URL.
   {
-    pattern: new RegExp(`^${SUBJ} (?:should be |am |is )?redirected to (?:the )?(.+?)(?: page)?$`, "i"),
+    pattern: new RegExp(
+      `^${SUBJ} (?:should be |am |is )?redirected to (?:the )?(.+?)(?: page)?$`,
+      "i",
+    ),
     build: (m, step, _pom, pageVar) => {
       // v1.1.4: stripArticles fixes "redirected to a logged-in page" — without
       // this, slug becomes "a[-_/]?logged-in" which fails to match
@@ -736,8 +749,7 @@ const RULES: Rule[] = [
       if (looksLikeProse(target)) {
         return {
           step,
-          warning:
-            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+          warning: `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
         };
       }
       const slug = target
@@ -777,7 +789,8 @@ const RULES: Rule[] = [
 
   // 13. URL prefix/contains: 'the current URL should start with "https"'
   {
-    pattern: /^the (?:current )?URL should (?:start with|begin with|contain|include) ["']([^"']+)["']$/i,
+    pattern:
+      /^the (?:current )?URL should (?:start with|begin with|contain|include) ["']([^"']+)["']$/i,
     build: (m, step, _pom, pageVar) => {
       const expected = m[1];
       // start-with → anchored regex; contain → unanchored
@@ -910,11 +923,11 @@ const RULES: Rule[] = [
       const item = stripUiSuffix(itemRaw).replace(/\s+/g, "");
       const part = stripUiSuffix(partRaw).replace(/\s+/g, "");
       const candidates = [
-        `${item}${capitalize(part)}`,            // productName
-        `${item}${capitalize(part)}s`,           // productNames (plural)
+        `${item}${capitalize(part)}`, // productName
+        `${item}${capitalize(part)}s`, // productNames (plural)
         `${pluraliseLower(item)}${capitalize(part)}`, // productsName
         `${pluraliseLower(item)}${capitalize(part)}s`, // productsNames
-        `${camelCase(partRaw)}${capitalize(item)}`,   // nameProduct (reverse)
+        `${camelCase(partRaw)}${capitalize(item)}`, // nameProduct (reverse)
       ];
       const field = candidates
         .map((name) => pom.fields.find((f) => f.fieldName === name))
@@ -922,8 +935,7 @@ const RULES: Rule[] = [
       if (!field) {
         return {
           step,
-          warning:
-            `No POM field maps to "${itemRaw} ${partRaw}" (tried: ${candidates.join(", ")}). Annotate the element with data-test="${camelCase(itemRaw)}-${camelCase(partRaw)}" or hand-author a list field so bdd2pw can bind this step.`,
+          warning: `No POM field maps to "${itemRaw} ${partRaw}" (tried: ${candidates.join(", ")}). Annotate the element with data-test="${camelCase(itemRaw)}-${camelCase(partRaw)}" or hand-author a list field so bdd2pw can bind this step.`,
         };
       }
       // Emit a visible+count>0 assertion against the (list) locator.
@@ -964,8 +976,7 @@ const RULES: Rule[] = [
       if (!field) {
         return {
           step,
-          warning:
-            `No POM field maps to "${subject}" (tried: ${candidates.join(", ")}). Annotate the collection container or hand-author a list field so bdd2pw can bind this step.`,
+          warning: `No POM field maps to "${subject}" (tried: ${candidates.join(", ")}). Annotate the collection container or hand-author a list field so bdd2pw can bind this step.`,
         };
       }
       const customBody =
@@ -1107,8 +1118,7 @@ const RULES: Rule[] = [
       return {
         step,
         customBody,
-        warning:
-          `Axe check for "${subject}" was emitted as a page-wide scan — AxeBuilder.include() needs a CSS selector string, which bdd2pw can't synthesise from a Locator. Tighten by replacing \`new AxeBuilder({ page: ${pageVar}.page })\` with \`.include("<css-for-${subject}>")\` if the scoped assertion matters.`,
+        warning: `Axe check for "${subject}" was emitted as a page-wide scan — AxeBuilder.include() needs a CSS selector string, which bdd2pw can't synthesise from a Locator. Tighten by replacing \`new AxeBuilder({ page: ${pageVar}.page })\` with \`.include("<css-for-${subject}>")\` if the scoped assertion matters.`,
       };
     },
   },
@@ -1177,8 +1187,7 @@ const RULES: Rule[] = [
       if (looksLikeProse(target)) {
         return {
           step,
-          warning:
-            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+          warning: `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
         };
       }
       const slug = target
@@ -1302,8 +1311,7 @@ const RULES: Rule[] = [
       if (looksLikeProse(target)) {
         return {
           step,
-          warning:
-            `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
+          warning: `URL slug target "${target}" reads like prose, not a path; emitting TODO so the user can supply a real URL fragment.`,
         };
       }
       const slug = target
@@ -1363,9 +1371,7 @@ const RULES: Rule[] = [
         field =
           findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
           findField(pom, "error", ["Alert", "Error"]);
-      } else if (
-        /\b(success|congrat|welcome|logged.?in|logged.?on)/i.test(description)
-      ) {
+      } else if (/\b(success|congrat|welcome|logged.?in|logged.?on)/i.test(description)) {
         field =
           findField(pom, "successMessage", ["Heading", "Message", "Banner"]) ??
           findField(pom, "success", ["Heading", "Message"]) ??
@@ -1434,9 +1440,7 @@ const RULES: Rule[] = [
       /^No\s+(.+?)\s+(?:appear(?:s)?|are visible|is visible|is displayed|are displayed|is shown|are shown)(?:\s+on\s+(?:the )?page)?$/i,
     build: (m, step, pom, pageVar) => {
       const desc = m[1].trim();
-      const quoted = desc.match(
-        /^["']([^"']+)["']\s*(button|link|icon|element|tab)?$/i,
-      );
+      const quoted = desc.match(/^["']([^"']+)["']\s*(button|link|icon|element|tab)?$/i);
       let locatorExpr: string;
       // Dispatcher order matters: check success/congrat BEFORE error/message,
       // because "success message" contains both keywords and we want the
@@ -1466,7 +1470,9 @@ const RULES: Rule[] = [
         locatorExpr = field
           ? `${pageVar}.${field.fieldName}`
           : synthFlexibleTextLocator(pageVar, desc);
-      } else if (/\b(error|invalid|fail|forbidden|unauthor|alert|warning)\b/.test(lowered)) {
+      } else if (
+        /\b(error|invalid|fail|forbidden|unauthor|alert|warning)\b/.test(lowered)
+      ) {
         const field =
           findField(pom, "errorMessage", ["Alert", "Error", "Message"]) ??
           findField(pom, "error", ["Alert", "Error"]);
@@ -1573,7 +1579,9 @@ function findField(
     );
     // 3a. substring match within the suffix-matched subset
     f = suffixMatched.find(
-      (x) => x.fieldName.toLowerCase().includes(lower) || lower.includes(x.fieldName.toLowerCase()),
+      (x) =>
+        x.fieldName.toLowerCase().includes(lower) ||
+        lower.includes(x.fieldName.toLowerCase()),
     );
     if (f) return f;
     // 3b. exactly one suffix-matched field on the whole page → use it.
@@ -1701,7 +1709,10 @@ function stripArticles(s: string): string {
  * rules 10/11b/N4/N5e via this strip.
  */
 function stripParentheticals(s: string): string {
-  return s.replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+  return s
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -1712,7 +1723,9 @@ function stripParentheticals(s: string): string {
  */
 function cleanSlugTarget(s: string): string {
   return stripArticles(
-    stripParentheticals(s).replace(/\s+page$/i, "").trim(),
+    stripParentheticals(s)
+      .replace(/\s+page$/i, "")
+      .trim(),
   );
 }
 

@@ -73,7 +73,9 @@ export function pickLocator(
 
   // 4. getByTestId — when the app uses data-testid (best stability across releases)
   if (element.testId) {
-    const rivals = allElements.filter((e) => e !== element && e.testId === element.testId);
+    const rivals = allElements.filter(
+      (e) => e !== element && e.testId === element.testId,
+    );
     return {
       api: "getByTestId",
       args: JSON.stringify(element.testId),
@@ -205,8 +207,7 @@ const STATUS_REGION_RE = /(error|alert|message|warning|success|notification|stat
  * possible). The `_ngcontent-` / `_nghost-` patterns are handled with an
  * explicit underscore prefix.
  */
-const FRAMEWORK_CLASS_RE =
-  /^(?:ng-|mat-|cdk-|mdc-|_ngcontent-|_nghost-)/i;
+const FRAMEWORK_CLASS_RE = /^(?:ng-|mat-|cdk-|mdc-|_ngcontent-|_nghost-)/i;
 
 /** True when `cls` looks like a framework-internal class. */
 export function isFrameworkClass(cls: string): boolean {
@@ -270,9 +271,8 @@ export function stripFrameworkClasses(selector: string): string {
   // Replace `.ng-foo` (and the rest) with empty string. The class-token
   // regex matches `.` followed by an identifier, terminated by anything
   // that isn't a class-name char (so `.foo.bar` is two matches, not one).
-  const out = selector.replace(
-    /\.([a-zA-Z_][\w-]*)/g,
-    (full, cls) => (isFrameworkClass(cls) ? "" : full),
+  const out = selector.replace(/\.([a-zA-Z_][\w-]*)/g, (full, cls) =>
+    isFrameworkClass(cls) ? "" : full,
   );
   // Collapse any whitespace produced by stripping.
   return out.replace(/\s+/g, " ").trim();
@@ -479,9 +479,7 @@ function pluraliseFieldName(name: string): string {
   return name + "s";
 }
 
-export function dedupeLocators(
-  choices: (LocatorChoice | undefined)[],
-): LocatorChoice[] {
+export function dedupeLocators(choices: (LocatorChoice | undefined)[]): LocatorChoice[] {
   // v4.5.1 — filter out undefineds (unresolved locators from pickLocator)
   // up front. Callers count the drops before this filter runs so the
   // review warning reports how many fields were skipped.

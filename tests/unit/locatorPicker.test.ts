@@ -52,12 +52,12 @@ describe("pickLocator priority chain", () => {
   });
 
   it("synthesises field names with role-based suffixes", () => {
-    expect(pickLocator({ tag: "input", role: "textbox", name: "Username" }, []).fieldName).toBe(
-      "usernameInput",
-    );
-    expect(pickLocator({ tag: "button", role: "button", name: "Sign in" }, []).fieldName).toBe(
-      "signInButton",
-    );
+    expect(
+      pickLocator({ tag: "input", role: "textbox", name: "Username" }, []).fieldName,
+    ).toBe("usernameInput");
+    expect(
+      pickLocator({ tag: "button", role: "button", name: "Sign in" }, []).fieldName,
+    ).toBe("signInButton");
   });
 
   describe("v2.2.6 — BUG-10 framework-class filtering", () => {
@@ -159,28 +159,22 @@ describe("pickLocator priority chain", () => {
     });
 
     it("strips framework tokens from mixed selectors", () => {
-      expect(stripFrameworkClasses(".ng-untouched.search-input")).toBe(
-        ".search-input",
+      expect(stripFrameworkClasses(".ng-untouched.search-input")).toBe(".search-input");
+      expect(stripFrameworkClasses(".ng-untouched.ng-pristine.login-form")).toBe(
+        ".login-form",
       );
-      expect(
-        stripFrameworkClasses(".ng-untouched.ng-pristine.login-form"),
-      ).toBe(".login-form");
-      expect(stripFrameworkClasses(".search-input.ng-pristine")).toBe(
-        ".search-input",
-      );
+      expect(stripFrameworkClasses(".search-input.ng-pristine")).toBe(".search-input");
     });
 
     it("preserves tag, id, attribute, and combinator parts", () => {
       expect(stripFrameworkClasses("input.ng-untouched")).toBe("input");
-      expect(stripFrameworkClasses("input.ng-untouched#main")).toBe(
-        "input#main",
-      );
+      expect(stripFrameworkClasses("input.ng-untouched#main")).toBe("input#main");
       expect(stripFrameworkClasses('input.ng-untouched[type="search"]')).toBe(
         'input[type="search"]',
       );
-      expect(
-        stripFrameworkClasses("form.ng-untouched .search-input"),
-      ).toBe("form .search-input");
+      expect(stripFrameworkClasses("form.ng-untouched .search-input")).toBe(
+        "form .search-input",
+      );
     });
 
     it("leaves selectors with no framework classes alone", () => {
@@ -230,9 +224,27 @@ describe("pickLocator priority chain", () => {
 describe("dedupeLocators", () => {
   it("suffixes collisions with a numeric index", () => {
     const out = dedupeLocators([
-      { api: "locator", args: "'#a'", fieldName: "foo", source: { tag: "" }, confidence: "unique" },
-      { api: "locator", args: "'#b'", fieldName: "foo", source: { tag: "" }, confidence: "unique" },
-      { api: "locator", args: "'#c'", fieldName: "foo", source: { tag: "" }, confidence: "unique" },
+      {
+        api: "locator",
+        args: "'#a'",
+        fieldName: "foo",
+        source: { tag: "" },
+        confidence: "unique",
+      },
+      {
+        api: "locator",
+        args: "'#b'",
+        fieldName: "foo",
+        source: { tag: "" },
+        confidence: "unique",
+      },
+      {
+        api: "locator",
+        args: "'#c'",
+        fieldName: "foo",
+        source: { tag: "" },
+        confidence: "unique",
+      },
     ]);
     expect(out.map((c) => c.fieldName)).toEqual(["foo", "foo2", "foo3"]);
   });

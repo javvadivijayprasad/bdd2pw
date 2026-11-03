@@ -69,13 +69,15 @@ export const BANKING_RULES: Rule[] = [
     ),
     build: (m, step) => {
       const op = m[1].toLowerCase();
-      const matcher = ({
-        "at least": "toBeGreaterThanOrEqual",
-        "at most": "toBeLessThanOrEqual",
-        "greater than": "toBeGreaterThan",
-        "less than": "toBeLessThan",
-        exactly: "toBe",
-      } as Record<string, string>)[op]!;
+      const matcher = (
+        {
+          "at least": "toBeGreaterThanOrEqual",
+          "at most": "toBeLessThanOrEqual",
+          "greater than": "toBeGreaterThan",
+          "less than": "toBeLessThan",
+          exactly: "toBe",
+        } as Record<string, string>
+      )[op]!;
       const num = m[2].replace(/,/g, "");
       return {
         step,
@@ -113,13 +115,15 @@ export const BANKING_RULES: Rule[] = [
     ),
     build: (m, step) => {
       const op = m[1].toLowerCase();
-      const matcher = ({
-        "at most": "toBeLessThanOrEqual",
-        "less than": "toBeLessThan",
-        exactly: "toBe",
-        "at least": "toBeGreaterThanOrEqual",
-        "greater than": "toBeGreaterThan",
-      } as Record<string, string>)[op]!;
+      const matcher = (
+        {
+          "at most": "toBeLessThanOrEqual",
+          "less than": "toBeLessThan",
+          exactly: "toBe",
+          "at least": "toBeGreaterThanOrEqual",
+          "greater than": "toBeGreaterThan",
+        } as Record<string, string>
+      )[op]!;
       const num = m[2].replace(/,/g, "");
       return {
         step,
@@ -205,8 +209,7 @@ export const BANKING_RULES: Rule[] = [
 
   // BANK:10 — `the payment status is "pending"`
   {
-    pattern:
-      /^(?:the )?(?:payment|transaction|transfer) status is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:payment|transaction|transfer) status is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='payment-status'], .payment-status").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -215,8 +218,7 @@ export const BANKING_RULES: Rule[] = [
 
   // BANK:11 — Reg E: `the dispute is filed within 60 days of the statement`
   {
-    pattern:
-      /^(?:the )?dispute is filed within (\d+) days(?: of the statement)?$/i,
+    pattern: /^(?:the )?dispute is filed within (\d+) days(?: of the statement)?$/i,
     build: (m, step) => ({
       step,
       customBody: [
@@ -242,8 +244,7 @@ export const BANKING_RULES: Rule[] = [
   // BANK:13 — `the customer has completed KYC verification`
   // and `the customer has not completed KYC verification`
   {
-    pattern:
-      /^(?:the )?customer has (not )?completed KYC(?: verification)?$/i,
+    pattern: /^(?:the )?customer has (not )?completed KYC(?: verification)?$/i,
     build: (m, step) => {
       const matcher = m[1] ? "not.toBeVisible" : "toBeVisible";
       return {
@@ -255,8 +256,7 @@ export const BANKING_RULES: Rule[] = [
 
   // BANK:14 — `the transaction is flagged for AML review`
   {
-    pattern:
-      /^(?:the )?transaction is (not )?flagged for AML(?: review)?$/i,
+    pattern: /^(?:the )?transaction is (not )?flagged for AML(?: review)?$/i,
     build: (m, step) => {
       const matcher = m[1] ? "not.toBeVisible" : "toBeVisible";
       return {

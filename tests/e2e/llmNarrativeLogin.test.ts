@@ -77,15 +77,21 @@ describe("llm-narrative-login end-to-end", () => {
     });
 
     it("emits passwordInput.fill('Password123') for TC-001", () => {
-      expect(specContents).toContain('await loginPage.passwordInput.fill("Password123");');
+      expect(specContents).toContain(
+        'await loginPage.passwordInput.fill("Password123");',
+      );
     });
 
     it("emits passwordInput.fill('wrongPassword') for TC-002", () => {
-      expect(specContents).toContain('await loginPage.passwordInput.fill("wrongPassword");');
+      expect(specContents).toContain(
+        'await loginPage.passwordInput.fill("wrongPassword");',
+      );
     });
 
     it("emits passwordInput.fill('WrongPass999') for TC-004", () => {
-      expect(specContents).toContain('await loginPage.passwordInput.fill("WrongPass999");');
+      expect(specContents).toContain(
+        'await loginPage.passwordInput.fill("WrongPass999");',
+      );
     });
   });
 
@@ -114,9 +120,7 @@ describe("llm-narrative-login end-to-end", () => {
     it("emits a comment for 'Observe the resulting page and URL' (strips leading 'the')", () => {
       // The rule's `(?:the )?` makes the leading "the" optional and not part
       // of the capture, so the comment is just the substantive content.
-      expect(specContents).toContain(
-        "// observation: resulting page and URL",
-      );
+      expect(specContents).toContain("// observation: resulting page and URL");
     });
 
     it("emits a comment for 'Observe the error message displayed on the page'", () => {
@@ -159,9 +163,7 @@ describe("llm-narrative-login end-to-end", () => {
       // The snapshot includes the success-page logout link as a 'link' role
       // with name 'Log out'. Picker generates fieldName 'logOutLink'.
       // findFieldByDescription resolves to logOutLink via norm+'Link'.
-      expect(specContents).toContain(
-        "await expect(loginPage.logOutLink).toBeVisible();",
-      );
+      expect(specContents).toContain("await expect(loginPage.logOutLink).toBeVisible();");
     });
   });
 

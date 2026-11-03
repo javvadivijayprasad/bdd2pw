@@ -144,9 +144,7 @@ describe("practice-test-login end-to-end", () => {
     });
 
     it("rule 9a emits toContainText for 'containing'", () => {
-      expect(specContents).toMatch(
-        /\.toContainText\("Congratulations"\)/,
-      );
+      expect(specContents).toMatch(/\.toContainText\("Congratulations"\)/);
     });
 
     it("rule 11 emits toHaveURL with regex for 'redirected to the logged-in page'", () => {

@@ -64,11 +64,7 @@ export function createLLMClient(
   repoRoot: string,
 ): LLMClient | undefined {
   if (!opts || !opts.provider) return undefined;
-  const cachePathDefault = path.join(
-    repoRoot,
-    ".bdd2pw",
-    "llm-cache.sqlite",
-  );
+  const cachePathDefault = path.join(repoRoot, ".bdd2pw", "llm-cache.sqlite");
   switch (opts.provider) {
     case "anthropic":
       return new AnthropicLLMClient(opts, cachePathDefault);

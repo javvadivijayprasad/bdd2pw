@@ -112,9 +112,7 @@ export async function openSqliteCache(
     // better-sqlite3 is in optionalDependencies. require() so a missing
     // module doesn't break import-time of this file.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const sqlite = _loader
-      ? (_loader() as any)
-      : (require("better-sqlite3") as any);
+    const sqlite = _loader ? (_loader() as any) : (require("better-sqlite3") as any);
 
     await fs.ensureDir(path.dirname(cachePath));
     // v2.0.2: this line in particular is what previously escaped the
@@ -157,12 +155,7 @@ export async function openSqliteCache(
         }
       },
       async set(key, entry) {
-        setStmt.run(
-          key,
-          JSON.stringify(entry.binding),
-          entry.model,
-          entry.createdAt,
-        );
+        setStmt.run(key, JSON.stringify(entry.binding), entry.model, entry.createdAt);
       },
       async size() {
         const row = sizeStmt.get() as { n: number };
@@ -189,9 +182,7 @@ export async function openSqliteCache(
     return {
       cache: new InMemoryCache(),
       persistent: false,
-      fallbackReason: flattenForComment(
-        err instanceof Error ? err.message : err,
-      ),
+      fallbackReason: flattenForComment(err instanceof Error ? err.message : err),
     };
   }
 }

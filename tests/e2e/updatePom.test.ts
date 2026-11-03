@@ -89,7 +89,7 @@ export class LoginPage {
     // No methods are ever added in v1.0
     expect(result.added.methods).toBe(0);
     // Preserved counts come from the existing POM
-    expect(result.preserved.fields).toBe(2);  // usernameInput + customField
+    expect(result.preserved.fields).toBe(2); // usernameInput + customField
     expect(result.preserved.methods).toBe(2); // login + customHelper
     // ts-morph returns POSIX-style separators on Windows; normalize before
     // comparing so the assertion isn't OS-specific.
@@ -111,7 +111,7 @@ export class LoginPage {
     });
 
     it("preserves the entire login method body", () => {
-      expect(after).toContain('await this.usernameInput.fill(user);');
+      expect(after).toContain("await this.usernameInput.fill(user);");
       expect(after).toContain('await this.page.locator("#password").fill(pass);');
       expect(after).toContain('await this.page.locator("#submit").click();');
     });

@@ -13,7 +13,12 @@ const MODEL = "claude-sonnet-4-6";
 
 function fireBatchCall(
   t: LLMTelemetry,
-  opts: { batchSize: number; inputTokens: number; outputTokens: number; latencyMs: number },
+  opts: {
+    batchSize: number;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+  },
 ): void {
   // Simulate the AnthropicLLMClient.generateBatchBindings event flow:
   // N cache_miss events, then provider_call_start, then provider_call_done.

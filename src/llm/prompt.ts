@@ -208,8 +208,14 @@ Return a JSON ARRAY of ${inputs.length} StepBinding object(s) — one per step, 
  * forever (until the user explicitly clears the cache or upgrades bdd2pw).
  */
 export function cacheKey(input: GenerateBindingInput, model: string): string {
-  const fieldNames = input.pom.fields.map((f) => f.fieldName).sort().join(",");
-  const methodNames = input.pom.methods.map((m) => m.name).sort().join(",");
+  const fieldNames = input.pom.fields
+    .map((f) => f.fieldName)
+    .sort()
+    .join(",");
+  const methodNames = input.pom.methods
+    .map((m) => m.name)
+    .sort()
+    .join(",");
   // Include the model so a model upgrade invalidates old cache entries.
   return [
     "v2",

@@ -100,14 +100,15 @@ export function mountRoutes(app: Application): void {
     const job = getJob(req.params.id);
     if (!job) return res.status(404).json({ error: "JobNotFound" });
     if (job.status !== "completed" || !job.artifactDir) {
-      return res
-        .status(409)
-        .json({ error: "ArtifactNotReady", status: job.status });
+      return res.status(409).json({ error: "ArtifactNotReady", status: job.status });
     }
     if (!(await fs.pathExists(job.artifactDir))) {
       return res
         .status(410)
-        .json({ error: "ArtifactExpired", message: "Artifact directory no longer exists." });
+        .json({
+          error: "ArtifactExpired",
+          message: "Artifact directory no longer exists.",
+        });
     }
     try {
       await streamArtifactZip(res, job.artifactDir, job.id);
@@ -247,7 +248,10 @@ async function runUpdatePomWorker(
       // updatePom modifies the user's repo directly; no artifact dir for download
       artifactDir: undefined,
     });
-    logger.info({ jobId, addedFields: result.added.fields }, "update-pom worker complete");
+    logger.info(
+      { jobId, addedFields: result.added.fields },
+      "update-pom worker complete",
+    );
   } catch (err) {
     logger.error({ jobId, err }, "update-pom worker failed");
     updateJob(jobId, {

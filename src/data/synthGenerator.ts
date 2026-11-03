@@ -114,12 +114,7 @@ export async function generateSyntheticRows(
         );
         continue;
       }
-      llmColumns[col] = await generateLlmColumn(
-        opts.llm,
-        prompt,
-        opts.rows,
-        col,
-      );
+      llmColumns[col] = await generateLlmColumn(opts.llm, prompt, opts.rows, col);
     }
   }
 
@@ -264,9 +259,7 @@ export function loadSchema(schemaPath: string): SynthSchema {
     parsed = JSON.parse(raw);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new SynthGeneratorError(
-      `Schema JSON parse error in ${schemaPath}: ${msg}`,
-    );
+    throw new SynthGeneratorError(`Schema JSON parse error in ${schemaPath}: ${msg}`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new SynthGeneratorError(

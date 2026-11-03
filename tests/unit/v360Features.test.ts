@@ -7,11 +7,7 @@ import * as fs from "fs-extra";
 import * as os from "os";
 import * as path from "path";
 import { diagnoseStep } from "../../src/transformers/stepMatcher";
-import {
-  fingerprint,
-  proposeRules,
-  synthesiseRegex,
-} from "../../src/llm/proposeRules";
+import { fingerprint, proposeRules, synthesiseRegex } from "../../src/llm/proposeRules";
 import type { PageObjectIR, StepIR } from "../../src/types";
 
 const EMPTY_POM: PageObjectIR = {
@@ -46,9 +42,7 @@ describe("v3.6.0 — diagnoseStep rule trace", () => {
     };
     const trace = diagnoseStep(step, EMPTY_POM, "page", 5);
     // At least one of the top-5 should mention URL in its pattern.
-    const anyUrl = trace.some((t) =>
-      /url|URL/i.test(t.patternSource),
-    );
+    const anyUrl = trace.some((t) => /url|URL/i.test(t.patternSource));
     expect(anyUrl).toBe(true);
   });
 });
@@ -64,12 +58,8 @@ describe("v3.6.0 — fingerprint", () => {
   });
 
   it("collapses currency, numbers, dates", () => {
-    expect(fingerprint("the balance is $1,234.56")).toBe(
-      "the balance is <MONEY>",
-    );
-    expect(fingerprint("the heart rate is 72 bpm")).toBe(
-      "the heart rate is <NUM> bpm",
-    );
+    expect(fingerprint("the balance is $1,234.56")).toBe("the balance is <MONEY>");
+    expect(fingerprint("the heart rate is 72 bpm")).toBe("the heart rate is <NUM> bpm");
     expect(fingerprint("the appointment is on 2026-05-22")).toBe(
       "the appointment is on <DATE>",
     );
@@ -106,7 +96,9 @@ describe("v3.6.0 — proposeRules end-to-end", () => {
         scaffoldId: "s1",
         stepText: 'I enter "alice" in the username field',
         stepKeyword: "When",
-        binding: { step: { keyword: "When", text: "I enter \"alice\" in the username field" } },
+        binding: {
+          step: { keyword: "When", text: 'I enter "alice" in the username field' },
+        },
         pomSignature: { className: "P", fieldNames: [], methodNames: [] },
         provider: "anthropic",
         model: "claude-sonnet-4-6",
@@ -117,7 +109,9 @@ describe("v3.6.0 — proposeRules end-to-end", () => {
         scaffoldId: "s2",
         stepText: 'I enter "bob" in the username field',
         stepKeyword: "When",
-        binding: { step: { keyword: "When", text: "I enter \"bob\" in the username field" } },
+        binding: {
+          step: { keyword: "When", text: 'I enter "bob" in the username field' },
+        },
         pomSignature: { className: "P", fieldNames: [], methodNames: [] },
         provider: "anthropic",
         model: "claude-sonnet-4-6",
@@ -128,7 +122,9 @@ describe("v3.6.0 — proposeRules end-to-end", () => {
         scaffoldId: "s3",
         stepText: 'I enter "carol" in the username field',
         stepKeyword: "When",
-        binding: { step: { keyword: "When", text: "I enter \"carol\" in the username field" } },
+        binding: {
+          step: { keyword: "When", text: 'I enter "carol" in the username field' },
+        },
         pomSignature: { className: "P", fieldNames: [], methodNames: [] },
         provider: "anthropic",
         model: "claude-sonnet-4-6",
@@ -140,7 +136,9 @@ describe("v3.6.0 — proposeRules end-to-end", () => {
         scaffoldId: "s4",
         stepText: "the user fires a unique snowflake step",
         stepKeyword: "Then",
-        binding: { step: { keyword: "Then", text: "the user fires a unique snowflake step" } },
+        binding: {
+          step: { keyword: "Then", text: "the user fires a unique snowflake step" },
+        },
         pomSignature: { className: "P", fieldNames: [], methodNames: [] },
         provider: "anthropic",
         model: "claude-sonnet-4-6",
@@ -148,11 +146,7 @@ describe("v3.6.0 — proposeRules end-to-end", () => {
       },
     ];
     const jsonlPath = path.join(tmpDir, "candidate-rules.jsonl");
-    await fs.writeFile(
-      jsonlPath,
-      jsonl.map((e) => JSON.stringify(e)).join("\n"),
-      "utf8",
-    );
+    await fs.writeFile(jsonlPath, jsonl.map((e) => JSON.stringify(e)).join("\n"), "utf8");
 
     const result = await proposeRules({ inputPath: jsonlPath });
     expect(result.proposalsWritten).toBe(1);

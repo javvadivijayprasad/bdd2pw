@@ -204,8 +204,7 @@ export async function analyseQuarantineStats(
 
   const promotions = await computePromotions(repo, warnings);
 
-  const llmCacheHitShare =
-    stepsByLlm > 0 ? cachedLlmSteps / stepsByLlm : null;
+  const llmCacheHitShare = stepsByLlm > 0 ? cachedLlmSteps / stepsByLlm : null;
 
   const stats: QuarantineStats = {
     version: opts.version,
@@ -312,9 +311,7 @@ async function computePromotions(
     await walkForSidecars(testsDir, files);
     for (const file of files) {
       try {
-        const sidecar = JSON.parse(
-          await fs.readFile(file, "utf8"),
-        ) as Sidecar;
+        const sidecar = JSON.parse(await fs.readFile(file, "utf8")) as Sidecar;
         for (const scenario of sidecar.scenarios ?? []) {
           for (const step of scenario.steps ?? []) {
             if (step.llm && typeof step.text === "string") {
@@ -370,9 +367,7 @@ export function renderQuarantineStatsTable(stats: QuarantineStats): string {
   );
   if (stats.totals.llmCacheHitShare !== null) {
     lines.push(
-      "LLM cache hit share: " +
-        (stats.totals.llmCacheHitShare * 100).toFixed(1) +
-        "%",
+      "LLM cache hit share: " + (stats.totals.llmCacheHitShare * 100).toFixed(1) + "%",
     );
   }
   lines.push("");

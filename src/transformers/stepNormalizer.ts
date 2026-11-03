@@ -36,9 +36,9 @@
  *  usual source. Single, double, and the prime variants. */
 function unifyQuotes(s: string): string {
   return s
-    .replace(/[‘’‚′]/g, "'")  // ’ ‘ ‚ ′
-    .replace(/[“”„″]/g, '"')  // “ ” „ ″
-    .replace(/[–—]/g, "-");             // – —  → -
+    .replace(/[‘’‚′]/g, "'") // ’ ‘ ‚ ′
+    .replace(/[“”„″]/g, '"') // “ ” „ ″
+    .replace(/[–—]/g, "-"); // – —  → -
 }
 
 /** Collapse runs of whitespace, drop trailing punctuation that doesn't
@@ -81,9 +81,7 @@ function stripTrailingParenthetical(s: string): string {
   // don't over-match "likely" / "for examples" — and CRITICALLY we don't
   // use \b after "e.g." because "." is non-word, so \b never matches the
   // following "," (which is also non-word). Use lookahead instead.
-  if (
-    /^(?:e\.g\.|i\.e\.|for example|such as|like)(?=[\s,]|$)/i.test(inner)
-  ) {
+  if (/^(?:e\.g\.|i\.e\.|for example|such as|like)(?=[\s,]|$)/i.test(inner)) {
     return s;
   }
   return m[1].trimEnd();
@@ -157,10 +155,28 @@ function expandImOn(s: string): string {
  * Callers should treat true as "abandon slug, emit warning instead".
  */
 const URL_PROSE_STOP_WORDS = new Set([
-  "with", "without", "any", "the", "a", "an",
-  "and", "or", "but", "if", "after", "before", "while",
-  "where", "when", "since", "until", "via",
-  "redirect", "redirection", "redirected", "redirects",
+  "with",
+  "without",
+  "any",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "if",
+  "after",
+  "before",
+  "while",
+  "where",
+  "when",
+  "since",
+  "until",
+  "via",
+  "redirect",
+  "redirection",
+  "redirected",
+  "redirects",
 ]);
 
 export function looksLikeProse(target: string): boolean {
@@ -173,7 +189,11 @@ export function looksLikeProse(target: string): boolean {
   // visible in the UI" was being slugified into a URL regex because
   // none of the existing stop-word heuristics fired on this exact
   // shape. Decline visibility-shaped captures outright.
-  if (/\b(?:is|are)\s+(?:visible|displayed|shown|hidden|not\s+(?:visible|displayed|shown))\b/i.test(target)) {
+  if (
+    /\b(?:is|are)\s+(?:visible|displayed|shown|hidden|not\s+(?:visible|displayed|shown))\b/i.test(
+      target,
+    )
+  ) {
     return true;
   }
   if (/\b(?:appears|appear)\b/i.test(target)) return true;

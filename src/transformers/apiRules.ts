@@ -151,8 +151,7 @@ export const API_RULES: Rule[] = [
     build: (m, step) => {
       const method = verbToMethod(m[1]);
       const pathLit = JSON.stringify(m[2]);
-      const docstring =
-        typeof step.argument === "string" ? step.argument : undefined;
+      const docstring = typeof step.argument === "string" ? step.argument : undefined;
       if (docstring) {
         const bodyLit = jsonBodyAsLiteral(docstring);
         const dataLiteral = indent(bodyLit, "  ").trimStart();

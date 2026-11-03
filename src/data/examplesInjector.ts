@@ -87,10 +87,7 @@ export interface InjectionReport {
   rowsPerSwap: number;
 }
 
-export function injectExamples(
-  feature: FeatureIR,
-  rows: DataRow[],
-): InjectionReport {
+export function injectExamples(feature: FeatureIR, rows: DataRow[]): InjectionReport {
   const report: InjectionReport = {
     totalScenarios: feature.scenarios.length,
     swappedScenarios: 0,

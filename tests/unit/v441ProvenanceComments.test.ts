@@ -117,9 +117,7 @@ describe("v4.4.1 — // @bdd2pw provenance comment grammar", () => {
     const out = build([b]).contents;
     expect(out).toContain("// @bdd2pw lane=todo");
     // Lane=todo has no other fields.
-    const line = out
-      .split("\n")
-      .find((l) => l.includes("@bdd2pw lane=todo"));
+    const line = out.split("\n").find((l) => l.includes("@bdd2pw lane=todo"));
     expect(line?.trim()).toBe("// @bdd2pw lane=todo");
   });
 
@@ -142,9 +140,7 @@ describe("v4.4.1 — // @bdd2pw provenance comment grammar", () => {
       },
     };
     const out = build([b]).contents;
-    const line = out
-      .split("\n")
-      .find((l) => l.includes("@bdd2pw lane"));
+    const line = out.split("\n").find((l) => l.includes("@bdd2pw lane"));
     expect(line?.trim()).toBe("// @bdd2pw lane=todo");
   });
 

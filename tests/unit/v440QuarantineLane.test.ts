@@ -132,9 +132,7 @@ describe("v4.4.0 Slice 1 — acceptance", () => {
     expect(stats.totals.llmCacheHitShare).toBeNull();
 
     // Verify the sidecar itself has no llm entry.
-    const raw = await fs.readJson(
-      path.join(repo, "tests", "login.spec.meta.json"),
-    );
+    const raw = await fs.readJson(path.join(repo, "tests", "login.spec.meta.json"));
     expect(raw.scenarios[0].steps[0].llm).toBeUndefined();
     expect(raw.scenarios[0].steps[0].rule).toBeUndefined();
   });
@@ -236,9 +234,7 @@ describe("v4.4.0 Slice 1 — acceptance", () => {
     // Cache hit share is populated when at least one LLM step ran.
     expect(stats.totals.steps.byLlm).toBe(2);
     expect(stats.totals.llmCacheHitShare).toBe(0.5);
-    expect(outputPath).toBe(
-      path.join(repo, "artefacts", "quarantine-stats.json"),
-    );
+    expect(outputPath).toBe(path.join(repo, "artefacts", "quarantine-stats.json"));
     const onDisk = (await fs.readJson(outputPath)) as QuarantineStats;
     expect(onDisk.totals.scenarios.llmGenerated).toBe(1);
     expect(onDisk.totals.steps.byRule).toBe(1);
@@ -256,9 +252,7 @@ describe("v4.4.0 Slice 1 — acceptance", () => {
         bindings: [llmBinding("legacy phrasing that used to need LLM")],
       },
     ]);
-    let raw = await fs.readJson(
-      path.join(repo, "tests", "login.spec.meta.json"),
-    );
+    let raw = await fs.readJson(path.join(repo, "tests", "login.spec.meta.json"));
     expect(raw.scenarios[0].tags).toContain("@llm-generated");
 
     // Round 2 — re-scaffold. The step is now rule-bound (no
@@ -289,9 +283,7 @@ describe("v4.4.0 Slice 1 — acceptance", () => {
     const testsDir = path.join(repo, "tests");
     await fs.ensureDir(testsDir);
     // Valid sidecar…
-    await writeSidecar(repo, "login", [
-      { name: "OK", bindings: [ruleBinding("step")] },
-    ]);
+    await writeSidecar(repo, "login", [{ name: "OK", bindings: [ruleBinding("step")] }]);
     // …plus a malformed one.
     await fs.writeFile(
       path.join(testsDir, "broken.spec.meta.json"),

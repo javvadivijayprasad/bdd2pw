@@ -94,21 +94,18 @@ describe("v3.11.0 — OpenAILLMClient", () => {
       ],
       usage: { prompt_tokens: 1234, completion_tokens: 56 },
     });
-    const result = await withOpenAIStub(
-      { chatCompletions: stubCreate },
-      async () => {
-        const client = new OpenAILLMClient(
-          {
-            provider: "openai",
-            apiKey: "sk-test",
-            skipGovernance: true,
-            cachePath: ":memory:",
-          },
-          ":memory:",
-        );
-        return client.generateBinding(STEP_INPUT);
-      },
-    );
+    const result = await withOpenAIStub({ chatCompletions: stubCreate }, async () => {
+      const client = new OpenAILLMClient(
+        {
+          provider: "openai",
+          apiKey: "sk-test",
+          skipGovernance: true,
+          cachePath: ":memory:",
+        },
+        ":memory:",
+      );
+      return client.generateBinding(STEP_INPUT);
+    });
     expect(result.binding?.pomCall?.method).toBe("usernameInput.fill");
     expect(result.fromCache).toBe(false);
     expect(result.model).toBe("gpt-4o-mini");
@@ -142,21 +139,18 @@ describe("v3.11.0 — OpenAILLMClient", () => {
       { ...STEP_INPUT, step: { keyword: "When", text: "I do thing two" } },
       { ...STEP_INPUT, step: { keyword: "When", text: "I do thing three" } },
     ];
-    const results = await withOpenAIStub(
-      { chatCompletions: stubCreate },
-      async () => {
-        const client = new OpenAILLMClient(
-          {
-            provider: "openai",
-            apiKey: "sk-test",
-            skipGovernance: true,
-            cachePath: ":memory:",
-          },
-          ":memory:",
-        );
-        return client.generateBatchBindings(inputs);
-      },
-    );
+    const results = await withOpenAIStub({ chatCompletions: stubCreate }, async () => {
+      const client = new OpenAILLMClient(
+        {
+          provider: "openai",
+          apiKey: "sk-test",
+          skipGovernance: true,
+          cachePath: ":memory:",
+        },
+        ":memory:",
+      );
+      return client.generateBatchBindings(inputs);
+    });
     expect(results).toHaveLength(3);
     expect(results.map((r) => r.binding?.pomCall?.args[0])).toEqual([
       '"a"',
@@ -173,22 +167,19 @@ describe("v3.11.0 — OpenAILLMClient", () => {
       providerCalls += 1;
       return { choices: [], usage: {} };
     };
-    const result = await withOpenAIStub(
-      { chatCompletions: stubCreate },
-      async () => {
-        const client = new OpenAILLMClient(
-          {
-            provider: "openai",
-            apiKey: "sk-test",
-            maxCalls: 0, // budget=0 → exhausted immediately
-            skipGovernance: true,
-            cachePath: ":memory:",
-          },
-          ":memory:",
-        );
-        return client.generateBinding(STEP_INPUT);
-      },
-    );
+    const result = await withOpenAIStub({ chatCompletions: stubCreate }, async () => {
+      const client = new OpenAILLMClient(
+        {
+          provider: "openai",
+          apiKey: "sk-test",
+          maxCalls: 0, // budget=0 → exhausted immediately
+          skipGovernance: true,
+          cachePath: ":memory:",
+        },
+        ":memory:",
+      );
+      return client.generateBinding(STEP_INPUT);
+    });
     expect(result.error).toMatch(/budget exhausted/);
     expect(providerCalls).toBe(0);
   });
@@ -212,21 +203,18 @@ describe("v3.11.0 — OpenAILLMClient", () => {
       choices: [{ message: { content: "this is not JSON" } }],
       usage: { prompt_tokens: 100, completion_tokens: 10 },
     });
-    const result = await withOpenAIStub(
-      { chatCompletions: stubCreate },
-      async () => {
-        const client = new OpenAILLMClient(
-          {
-            provider: "openai",
-            apiKey: "sk-test",
-            skipGovernance: true,
-            cachePath: ":memory:",
-          },
-          ":memory:",
-        );
-        return client.generateBinding(STEP_INPUT);
-      },
-    );
+    const result = await withOpenAIStub({ chatCompletions: stubCreate }, async () => {
+      const client = new OpenAILLMClient(
+        {
+          provider: "openai",
+          apiKey: "sk-test",
+          skipGovernance: true,
+          cachePath: ":memory:",
+        },
+        ":memory:",
+      );
+      return client.generateBinding(STEP_INPUT);
+    });
     expect(result.error).toMatch(/Could not parse/);
   });
 });

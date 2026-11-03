@@ -18,12 +18,7 @@ import {
   type EmitPageObjectOptions,
 } from "@vijaypjavvadi/pw-emit";
 
-import type {
-  PageObjectIR,
-  LocatorChoice,
-  StepBinding,
-  ReviewItem,
-} from "../types";
+import type { PageObjectIR, LocatorChoice, StepBinding, ReviewItem } from "../types";
 import { camelCase } from "../utils/naming";
 import { flattenForComment } from "../utils/commentSafe";
 
@@ -103,8 +98,14 @@ export function sanitizeLocatorReferences(s: string): string {
       let j = i + 1;
       while (j < s.length) {
         const ch = s[j];
-        if (ch === "\\") { j += 2; continue; }
-        if (ch === quote) { j += 1; break; }
+        if (ch === "\\") {
+          j += 2;
+          continue;
+        }
+        if (ch === quote) {
+          j += 1;
+          break;
+        }
         // Template-literal `${...}`: step over balanced braces so a `.15`
         // inside an expression (code!) still gets sanitized — but a plain
         // template without interpolation stays verbatim.
@@ -124,7 +125,10 @@ export function sanitizeLocatorReferences(s: string): string {
             j += 1;
           }
           parts.push(transform(s.slice(exprStart, j)));
-          if (s[j] === "}") { parts.push("}"); j += 1; }
+          if (s[j] === "}") {
+            parts.push("}");
+            j += 1;
+          }
           i = j;
           continue;
         }
@@ -317,9 +321,7 @@ export function emitTestFile(input: EmitTestFileInput): EmitResult {
       // so a leftover from a previous test never bleeds into the next.
       // Only when this scenario actually has API steps — UI-only scenarios
       // in the same feature stay clean.
-      const body = s.hasApi
-        ? `apiResponse = null;\n${baseBody}`
-        : baseBody;
+      const body = s.hasApi ? `apiResponse = null;\n${baseBody}` : baseBody;
       return {
         name: s.name,
         body,
@@ -449,9 +451,7 @@ function bindingsToBody(
     stepIndex += 1;
     const stepId = String(stepIndex).padStart(4, "0");
     if (options.stepMarkers) {
-      lines.push(
-        `// bdd2pw:step-open id="${stepId}" title=${JSON.stringify(stepLabel)}`,
-      );
+      lines.push(`// bdd2pw:step-open id="${stepId}" title=${JSON.stringify(stepLabel)}`);
     }
 
     lines.push(`await test.step(${labelLit}, async () => {`);
@@ -476,14 +476,11 @@ function bindingsToBody(
       const safeBody = sanitizeLocatorReferences(b.customBody);
       for (const line of safeBody.split("\n")) bodyLines.push(line);
     } else if (b.pomCall) {
-      const args = b.pomCall.args
-        .map((a) => sanitizeLocatorReferences(a))
-        .join(", ");
+      const args = b.pomCall.args.map((a) => sanitizeLocatorReferences(a)).join(", ");
       const method = sanitizeLocatorReferences(b.pomCall.method);
       bodyLines.push(`await ${b.pomCall.page}.${method}(${args});`);
     } else if (b.assertion) {
-      const expected =
-        b.assertion.expected !== undefined ? b.assertion.expected : "";
+      const expected = b.assertion.expected !== undefined ? b.assertion.expected : "";
       // v2.2.4 — defend against empty/missing locator. The v2.2.3 prompt
       // told the LLM to use empty string for toHaveURL; the LLM took it
       // literally and emitted locator: "". `expect()` with no argument
@@ -503,9 +500,7 @@ function bindingsToBody(
       // messages (e.g. multi-line stack traces from LLM provider errors,
       // native module load failures) don't bleed past the `//` and break
       // the .spec.ts parse.
-      const safeWarning = flattenForComment(
-        b.warning ?? "no rule matched this step",
-      );
+      const safeWarning = flattenForComment(b.warning ?? "no rule matched this step");
       // v4.6.4 — attestqa handoff. "throw" mode: raise an error inside
       // the step so Playwright reports the test as failed at this step.
       // "skip" and "none" leave the body as a comment: for "skip", a

@@ -19,8 +19,7 @@ interface Rule {
   ): StepBinding | null;
 }
 
-const SUBJ =
-  "(?:I|user|User|the user|the User|the subscriber|the customer|the agent)";
+const SUBJ = "(?:I|user|User|the user|the User|the subscriber|the customer|the agent)";
 const MONEY = `\\$?["']?\\$?([\\d,]+(?:\\.\\d{1,2})?)["']?`;
 
 export const TELECOM_RULES: Rule[] = [
@@ -45,10 +44,7 @@ export const TELECOM_RULES: Rule[] = [
 
   // TEL:03 — `the monthly price is "$50"` / `the monthly bill is "$N"`
   {
-    pattern: new RegExp(
-      `^(?:the )?(?:monthly )?(?:price|bill|rate) is ${MONEY}$`,
-      "i",
-    ),
+    pattern: new RegExp(`^(?:the )?(?:monthly )?(?:price|bill|rate) is ${MONEY}$`, "i"),
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='monthly-price'], [data-testid='monthly-bill']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -96,8 +92,7 @@ export const TELECOM_RULES: Rule[] = [
 
   // TEL:08 — `the voice usage is "120 min"` / `"2 hours"`
   {
-    pattern:
-      /^(?:the )?voice usage is ["']?(\d+(?:\.\d+)?\s*(?:min|hours?|m|h))["']?$/i,
+    pattern: /^(?:the )?voice usage is ["']?(\d+(?:\.\d+)?\s*(?:min|hours?|m|h))["']?$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='voice-usage']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -106,8 +101,7 @@ export const TELECOM_RULES: Rule[] = [
 
   // TEL:09 — `the SMS count is N` / `the messages count is N`
   {
-    pattern:
-      /^(?:the )?(?:SMS|message|text) count is (\d+)$/i,
+    pattern: /^(?:the )?(?:SMS|message|text) count is (\d+)$/i,
     build: (m, step) => ({
       step,
       customBody: [

@@ -8,7 +8,8 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const PACKAGE_VERSION: string = (require("../package.json") as { version: string }).version;
+const PACKAGE_VERSION: string = (require("../package.json") as { version: string })
+  .version;
 import type {
   AnalyzeOptions,
   AnalyzeResult,
@@ -24,7 +25,11 @@ import { parseFeature, substituteOutlinePlaceholders } from "./parser/gherkinPar
 import { isJsonScenarioFile, parseJsonScenarios } from "./parser/jsonScenarioParser";
 // v4.0.0 — data-driven scaffolds.
 import { loadDataFile, DataLoaderError, type DataRow } from "./data/dataLoader";
-import { generateSyntheticRows, loadSchema, SynthGeneratorError } from "./data/synthGenerator";
+import {
+  generateSyntheticRows,
+  loadSchema,
+  SynthGeneratorError,
+} from "./data/synthGenerator";
 import { injectExamples, reportToReviewItems } from "./data/examplesInjector";
 import { scanRepo } from "./repo/repoScanner";
 import { scaffoldProject } from "./repo/projectScaffolder";
@@ -32,11 +37,7 @@ import { scanPage } from "./discovery/mcpClient";
 import { parseSnapshot } from "./discovery/snapshotParser";
 import { dedupeLocators, pickLocator } from "./transformers/locatorPicker";
 import { resolvePom } from "./transformers/pomResolver";
-import {
-  diagnoseStep,
-  matchStep,
-  setActiveDomains,
-} from "./transformers/stepMatcher";
+import { diagnoseStep, matchStep, setActiveDomains } from "./transformers/stepMatcher";
 import { emitPageObject, emitTestFile } from "./emitters/facade";
 import {
   computeDomHash,
@@ -113,7 +114,10 @@ class NotImplementedError extends Error {
  */
 export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const reviewItems: ReviewItem[] = [];
-  logger.info({ feature: opts.feature, page: opts.page, repo: opts.repo }, "scaffold start");
+  logger.info(
+    { feature: opts.feature, page: opts.page, repo: opts.repo },
+    "scaffold start",
+  );
 
   // v3.7.1 — normalise the POM class name to PascalCase up-front.
   // TestForge regression #1 from 2026-05-22: a caller passing
@@ -184,7 +188,8 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   if (opts.noDiscovery) {
     reviewItems.push({
       severity: "info",
-      message: "Page discovery skipped (--no-discovery). Field-referencing rules will fall to TODO.",
+      message:
+        "Page discovery skipped (--no-discovery). Field-referencing rules will fall to TODO.",
     });
   } else {
     try {
@@ -308,7 +313,12 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   });
 
   // 6) Build the final POM IR (existing fields + only the new ones we need)
-  const finalPomRaw: PageObjectIR = buildFinalPom(decision, pageClassName, candidatePom, candidateChoices);
+  const finalPomRaw: PageObjectIR = buildFinalPom(
+    decision,
+    pageClassName,
+    candidatePom,
+    candidateChoices,
+  );
   // v4.5.1 — attestqa Bug B defence (part 2). Strip any field whose
   // confidence is "unparseable" BEFORE pw-emit sees the IR; pw-emit
   // would otherwise rebuild them as `page.locator("")`. The source
@@ -388,9 +398,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       : undefined,
     opts.repo,
   );
-  const candidates = llm
-    ? new CandidateRulesWriter(opts.repo)
-    : undefined;
+  const candidates = llm ? new CandidateRulesWriter(opts.repo) : undefined;
 
   // v4.0.0 — data-driven Examples injection. If --data or --gen-data was
   // passed, swap every Scenario Outline's examples with externally-sourced
@@ -468,12 +476,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // Background steps are treated as a synthetic scenario for batching:
   // they share the same POM context and run together in beforeEach.
   const beforeEachBindings: StepBinding[] = feature.background?.length
-    ? await matchScenarioWithLLM(
-        feature.background,
-        finalPom,
-        pageVar,
-        llmCtx,
-      )
+    ? await matchScenarioWithLLM(feature.background, finalPom, pageVar, llmCtx)
     : [];
 
   // Outline scenarios — flatten Examples into one test per row.
@@ -499,7 +502,9 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
           pageVar,
           llmCtx,
         );
-        const labels = Object.entries(row).map(([k, v]) => `${k}=${v}`).join(", ");
+        const labels = Object.entries(row)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(", ");
         flattened.push({
           name: `${scenario.name} [${labels}]`,
           bindings: expanded,
@@ -535,9 +540,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // v2.0.2 — cache backend status. We check `=== false` (not falsy) so
     // the null "not yet initialised" case (no LLM calls were made because
     // every step matched a rule) doesn't produce a noisy false alarm.
-    const persistent = llm.cacheBackendPersistent
-      ? llm.cacheBackendPersistent()
-      : null;
+    const persistent = llm.cacheBackendPersistent ? llm.cacheBackendPersistent() : null;
     if (persistent === false) {
       const reason = llm.cacheBackendFallbackReason
         ? llm.cacheBackendFallbackReason()
@@ -561,9 +564,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     const trace = diagnoseStep(b.step, finalPom, pageVar);
     if (trace.length === 0) return undefined;
     return trace.map((t) => {
-      const status = t.matchedButDeclined
-        ? "matched-but-declined"
-        : "no-match";
+      const status = t.matchedButDeclined ? "matched-but-declined" : "no-match";
       const captureSuffix =
         t.captures && t.captures.length > 0
           ? ` · captures: ${t.captures.map((c) => JSON.stringify(c)).join(", ")}`
@@ -578,7 +579,8 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         reviewItems.push({
           severity: "warn",
           message: `[${sc.name}] ${b.warning}`,
-          suggestion: "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
+          suggestion:
+            "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
           details: buildDetails(b),
         });
       }
@@ -588,9 +590,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // teams can filter runs with `--grep-invert @llm-generated` for a
     // trusted-only lane. The tag is idempotent — a re-scaffold that
     // finds every step now rule-bound drops it automatically.
-    const hasLlmBinding = sc.bindings.some(
-      (b) => b.provenance?.source === "llm",
-    );
+    const hasLlmBinding = sc.bindings.some((b) => b.provenance?.source === "llm");
     if (hasLlmBinding) {
       const existing = sc.tags ?? [];
       if (!existing.includes("@llm-generated")) {
@@ -609,7 +609,8 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       reviewItems.push({
         severity: "warn",
         message: `[Background] ${b.warning}`,
-        suggestion: "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
+        suggestion:
+          "Add a custom step rule, enable --llm fallback, or hand-edit the spec.",
         details: buildDetails(b),
       });
     }
@@ -742,9 +743,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       // no changes and every field call heals through the wrapped page.
       selfHealingShim: opts.selfHealing === true && opts.legacyHealing === true,
     });
-    reviewItems.push(
-      ...pomEmit.warnings.map((w) => ({ ...w, file: finalPom.filePath })),
-    );
+    reviewItems.push(...pomEmit.warnings.map((w) => ({ ...w, file: finalPom.filePath })));
     // v4.2.0 — prepend DOM-hash header if we have a snapshot. Header is
     // idempotent (replaces any prior header block from a previous
     // scaffold) so re-emitting doesn't stack duplicates.
@@ -766,16 +765,17 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // class, the P0-1/P0-3 class, and any future "candidate POM lost
     // a method the specs rely on" shape, with one check regardless of
     // the resolver's decision.
-    const specReferenceCheck = !isReuseNoop && !shouldSkipPomEmit
-      ? await findMembersStillUsedInSpecs({
-          repoDir: opts.repo,
-          pageClassName,
-          newMembers: new Set<string>([
-            ...finalPom.fields.map((f) => f.fieldName),
-            ...finalPom.methods.map((m) => m.name),
-          ]),
-        })
-      : { stillUsed: [] as Array<{ member: string; file: string; line: number }> };
+    const specReferenceCheck =
+      !isReuseNoop && !shouldSkipPomEmit
+        ? await findMembersStillUsedInSpecs({
+            repoDir: opts.repo,
+            pageClassName,
+            newMembers: new Set<string>([
+              ...finalPom.fields.map((f) => f.fieldName),
+              ...finalPom.methods.map((m) => m.name),
+            ]),
+          })
+        : { stillUsed: [] as Array<{ member: string; file: string; line: number }> };
 
     const blockedByStillUsed =
       specReferenceCheck.stillUsed.length > 0 && opts.forcePomOverwrite !== true;
@@ -820,9 +820,13 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     // filename, class name, and `../pages/<pomStem>` import path are
     // never touched — only the spec filename. See attestqa integration
     // note dated 2026-10-11 for the motivation.
-    const resolvedSpecName = opts.specName && opts.specName.trim().length > 0
-      ? opts.specName.trim().replace(/\.spec\.ts$/, "").replace(/\.spec$/, "")
-      : undefined;
+    const resolvedSpecName =
+      opts.specName && opts.specName.trim().length > 0
+        ? opts.specName
+            .trim()
+            .replace(/\.spec\.ts$/, "")
+            .replace(/\.spec$/, "")
+        : undefined;
     const specStem = resolvedSpecName ?? pomStem.replace(/\.page$/, ""); // "login"
     const specPath = path.join(opts.repo, "tests", `${specStem}.spec.ts`);
     const specEmit = emitTestFile({
@@ -956,7 +960,12 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       severity: "error",
       message:
         `Rolled back ${rolledBack.length} file(s) because tsc reported ${tscErrorCount} error(s) on the scaffold output. ` +
-        `Rolled: ${rolledBack.slice(0, 5).map((f) => path.relative(opts.repo, f)).join(", ")}${rolledBack.length > 5 ? ` (+${rolledBack.length - 5} more)` : ""}.`,
+        `Rolled: ${rolledBack
+          .slice(0, 5)
+          .map((f) => path.relative(opts.repo, f))
+          .join(
+            ", ",
+          )}${rolledBack.length > 5 ? ` (+${rolledBack.length - 5} more)` : ""}.`,
       suggestion:
         "Fix the tsc errors (either by annotating the page elements bdd2pw couldn't resolve, hand-authoring the missing locators, or dropping --rollback-on-tsc-errors to accept the partial output).",
     });
@@ -1045,11 +1054,15 @@ export async function analyze(opts: AnalyzeOptions): Promise<AnalyzeResult> {
     url: opts.url,
     storageState: opts.storageState,
     headed: opts.headed,
-    browserChannel: (opts as AnalyzeOptions & { browserChannel?: "chrome" | "msedge" | "chromium" }).browserChannel,
+    browserChannel: (
+      opts as AnalyzeOptions & { browserChannel?: "chrome" | "msedge" | "chromium" }
+    ).browserChannel,
     snapshotFile,
   });
   const elements = parseSnapshot(snapshot);
-  const discoveredLocators = dedupeLocators(elements.map((e) => pickLocator(e, elements)));
+  const discoveredLocators = dedupeLocators(
+    elements.map((e) => pickLocator(e, elements)),
+  );
   const provisionalPom: PageObjectIR = {
     className: "AnalyzedPage",
     filePath: "",
@@ -1108,7 +1121,8 @@ export async function updatePom(opts: UpdatePomOptions): Promise<UpdatePomResult
 
   // 2) Discover live elements.
   const noDiscovery = (opts as UpdatePomOptions & { noDiscovery?: boolean }).noDiscovery;
-  const snapshotFile = (opts as UpdatePomOptions & { snapshotFile?: string }).snapshotFile;
+  const snapshotFile = (opts as UpdatePomOptions & { snapshotFile?: string })
+    .snapshotFile;
   let elements: ReturnType<typeof parseSnapshot> = [];
   if (noDiscovery) {
     reviewItems.push({
@@ -1182,10 +1196,14 @@ export async function updatePom(opts: UpdatePomOptions): Promise<UpdatePomResult
   if (!cls) {
     throw new Error(
       `File ${existing.filePath} exists but does not declare class "${opts.page}". ` +
-        `Found classes: ${sourceFile
-          .getClasses()
-          .map((c: { getName: () => string | undefined }) => c.getName() ?? "(anonymous)")
-          .join(", ") || "(none)"}.`,
+        `Found classes: ${
+          sourceFile
+            .getClasses()
+            .map(
+              (c: { getName: () => string | undefined }) => c.getName() ?? "(anonymous)",
+            )
+            .join(", ") || "(none)"
+        }.`,
     );
   }
 
@@ -1326,8 +1344,14 @@ async function findMembersStillUsedInSpecs(input: {
         let j = i + 1;
         while (j < src.length) {
           const ch = src[j];
-          if (ch === "\\") { j += 2; continue; }
-          if (ch === quote) { j += 1; break; }
+          if (ch === "\\") {
+            j += 2;
+            continue;
+          }
+          if (ch === quote) {
+            j += 1;
+            break;
+          }
           j += 1;
         }
         space(i, j);

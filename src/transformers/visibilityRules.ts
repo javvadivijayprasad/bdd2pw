@@ -45,13 +45,7 @@ interface Rule {
  *  step refers to a navigation / URL claim rather than a UI element.
  *  When found, we decline the visibility rule so URL rules can have
  *  another chance. */
-const URL_HINT_WORDS = new Set([
-  "url",
-  "path",
-  "endpoint",
-  "page",
-  "route",
-]);
+const URL_HINT_WORDS = new Set(["url", "path", "endpoint", "page", "route"]);
 
 /**
  * Role hints THAT N6 SPECIFICALLY HANDLES. When the captured noun
@@ -182,24 +176,21 @@ export const VISIBILITY_RULES: Rule[] = [
   // capture greedily up to ` is visible` and then optionally consume
   // a trailing " in/on <something>" clause.
   {
-    pattern:
-      /^(.+?)\s+is\s+visible(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
+    pattern: /^(.+?)\s+is\s+visible(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
     build: (m, step, pom, pageVar) =>
       buildVisibilityBinding(step, pom, pageVar, m[1], "toBeVisible"),
   },
 
   // V:02 — "<noun> is displayed (in/on <where>)?"
   {
-    pattern:
-      /^(.+?)\s+is\s+displayed(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
+    pattern: /^(.+?)\s+is\s+displayed(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
     build: (m, step, pom, pageVar) =>
       buildVisibilityBinding(step, pom, pageVar, m[1], "toBeVisible"),
   },
 
   // V:03 — "<noun> is shown (in/on <where>)?"
   {
-    pattern:
-      /^(.+?)\s+is\s+shown(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
+    pattern: /^(.+?)\s+is\s+shown(?:\s+(?:in|on)\s+the\s+(?:ui|page|screen))?$/i,
     build: (m, step, pom, pageVar) =>
       buildVisibilityBinding(step, pom, pageVar, m[1], "toBeVisible"),
   },
@@ -221,8 +212,7 @@ export const VISIBILITY_RULES: Rule[] = [
 
   // V:06 — negative: "<noun> is (not visible|hidden|not displayed|not shown)"
   {
-    pattern:
-      /^(.+?)\s+is\s+(?:not\s+visible|hidden|not\s+displayed|not\s+shown)$/i,
+    pattern: /^(.+?)\s+is\s+(?:not\s+visible|hidden|not\s+displayed|not\s+shown)$/i,
     build: (m, step, pom, pageVar) =>
       buildVisibilityBinding(step, pom, pageVar, m[1], "not.toBeVisible"),
   },

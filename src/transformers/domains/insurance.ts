@@ -65,13 +65,15 @@ export const INSURANCE_RULES: Rule[] = [
           customBody: `await expect(page.locator("[data-testid='deductible']").first()).toContainText(${JSON.stringify(m[2])});`,
         };
       }
-      const matcher = ({
-        "at least": "toBeGreaterThanOrEqual",
-        "at most": "toBeLessThanOrEqual",
-        "less than": "toBeLessThan",
-        "greater than": "toBeGreaterThan",
-        exactly: "toBe",
-      } as Record<string, string>)[op]!;
+      const matcher = (
+        {
+          "at least": "toBeGreaterThanOrEqual",
+          "at most": "toBeLessThanOrEqual",
+          "less than": "toBeLessThan",
+          "greater than": "toBeGreaterThan",
+          exactly: "toBe",
+        } as Record<string, string>
+      )[op]!;
       return {
         step,
         customBody: [
@@ -95,8 +97,7 @@ export const INSURANCE_RULES: Rule[] = [
 
   // INS:06 — `the claim is filed within (N) days of the loss`
   {
-    pattern:
-      /^(?:the )?claim is filed within (\d+) days(?: of the loss)?$/i,
+    pattern: /^(?:the )?claim is filed within (\d+) days(?: of the loss)?$/i,
     build: (m, step) => ({
       step,
       customBody: [
@@ -136,8 +137,7 @@ export const INSURANCE_RULES: Rule[] = [
 
   // INS:10 — `the claim is assigned to "Smith"`
   {
-    pattern:
-      /^(?:the )?(?:claim|case|file) is assigned to ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:claim|case|file) is assigned to ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='assigned-adjuster']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -146,10 +146,7 @@ export const INSURANCE_RULES: Rule[] = [
 
   // INS:11 — `I file a claim for "$X"`
   {
-    pattern: new RegExp(
-      `^(?:${SUBJ}\\s+)?file(?:s)? (?:a )?claim for ${MONEY}$`,
-      "i",
-    ),
+    pattern: new RegExp(`^(?:${SUBJ}\\s+)?file(?:s)? (?:a )?claim for ${MONEY}$`, "i"),
     build: (m, step) => ({
       step,
       customBody: [

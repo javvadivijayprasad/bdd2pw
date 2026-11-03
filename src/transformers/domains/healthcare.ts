@@ -38,7 +38,8 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:02 — `the patient ID is "MRN12345"`
   {
-    pattern: /^(?:the )?patient(?: ID| MRN|'?s? medical record number) is ["']([^"']+)["']$/i,
+    pattern:
+      /^(?:the )?patient(?: ID| MRN|'?s? medical record number) is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='patient-mrn'], [data-testid='patient-id']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -73,7 +74,8 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:05 — `the diagnosis code is "ICD-10:E11.9"`
   {
-    pattern: /^(?:the )?diagnosis(?: code)? is ["']?(ICD-10[: ]?[A-Z]\d{2}(?:\.\d{1,3})?)["']?$/i,
+    pattern:
+      /^(?:the )?diagnosis(?: code)? is ["']?(ICD-10[: ]?[A-Z]\d{2}(?:\.\d{1,3})?)["']?$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='diagnosis-code'], .icd-10").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -108,8 +110,7 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:08 — `the patient has signed consent form "HIPAA-1"`
   {
-    pattern:
-      /^(?:the )?patient has (not )?signed (?:consent )?form ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?patient has (not )?signed (?:consent )?form ["']([^"']+)["']$/i,
     build: (m, step) => {
       const matcher = m[1] ? "not.toBeVisible" : "toBeVisible";
       return {
@@ -130,8 +131,7 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:10 — `the FHIR resource is "Patient/123"`
   {
-    pattern:
-      /^(?:the )?FHIR resource is ["']?([A-Z][a-zA-Z]+\/[\w-]+)["']?$/i,
+    pattern: /^(?:the )?FHIR resource is ["']?([A-Z][a-zA-Z]+\/[\w-]+)["']?$/i,
     build: (m, step) => ({
       step,
       customBody: [
@@ -143,8 +143,7 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:11 — `the patient's data is encrypted`
   {
-    pattern:
-      /^(?:the )?patient'?s? (?:data|record|chart) is (not )?encrypted$/i,
+    pattern: /^(?:the )?patient'?s? (?:data|record|chart) is (not )?encrypted$/i,
     build: (m, step) => {
       const matcher = m[1] ? "not.toBeVisible" : "toBeVisible";
       return {
@@ -178,8 +177,7 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:14 — `the patient is allergic to "penicillin"`
   {
-    pattern:
-      /^(?:the )?patient is (not )?allergic to ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?patient is (not )?allergic to ["']([^"']+)["']$/i,
     build: (m, step) => {
       const matcher = m[1] ? "not.toContainText" : "toContainText";
       return {
@@ -200,8 +198,7 @@ export const HEALTHCARE_RULES: Rule[] = [
 
   // HEALTH:16 — `the provider DEA number is "AB1234567"`
   {
-    pattern:
-      /^(?:the )?provider DEA(?: number)? is ["']?([A-Z]{2}\d{7})["']?$/i,
+    pattern: /^(?:the )?provider DEA(?: number)? is ["']?([A-Z]{2}\d{7})["']?$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='provider-dea']").first()).toContainText(${JSON.stringify(m[1])});`,

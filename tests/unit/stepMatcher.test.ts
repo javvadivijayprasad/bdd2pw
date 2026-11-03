@@ -6,10 +6,34 @@ const pom: PageObjectIR = {
   className: "LoginPage",
   filePath: "pages/login.page.ts",
   fields: [
-    { api: "getByLabel", args: "'Username'", fieldName: "usernameInput", source: { tag: "input" }, confidence: "unique" },
-    { api: "getByLabel", args: "'Password'", fieldName: "passwordInput", source: { tag: "input" }, confidence: "unique" },
-    { api: "getByRole", args: "'button', { name: 'Login' }", fieldName: "loginButton", source: { tag: "button" }, confidence: "unique" },
-    { api: "getByRole", args: "'alert'", fieldName: "errorMessageAlert", source: { tag: "div" }, confidence: "unique" },
+    {
+      api: "getByLabel",
+      args: "'Username'",
+      fieldName: "usernameInput",
+      source: { tag: "input" },
+      confidence: "unique",
+    },
+    {
+      api: "getByLabel",
+      args: "'Password'",
+      fieldName: "passwordInput",
+      source: { tag: "input" },
+      confidence: "unique",
+    },
+    {
+      api: "getByRole",
+      args: "'button', { name: 'Login' }",
+      fieldName: "loginButton",
+      source: { tag: "button" },
+      confidence: "unique",
+    },
+    {
+      api: "getByRole",
+      args: "'alert'",
+      fieldName: "errorMessageAlert",
+      source: { tag: "div" },
+      confidence: "unique",
+    },
   ],
   methods: [],
   exists: false,
@@ -25,7 +49,7 @@ describe("stepMatcher rules", () => {
     expect(b.pomCall?.method).toBe("goto");
   });
 
-  it('input: \'I enter "alice" into the username field\' → usernameInput.fill', () => {
+  it("input: 'I enter \"alice\" into the username field' → usernameInput.fill", () => {
     const b = matchStep(
       step("When", 'I enter "alice" into the username field'),
       pom,
@@ -45,7 +69,7 @@ describe("stepMatcher rules", () => {
     expect(b.assertion?.matcher).toBe("toBeVisible");
   });
 
-  it('error message: \'I should see the error message "Invalid credentials"\' → toContainText', () => {
+  it("error message: 'I should see the error message \"Invalid credentials\"' → toContainText", () => {
     const b = matchStep(
       step("Then", 'I should see the error message "Invalid credentials"'),
       pom,
@@ -69,11 +93,7 @@ describe("stepMatcher rules", () => {
 
   it("URL contains: regex metacharacters in fragment are escaped", () => {
     // '?' is a regex metachar; the fix MUST escape it so the literal '?' is matched.
-    const b = matchStep(
-      step("Then", 'URL contains "/search?q=test"'),
-      pom,
-      "loginPage",
-    );
+    const b = matchStep(step("Then", 'URL contains "/search?q=test"'), pom, "loginPage");
     expect(b.assertion?.matcher).toBe("toHaveURL");
     expect(b.assertion?.expected).toBe('new RegExp("/search\\\\?q=test")');
   });
@@ -152,11 +172,7 @@ describe("stepMatcher rules", () => {
     });
 
     it("'Note the error message' → comment", () => {
-      const b = matchStep(
-        step("When", "Note the error message"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("When", "Note the error message"), pom, "loginPage");
       expect(b.customBody).toBe("// observation: error message");
     });
   });
@@ -173,11 +189,7 @@ describe("stepMatcher rules", () => {
     });
 
     it("'URL doesn\\'t change' (no destination) defaults to 'success' fragment", () => {
-      const b = matchStep(
-        step("Then", "URL doesn't change"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Then", "URL doesn't change"), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("not.toHaveURL");
       expect(b.assertion?.expected).toBe('new RegExp("success")');
     });
@@ -249,11 +261,7 @@ describe("stepMatcher rules", () => {
 
   describe("LLM-narrative — N7 No 'X' appears / No <noun> displayed", () => {
     it("'No \\'Log out\\' button appears' → not.toBeVisible (cross-role synthesis, v1.1.3)", () => {
-      const b = matchStep(
-        step("Then", "No 'Log out' button appears"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Then", "No 'Log out' button appears"), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("not.toBeVisible");
       expect(b.assertion?.locator).toContain(
         `locator("a, button, [role='button'], [role='link']")`,
@@ -273,11 +281,7 @@ describe("stepMatcher rules", () => {
     });
 
     it("'No success message is shown' → not.toBeVisible (no field on this POM, falls back to getByText)", () => {
-      const b = matchStep(
-        step("Then", "No success message is shown"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Then", "No success message is shown"), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("not.toBeVisible");
       // POM has no success* field, falls back to getByText with the description
       expect(b.assertion?.locator).toContain("getByText");
@@ -290,11 +294,7 @@ describe("stepMatcher rules", () => {
 
   describe("LLM-narrative — N1.5 'the X page is displayed'", () => {
     it("'Given the login page is displayed' → goto", () => {
-      const b = matchStep(
-        step("Given", "the login page is displayed"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Given", "the login page is displayed"), pom, "loginPage");
       expect(b.pomCall?.method).toBe("goto");
     });
 
@@ -376,11 +376,7 @@ describe("stepMatcher rules", () => {
 
   describe("LLM-narrative — N6 unquoted role+name variant", () => {
     it("'a Logout button is visible' (unquoted) → cross-role synthesis (v1.1.3)", () => {
-      const b = matchStep(
-        step("And", "a Logout button is visible"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("And", "a Logout button is visible"), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("toBeVisible");
       // Test pom has no Logout field; synthesise cross-role locator with
       // flexible regex so "Logout" matches both "Logout" and "Log out".
@@ -392,11 +388,7 @@ describe("stepMatcher rules", () => {
     });
 
     it("'A Login button is visible' (unquoted) → resolves to loginButton (POM has it)", () => {
-      const b = matchStep(
-        step("Then", "A Login button is visible"),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Then", "A Login button is visible"), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("toBeVisible");
       expect(b.assertion?.locator).toBe("loginPage.loginButton");
     });
@@ -464,7 +456,10 @@ describe("stepMatcher rules", () => {
       // Without v1.1.7, this fell to TODO. Background still navigates so tests
       // still pass, but BDD_REVIEW.md filled with noise.
       const b = matchStep(
-        step("Given", 'the user is on the login page "https://practicetestautomation.com/practice-test-login/"'),
+        step(
+          "Given",
+          'the user is on the login page "https://practicetestautomation.com/practice-test-login/"',
+        ),
         pom,
         "loginPage",
       );
@@ -508,11 +503,7 @@ describe("stepMatcher rules", () => {
     });
 
     it("regression: plain 'URL contains \"X\"' still matches (no path/segment word)", () => {
-      const b = matchStep(
-        step("Then", 'URL contains "abc"'),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("Then", 'URL contains "abc"'), pom, "loginPage");
       expect(b.assertion?.matcher).toBe("toHaveURL");
       expect(b.assertion?.expected).toBe('new RegExp("abc")');
     });
@@ -546,40 +537,24 @@ describe("stepMatcher rules", () => {
 
   describe("v1.1.5 — subject-less 'enters <field> \"V\"'", () => {
     it("'enters password \"Password123\"' → passwordInput.fill", () => {
-      const b = matchStep(
-        step("And", 'enters password "Password123"'),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("And", 'enters password "Password123"'), pom, "loginPage");
       expect(b.pomCall?.method).toBe("passwordInput.fill");
       expect(b.pomCall?.args).toEqual(['"Password123"']);
     });
 
     it("'enters username \"alice\"' → usernameInput.fill", () => {
-      const b = matchStep(
-        step("When", 'enters username "alice"'),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("When", 'enters username "alice"'), pom, "loginPage");
       expect(b.pomCall?.method).toBe("usernameInput.fill");
       expect(b.pomCall?.args).toEqual(['"alice"']);
     });
 
     it("subject-prefix forms still match (regression — original rule 2b coverage)", () => {
-      const b = matchStep(
-        step("When", 'User enters username "alice"'),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("When", 'User enters username "alice"'), pom, "loginPage");
       expect(b.pomCall?.method).toBe("usernameInput.fill");
     });
 
     it("'types the password \"secret\"' (verb 'types', article 'the') → passwordInput.fill", () => {
-      const b = matchStep(
-        step("And", 'types the password "secret"'),
-        pom,
-        "loginPage",
-      );
+      const b = matchStep(step("And", 'types the password "secret"'), pom, "loginPage");
       expect(b.pomCall?.method).toBe("passwordInput.fill");
       expect(b.pomCall?.args).toEqual(['"secret"']);
     });
@@ -656,10 +631,7 @@ describe("stepMatcher rules", () => {
 
     it("rule N5e: 'is NOT redirected away from login page (URL ...)' → slug 'login'", () => {
       const b = matchStep(
-        step(
-          "Then",
-          "user is NOT redirected away from login page (URL stays the same)",
-        ),
+        step("Then", "user is NOT redirected away from login page (URL stays the same)"),
         pom,
         "loginPage",
       );

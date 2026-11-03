@@ -46,9 +46,7 @@ async function render(
   pageVar: string,
   opts: { stepHooks?: boolean; stepMarkers?: boolean } = {},
 ): Promise<string> {
-  const feature = await parseFeature(
-    path.join(FIXTURES, fixtureName, "input.feature"),
-  );
+  const feature = await parseFeature(path.join(FIXTURES, fixtureName, "input.feature"));
   const scenarios = feature.scenarios.map((s) => ({
     name: s.name,
     bindings: s.steps.map<StepBinding>((step) => matchStep(step, pom, pageVar)),
@@ -132,13 +130,9 @@ describe("v3.1.0 — TestForge handoff regression suite", () => {
     // v3.3.0 — both hooks now also receive a fixtures object.
     // The default fixture list is `{ page }` (matches pw-emit's
     // testEmitter default destructure).
-    expect(out).toMatch(
-      /beforeStep\?\.\(testInfo, "[^"]+", \{ page \}\)/,
-    );
+    expect(out).toMatch(/beforeStep\?\.\(testInfo, "[^"]+", \{ page \}\)/);
     // v3.3.0 — afterStep also receives a status arg before fixtures.
-    expect(out).toMatch(
-      /afterStep\?\.\(testInfo, "[^"]+", _bdd2pwStatus, \{ page \}\)/,
-    );
+    expect(out).toMatch(/afterStep\?\.\(testInfo, "[^"]+", _bdd2pwStatus, \{ page \}\)/);
     // v3.3.0 — body is wrapped in try/catch/finally so afterStep fires
     // on the failure path too.
     expect(out).toMatch(/let _bdd2pwStatus: "passed" \| "failed" = "passed";/);
@@ -179,7 +173,9 @@ describe("v3.1.0 — TestForge handoff regression suite", () => {
   // ── Cross-cutting ──────────────────────────────────────────────────
   it("looksLikeProse flags visibility-shaped slugs (URL-slug rules will decline)", async () => {
     const { looksLikeProse } = await import("../../src/transformers/stepNormalizer");
-    expect(looksLikeProse("the user's name or profile indicator is visible in the UI")).toBe(true);
+    expect(
+      looksLikeProse("the user's name or profile indicator is visible in the UI"),
+    ).toBe(true);
     expect(looksLikeProse("the welcome banner is shown")).toBe(true);
     expect(looksLikeProse("the success message appears")).toBe(true);
     expect(looksLikeProse("the panel is displayed")).toBe(true);

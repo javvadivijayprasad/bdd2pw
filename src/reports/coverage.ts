@@ -55,10 +55,7 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 import type { DomainName } from "../transformers/stepMatcher";
-import {
-  analyseQuarantineStats,
-  type QuarantineStats,
-} from "./quarantineStats";
+import { analyseQuarantineStats, type QuarantineStats } from "./quarantineStats";
 
 export interface RuleHit {
   ruleId: string;
@@ -241,9 +238,7 @@ export async function analyseCoverage(
       : undefined;
   if (!activeHealPath) {
     // Not an error — many repos don't run --self-healing. Note it.
-    missingArtefacts.push(
-      "artefacts/heal-events.jsonl (or .pwheal/heal-events.jsonl)",
-    );
+    missingArtefacts.push("artefacts/heal-events.jsonl (or .pwheal/heal-events.jsonl)");
   } else {
     try {
       const raw = await fs.readFile(activeHealPath, "utf8");
@@ -267,9 +262,7 @@ export async function analyseCoverage(
       }
     } catch (e) {
       warnings.push(
-        `Could not read heal-events log: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `Could not read heal-events log: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
@@ -292,9 +285,7 @@ export async function analyseCoverage(
     sidecars: stats.totals.sidecars,
     totals: stats.totals,
     rules: {
-      hit: Array.from(hitByRule.values()).sort(
-        (a, b) => b.hitCount - a.hitCount,
-      ),
+      hit: Array.from(hitByRule.values()).sort((a, b) => b.hitCount - a.hitCount),
       dead: deadRules,
     },
     packs: {
@@ -307,8 +298,7 @@ export async function analyseCoverage(
     warnings,
   };
 
-  const outputPath =
-    opts.outputPath ?? path.join(repo, "artefacts", "coverage.json");
+  const outputPath = opts.outputPath ?? path.join(repo, "artefacts", "coverage.json");
   await fs.ensureDir(path.dirname(outputPath));
   await fs.writeFile(outputPath, JSON.stringify(coverage, null, 2) + "\n", "utf8");
   return { coverage, outputPath };
@@ -361,9 +351,7 @@ export function renderCoverageTable(cov: Coverage): string {
   const deadPacks = cov.packs.dead;
   if (deadPacks.length > 0) {
     lines.push("");
-    lines.push(
-      `dead packs (no rule fired in this repo): ${deadPacks.join(", ")}`,
-    );
+    lines.push(`dead packs (no rule fired in this repo): ${deadPacks.join(", ")}`);
     lines.push(
       `  → drop from your domains: [...] to shrink the rule table (--suggest-retire prints the stanza).`,
     );
@@ -402,12 +390,8 @@ export function renderSuggestRetire(cov: Coverage): string {
   lines.push(
     "# `bdd2pw coverage --suggest-retire` — copy the block(s) you want to apply.",
   );
-  lines.push(
-    "# Each entry is a rule or pack that did NOT fire in this repo. Removing",
-  );
-  lines.push(
-    "# them is safe here; it may not be safe across all your repos.",
-  );
+  lines.push("# Each entry is a rule or pack that did NOT fire in this repo. Removing");
+  lines.push("# them is safe here; it may not be safe across all your repos.");
   lines.push("");
   if (cov.packs.dead.length > 0) {
     lines.push("# Domain packs to drop from ScaffoldOptions.domains:");

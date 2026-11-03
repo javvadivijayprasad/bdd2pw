@@ -21,13 +21,7 @@ import * as os from "os";
 import * as path from "path";
 import { scaffold } from "../../src";
 
-const fixtureDir = path.resolve(
-  __dirname,
-  "..",
-  "..",
-  "examples",
-  "practice-test-login",
-);
+const fixtureDir = path.resolve(__dirname, "..", "..", "examples", "practice-test-login");
 const featurePath = path.join(fixtureDir, "login.feature");
 const snapshotPath = path.join(fixtureDir, "snapshot.json");
 
@@ -80,9 +74,9 @@ describe("v4.4.0 — --spec-name attestqa integration", () => {
     expect(
       await fs.pathExists(path.join(outDir, "tests", `${stem}.spec.meta.json`)),
     ).toBe(true);
-    expect(
-      await fs.pathExists(path.join(outDir, "tests", "login.spec.meta.json")),
-    ).toBe(false);
+    expect(await fs.pathExists(path.join(outDir, "tests", "login.spec.meta.json"))).toBe(
+      false,
+    );
   });
 
   it("does NOT change the POM filename, class name, or import path", async () => {
@@ -136,9 +130,9 @@ describe("v4.4.0 — --spec-name attestqa integration", () => {
       // @ts-expect-error — snapshot-file bypass
       snapshotFile: snapshotPath,
     });
-    expect(
-      await fs.pathExists(path.join(outDir, "tests", "epic-foo.spec.ts")),
-    ).toBe(true);
+    expect(await fs.pathExists(path.join(outDir, "tests", "epic-foo.spec.ts"))).toBe(
+      true,
+    );
     // No double-suffix.
     expect(
       await fs.pathExists(path.join(outDir, "tests", "epic-foo.spec.ts.spec.ts")),
@@ -155,9 +149,9 @@ describe("v4.4.0 — --spec-name attestqa integration", () => {
       // @ts-expect-error — snapshot-file bypass
       snapshotFile: snapshotPath,
     });
-    expect(
-      await fs.pathExists(path.join(outDir2, "tests", "epic-bar.spec.ts")),
-    ).toBe(true);
+    expect(await fs.pathExists(path.join(outDir2, "tests", "epic-bar.spec.ts"))).toBe(
+      true,
+    );
   });
 
   it("default (no specName) is byte-identical to pre-v4.4 behavior", async () => {

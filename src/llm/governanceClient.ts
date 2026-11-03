@@ -45,7 +45,10 @@ export class GovernanceUnreachableError extends Error {
 
 /** Legacy alias kept for backwards-compat with any external imports. */
 export class GovernanceError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "GovernanceError";
   }

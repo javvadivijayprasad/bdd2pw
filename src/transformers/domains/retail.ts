@@ -167,8 +167,7 @@ export const RETAIL_RULES: Rule[] = [
 
   // RETAIL:13 — `the product name is "X"` / `the product's name is "X"` / `the product is "X"`
   {
-    pattern:
-      /^(?:the )?product(?:(?:'s)?\s+name)? is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?product(?:(?:'s)?\s+name)? is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='product-name'], h1[itemprop='name']").first()).toContainText(${JSON.stringify(m[1])});`,

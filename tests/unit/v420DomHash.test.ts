@@ -109,7 +109,7 @@ describe("prependDomHashHeader", () => {
     const pom = 'import { Page } from "@playwright/test";\n\nexport class LoginPage {}\n';
     const out = prependDomHashHeader(pom, header);
     expect(out.startsWith("/**")).toBe(true);
-    expect(out).toContain('import { Page }');
+    expect(out).toContain("import { Page }");
     expect(extractDomHashFromPom(out)).toBe(hash);
   });
 
@@ -121,7 +121,11 @@ describe("prependDomHashHeader", () => {
   });
 
   it("replaces an old header with a new one instead of stacking", () => {
-    const oldHeader = buildDomHashHeader("c".repeat(64), url, new Date("2026-08-01T00:00:00Z"));
+    const oldHeader = buildDomHashHeader(
+      "c".repeat(64),
+      url,
+      new Date("2026-08-01T00:00:00Z"),
+    );
     const pom = 'import { Page } from "@playwright/test";\n';
     const withOld = prependDomHashHeader(pom, oldHeader);
     const withNew = prependDomHashHeader(withOld, header);

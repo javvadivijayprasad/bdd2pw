@@ -186,8 +186,7 @@ describe("POST /scaffold worker → end-to-end", () => {
 
     const first = warnings[0];
     const isNetworkCascade =
-      first?.severity === "warn" &&
-      /Page discovery failed/i.test(first.message ?? "");
+      first?.severity === "warn" && /Page discovery failed/i.test(first.message ?? "");
     if (!isNetworkCascade) {
       expect(warnings, "non-network warning surfaced unexpectedly").toEqual([]);
       return;

@@ -59,7 +59,10 @@ describe("v2.0.2 — cache backend graceful degradation", () => {
   });
 
   it("the fallback in-memory cache supports get/set normally", async () => {
-    const tmpPath = path.join(os.tmpdir(), `bdd2pw-cache-test-fallback-${Date.now()}.sqlite`);
+    const tmpPath = path.join(
+      os.tmpdir(),
+      `bdd2pw-cache-test-fallback-${Date.now()}.sqlite`,
+    );
     const result = await openSqliteCache(tmpPath, throwingLoader);
     expect(result.persistent).toBe(false);
     const { cache } = result;

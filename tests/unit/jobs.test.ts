@@ -34,9 +34,7 @@ describe("job store", () => {
     const updated = updateJob(created.id, { status: "running", progress: 0.5 });
     expect(updated?.status).toBe("running");
     expect(updated?.progress).toBe(0.5);
-    expect(Date.parse(updated!.updatedAt)).toBeGreaterThan(
-      Date.parse(created.updatedAt),
-    );
+    expect(Date.parse(updated!.updatedAt)).toBeGreaterThan(Date.parse(created.updatedAt));
   });
 
   it("sweeps jobs older than the cutoff", () => {

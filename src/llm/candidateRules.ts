@@ -38,11 +38,7 @@ export class CandidateRulesWriter {
         await fs.ensureDir(path.dirname(this.filePath));
         this.initialised = true;
       }
-      await fs.appendFile(
-        this.filePath,
-        JSON.stringify(entry) + "\n",
-        "utf8",
-      );
+      await fs.appendFile(this.filePath, JSON.stringify(entry) + "\n", "utf8");
     } catch {
       /* best-effort */
     }

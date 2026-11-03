@@ -134,9 +134,10 @@ async function scanPageWithBrowser(opts: ScanPageOptions): Promise<PageSnapshot>
     }
     browser = await chromium.launch(launchArgs);
   } catch (err) {
-    const hint = resolvedChannel && resolvedChannel !== "chromium"
-      ? ` Install the ${resolvedChannel} channel with \`npx playwright install ${resolvedChannel}\`, or drop --browser-channel to use bundled Chromium.`
-      : " Did you run `npx playwright install chromium`?";
+    const hint =
+      resolvedChannel && resolvedChannel !== "chromium"
+        ? ` Install the ${resolvedChannel} channel with \`npx playwright install ${resolvedChannel}\`, or drop --browser-channel to use bundled Chromium.`
+        : " Did you run `npx playwright install chromium`?";
     throw new McpError(
       "Could not launch " + (resolvedChannel ?? "chromium") + "." + hint,
       err,

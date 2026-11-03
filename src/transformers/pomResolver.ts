@@ -51,9 +51,7 @@ export function resolvePom(input: ResolvePomInput): ResolvePomResult {
   // here is the structural fix: REUSE now only happens when every
   // referenced field is REALLY present on the existing POM.
   const presentFieldNames = new Set(
-    found.fields
-      .filter((f) => f.confidence !== "unparseable")
-      .map((f) => f.fieldName),
+    found.fields.filter((f) => f.confidence !== "unparseable").map((f) => f.fieldName),
   );
   const missingFields = [
     ...new Set(referencedFields.filter((f) => !presentFieldNames.has(f))),

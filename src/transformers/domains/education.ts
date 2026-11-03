@@ -19,8 +19,7 @@ interface Rule {
   ): StepBinding | null;
 }
 
-const SUBJ =
-  "(?:I|user|User|the user|the User|the student|the teacher|the instructor)";
+const SUBJ = "(?:I|user|User|the user|the User|the student|the teacher|the instructor)";
 
 export const EDUCATION_RULES: Rule[] = [
   // EDU:01 — `the student's grade is "B+"` / `the grade in "Algebra" is "A"`
@@ -60,8 +59,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:03 — `the attendance rate is "95%"` / `the attendance is "N%"`
   {
-    pattern:
-      /^(?:the )?attendance(?: rate)? is ["']?(\d+(?:\.\d+)?%?)["']?$/i,
+    pattern: /^(?:the )?attendance(?: rate)? is ["']?(\d+(?:\.\d+)?%?)["']?$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='attendance-rate']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -70,8 +68,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:04 — `the student is "present"` / `"absent"` / `"tardy"` / `"excused"`
   {
-    pattern:
-      /^(?:the )?student is ["']?(present|absent|tardy|excused|late)["']?$/i,
+    pattern: /^(?:the )?student is ["']?(present|absent|tardy|excused|late)["']?$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='attendance-status']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -129,8 +126,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:09 — `the transcript shows N credits` / `the student has N credits`
   {
-    pattern:
-      /^(?:the )?(?:transcript shows|student has) (\d+(?:\.\d+)?) credits?$/i,
+    pattern: /^(?:the )?(?:transcript shows|student has) (\d+(?:\.\d+)?) credits?$/i,
     build: (m, step) => ({
       step,
       customBody: [
@@ -142,8 +138,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:10 — `the instructor is "Ms. Smith"` / `the teacher is "..."`
   {
-    pattern:
-      /^(?:the )?(?:instructor|teacher|professor) is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:instructor|teacher|professor) is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='instructor-name'], [data-testid='teacher-name']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -152,8 +147,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:11 — `the term is "Fall 2026"` / `the semester is "Spring 2027"`
   {
-    pattern:
-      /^(?:the )?(?:term|semester|quarter) is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:term|semester|quarter) is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='term'], [data-testid='semester']").first()).toContainText(${JSON.stringify(m[1])});`,
@@ -239,8 +233,7 @@ export const EDUCATION_RULES: Rule[] = [
 
   // EDU:18 — `the parent is "John Doe"` / `the guardian is "..."`
   {
-    pattern:
-      /^(?:the )?(?:parent|guardian|emergency contact) is ["']([^"']+)["']$/i,
+    pattern: /^(?:the )?(?:parent|guardian|emergency contact) is ["']([^"']+)["']$/i,
     build: (m, step) => ({
       step,
       customBody: `await expect(page.locator("[data-testid='guardian-name']").first()).toContainText(${JSON.stringify(m[1])});`,

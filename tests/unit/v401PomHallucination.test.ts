@@ -73,11 +73,7 @@ describe("v4.0.1 — detectHallucinatedPomMethods", () => {
 
   it("accepts loginPage.goto()", () => {
     expect(
-      detectHallucinatedPomMethods(
-        "await loginPage.goto();",
-        "loginPage",
-        known,
-      ),
+      detectHallucinatedPomMethods("await loginPage.goto();", "loginPage", known),
     ).toEqual([]);
   });
 
@@ -119,11 +115,7 @@ describe("v4.0.1 — detectHallucinatedPomMethods", () => {
   it("only matches the configured pomVar", () => {
     // Other variable names should not trigger.
     expect(
-      detectHallucinatedPomMethods(
-        "await otherThing.fill(x);",
-        "loginPage",
-        known,
-      ),
+      detectHallucinatedPomMethods("await otherThing.fill(x);", "loginPage", known),
     ).toEqual([]);
   });
 });
@@ -140,8 +132,7 @@ describe("v4.0.1 — parseBindingJson rejects POM-method hallucinations", () => 
   it("rejects a binding with customBody calling loginPage.click(locator)", () => {
     const response = JSON.stringify({
       step: { keyword: "When", text: "I do a thing" },
-      customBody:
-        'await loginPage.click(page.getByRole("button", { name: "Sign in" }));',
+      customBody: 'await loginPage.click(page.getByRole("button", { name: "Sign in" }));',
     });
     expect(parseBindingJson(response, STEP)).toBeUndefined();
   });
@@ -167,8 +158,7 @@ describe("v4.0.1 — parseBindingJson rejects POM-method hallucinations", () => 
   it("accepts a binding via loginPage.page (allowed Page-instance chain)", () => {
     const response = JSON.stringify({
       step: { keyword: "When", text: "I do a thing" },
-      customBody:
-        'await loginPage.page.getByPlaceholder("Email").fill("x");',
+      customBody: 'await loginPage.page.getByPlaceholder("Email").fill("x");',
     });
     const result = parseBindingJson(response, STEP);
     expect(result?.customBody).toContain("loginPage.page.getByPlaceholder");
@@ -183,7 +173,7 @@ describe("v4.0.1 — parseBindingJson rejects POM-method hallucinations", () => 
       pomCall: {
         page: "loginPage",
         method: "fill",
-        args: ['page.getByLabel(/email/i).first()', '"bench@example.com"'],
+        args: ["page.getByLabel(/email/i).first()", '"bench@example.com"'],
       },
     });
     expect(parseBindingJson(response, STEP)).toBeUndefined();

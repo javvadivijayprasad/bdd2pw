@@ -43,12 +43,7 @@
 import type { BindingCache } from "./cache";
 import { openSqliteCache } from "./cache";
 import { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
-import {
-  SYSTEM_PROMPT,
-  buildBatchUserPrompt,
-  buildUserPrompt,
-  cacheKey,
-} from "./prompt";
+import { SYSTEM_PROMPT, buildBatchUserPrompt, buildUserPrompt, cacheKey } from "./prompt";
 import { parseBindingJson } from "./anthropicClient";
 import type {
   GenerateBindingInput,
@@ -83,12 +78,12 @@ export class GeminiLLMClient implements LLMClient {
 
   constructor(opts: LLMClientOptions, cachePathDefault: string) {
     this.model = opts.model ?? DEFAULT_MODEL;
-    this.apiKey = opts.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
+    this.apiKey =
+      opts.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
     this.maxCalls = opts.maxCalls ?? DEFAULT_MAX_CALLS;
     this.skipGovernance = opts.skipGovernance ?? false;
     this.log = opts.log ?? (() => {});
-    this.providerTimeoutMs =
-      opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+    this.providerTimeoutMs = opts.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.governance = new GovernanceClient(
       opts.governanceUrl ?? DEFAULT_GOVERNANCE_URL,
       opts.governanceTimeoutMs ?? DEFAULT_GOVERNANCE_TIMEOUT_MS,
@@ -140,9 +135,7 @@ export class GeminiLLMClient implements LLMClient {
    * Single-step generation. Cache → governance → Gemini → parse.
    * Mirrors `AnthropicLLMClient.generateBinding` and `OpenAILLMClient.generateBinding`.
    */
-  async generateBinding(
-    input: GenerateBindingInput,
-  ): Promise<GenerateBindingResult> {
+  async generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult> {
     const start = Date.now();
     const key = cacheKey(input, this.model);
     const cache = await this.ensureCache();
@@ -202,7 +195,8 @@ export class GeminiLLMClient implements LLMClient {
     const model = await this.lazyModel();
     if (!model) {
       return {
-        error: "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
+        error:
+          "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
         fromCache: false,
       };
     }
@@ -240,9 +234,8 @@ export class GeminiLLMClient implements LLMClient {
       this.callsCounter += 1;
       const callLatency = Date.now() - callStart;
       // response.text() is the canonical accessor.
-      responseText = typeof result?.response?.text === "function"
-        ? result.response.text()
-        : "";
+      responseText =
+        typeof result?.response?.text === "function" ? result.response.text() : "";
       const usage = result?.response?.usageMetadata ?? {};
       inputTokens = usage.promptTokenCount ?? 0;
       outputTokens = usage.candidatesTokenCount ?? 0;
@@ -302,9 +295,7 @@ export class GeminiLLMClient implements LLMClient {
     const start = Date.now();
     const cache = await this.ensureCache();
 
-    const results: (GenerateBindingResult | undefined)[] = new Array(
-      inputs.length,
-    );
+    const results: (GenerateBindingResult | undefined)[] = new Array(inputs.length);
     const missIndexes: number[] = [];
     const missInputs: GenerateBindingInput[] = [];
     const missKeys: string[] = [];
@@ -379,7 +370,8 @@ export class GeminiLLMClient implements LLMClient {
     const model = await this.lazyModel();
     if (!model) {
       const err = {
-        error: "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
+        error:
+          "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
         fromCache: false as const,
       };
       for (const i of missIndexes) results[i] = err;
@@ -413,9 +405,8 @@ export class GeminiLLMClient implements LLMClient {
       };
       this.callsCounter += 1;
       const callLatency = Date.now() - callStart;
-      responseText = typeof result?.response?.text === "function"
-        ? result.response.text()
-        : "";
+      responseText =
+        typeof result?.response?.text === "function" ? result.response.text() : "";
       const usage = result?.response?.usageMetadata ?? {};
       this.log({
         kind: "provider_call_done",
@@ -520,8 +511,7 @@ export class GeminiLLMClient implements LLMClient {
       // clean error instead of a module-load crash.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const mod = require("@google/generative-ai");
-      const GoogleGenerativeAI =
-        mod.GoogleGenerativeAI ?? mod.default ?? mod;
+      const GoogleGenerativeAI = mod.GoogleGenerativeAI ?? mod.default ?? mod;
       this.genai = new GoogleGenerativeAI(this.apiKey);
       this.modelHandle = this.genai.getGenerativeModel({
         model: this.model,
@@ -572,13 +562,15 @@ export class GeminiLLMClient implements LLMClient {
 
     if (!this.apiKey) {
       return {
-        error: "GEMINI_API_KEY (or GOOGLE_API_KEY) is not set; pass apiKey or set the env var.",
+        error:
+          "GEMINI_API_KEY (or GOOGLE_API_KEY) is not set; pass apiKey or set the env var.",
       };
     }
     const model = await this.lazyModel();
     if (!model) {
       return {
-        error: "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
+        error:
+          "@google/generative-ai SDK not installed. Run: npm install @google/generative-ai",
       };
     }
 
@@ -608,9 +600,7 @@ export class GeminiLLMClient implements LLMClient {
       this.callsCounter += 1;
       const callLatency = Date.now() - callStart;
       const text =
-        typeof result?.response?.text === "function"
-          ? result.response.text()
-          : "";
+        typeof result?.response?.text === "function" ? result.response.text() : "";
       const usage = result?.response?.usageMetadata ?? {};
       const inputTokens = usage.promptTokenCount ?? 0;
       const outputTokens = usage.candidatesTokenCount ?? 0;

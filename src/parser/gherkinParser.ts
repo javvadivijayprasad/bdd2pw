@@ -4,11 +4,7 @@
  */
 
 import * as fs from "fs-extra";
-import {
-  Parser,
-  AstBuilder,
-  GherkinClassicTokenMatcher,
-} from "@cucumber/gherkin";
+import { Parser, AstBuilder, GherkinClassicTokenMatcher } from "@cucumber/gherkin";
 import { IdGenerator } from "@cucumber/messages";
 import type { FeatureIR, ScenarioIR, StepIR } from "../types";
 
@@ -85,9 +81,7 @@ function toScenarioIR(scenario: any): ScenarioIR {
   if (scenario.examples && scenario.examples.length > 0) {
     examples = [];
     for (const block of scenario.examples) {
-      const headers: string[] = (block.tableHeader?.cells ?? []).map(
-        (c: any) => c.value,
-      );
+      const headers: string[] = (block.tableHeader?.cells ?? []).map((c: any) => c.value);
       for (const row of block.tableBody ?? []) {
         const record: Record<string, string> = {};
         const cells: any[] = row.cells ?? [];

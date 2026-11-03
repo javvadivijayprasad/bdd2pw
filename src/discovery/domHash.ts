@@ -37,9 +37,7 @@ function canonicalStringify(value: unknown): string {
   }
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj).sort();
-  const parts = keys.map(
-    (k) => JSON.stringify(k) + ":" + canonicalStringify(obj[k]),
-  );
+  const parts = keys.map((k) => JSON.stringify(k) + ":" + canonicalStringify(obj[k]));
   return "{" + parts.join(",") + "}";
 }
 
@@ -85,9 +83,7 @@ export function buildDomHashHeader(
  * undefined if no hash header is present (older POM files predating
  * v4.2, or files where the header was hand-removed).
  */
-export function extractDomHashFromPom(
-  pomContents: string,
-): string | undefined {
+export function extractDomHashFromPom(pomContents: string): string | undefined {
   const match = pomContents.match(/@bdd2pw dom-hash ([a-f0-9]{64})/);
   return match ? match[1] : undefined;
 }
@@ -98,10 +94,7 @@ export function extractDomHashFromPom(
  * If a header is already present (idempotent re-emit), it is replaced
  * rather than duplicated.
  */
-export function prependDomHashHeader(
-  pomContents: string,
-  header: string,
-): string {
+export function prependDomHashHeader(pomContents: string, header: string): string {
   // Strip any existing @bdd2pw header block first (idempotent).
   const stripped = pomContents.replace(
     /^\/\*\*[\s\S]*?@bdd2pw dom-hash[\s\S]*?\*\/\s*\n*/,

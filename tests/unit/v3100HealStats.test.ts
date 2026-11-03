@@ -31,7 +31,12 @@ describe("v3.10.0 — healStats aggregate()", () => {
   it("aggregates a mixed-event sequence correctly", () => {
     const events = [
       // 1 register + 1 attempt + 1 heal — success.
-      { ts: "2026-06-01T00:00:00.000Z", event: "register", page: "LoginPage", name: "submitButton" },
+      {
+        ts: "2026-06-01T00:00:00.000Z",
+        event: "register",
+        page: "LoginPage",
+        name: "submitButton",
+      },
       {
         ts: "2026-06-01T00:00:01.000Z",
         event: "heal_attempt",
@@ -54,7 +59,12 @@ describe("v3.10.0 — healStats aggregate()", () => {
         scenario_name: "User logs in",
       },
       // 1 attempt + 1 unavailable — failure.
-      { ts: "2026-06-01T00:00:03.000Z", event: "register", page: "HomePage", name: "menuButton" },
+      {
+        ts: "2026-06-01T00:00:03.000Z",
+        event: "register",
+        page: "HomePage",
+        name: "menuButton",
+      },
       {
         ts: "2026-06-01T00:00:04.000Z",
         event: "heal_attempt",
@@ -75,7 +85,12 @@ describe("v3.10.0 — healStats aggregate()", () => {
         error: "no candidate returned",
       },
       // Second register + heal of submitButton (same candidate reused).
-      { ts: "2026-06-01T00:00:06.000Z", event: "register", page: "LoginPage", name: "submitButton" },
+      {
+        ts: "2026-06-01T00:00:06.000Z",
+        event: "register",
+        page: "LoginPage",
+        name: "submitButton",
+      },
       {
         ts: "2026-06-01T00:00:07.000Z",
         event: "heal_attempt",
@@ -175,8 +190,24 @@ describe("v3.10.0 — analyseHealStats end-to-end", () => {
     const jsonlPath = path.join(tmpDir, "heal-events.jsonl");
     const events = [
       { ts: "2026-06-01T00:00:00.000Z", event: "register", page: "P", name: "f" },
-      { ts: "2026-06-01T00:00:01.000Z", event: "heal_attempt", page: "P", name: "f", method: "click", error: "x" },
-      { ts: "2026-06-01T00:00:02.000Z", event: "healed", page: "P", name: "f", method: "click", original: "old", healed: "new", confidence: 0.9 },
+      {
+        ts: "2026-06-01T00:00:01.000Z",
+        event: "heal_attempt",
+        page: "P",
+        name: "f",
+        method: "click",
+        error: "x",
+      },
+      {
+        ts: "2026-06-01T00:00:02.000Z",
+        event: "healed",
+        page: "P",
+        name: "f",
+        method: "click",
+        original: "old",
+        healed: "new",
+        confidence: 0.9,
+      },
     ];
     await fs.writeFile(
       jsonlPath,

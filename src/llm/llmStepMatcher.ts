@@ -168,9 +168,7 @@ export async function matchStepWithLLM(
     // case: better-sqlite3 NODE_MODULE_VERSION mismatch — a 5-line stack
     // trace) don't bleed past the `//` in the emitted spec.
     if (timeoutId) clearTimeout(timeoutId);
-    const message = flattenForComment(
-      err instanceof Error ? err.message : err,
-    );
+    const message = flattenForComment(err instanceof Error ? err.message : err);
     return {
       ...ruleBased,
       warning: `${ruleBased.warning} (LLM fallback threw: ${message})`,
@@ -231,9 +229,7 @@ export async function matchScenarioWithLLM(
   ctx: MatchStepWithLLMContext,
 ): Promise<StepBinding[]> {
   // 1) Rule pass for every step. Cheap; pure-sync inside.
-  const ruleBindings: StepBinding[] = steps.map((s) =>
-    matchStep(s, pom, pageVar),
-  );
+  const ruleBindings: StepBinding[] = steps.map((s) => matchStep(s, pom, pageVar));
 
   // 2) Identify warning slots. If no LLM client or budget exhausted,
   //    bail out with the rule bindings — same as the per-step path.
@@ -273,9 +269,7 @@ export async function matchScenarioWithLLM(
     // Wrap-failure: annotate every warning slot with the throw message
     // and continue. Matches the per-step path's `LLM fallback threw`
     // annotation.
-    const message = flattenForComment(
-      err instanceof Error ? err.message : err,
-    );
+    const message = flattenForComment(err instanceof Error ? err.message : err);
     const out = [...ruleBindings];
     for (const idx of warningIndexes) {
       out[idx] = {

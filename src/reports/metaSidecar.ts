@@ -102,9 +102,7 @@ function classifyIntent(b: StepBinding): MetaSidecarStep["intent"] {
  * markers (v3.1.0 Issue 5), so post-processors can correlate the
  * sidecar to the in-source markers when both features are enabled.
  */
-export function bindingsToMetaSteps(
-  bindings: StepBinding[],
-): MetaSidecarStep[] {
+export function bindingsToMetaSteps(bindings: StepBinding[]): MetaSidecarStep[] {
   return bindings.map((b, idx) => {
     const step: MetaSidecarStep = {
       id: String(idx + 1).padStart(4, "0"),

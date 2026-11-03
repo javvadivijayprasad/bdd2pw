@@ -151,10 +151,7 @@ export async function scanRepo(repoRoot: string): Promise<RepoScanResult> {
  *       passing the raw file text through so emit-time augment
  *       preserves the original line.
  */
-function parseLocatorField(
-  fieldName: string,
-  init?: string,
-): LocatorChoice | undefined {
+function parseLocatorField(fieldName: string, init?: string): LocatorChoice | undefined {
   if (!init) return undefined;
   const m = init.match(
     /(?:this\.)?page\.(getByRole|getByLabel|getByPlaceholder|getByTestId|getByText|locator)\s*\(([\s\S]*)\)\s*;?\s*$/,

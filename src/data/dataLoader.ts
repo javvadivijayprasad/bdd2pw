@@ -199,10 +199,7 @@ export function parseJson(text: string, fileLabel?: string): DataRow[] {
     );
   }
   if (raw.length === 0) {
-    throw new DataLoaderError(
-      "JSON contained zero rows",
-      fileLabel,
-    );
+    throw new DataLoaderError("JSON contained zero rows", fileLabel);
   }
   const rows: DataRow[] = [];
   let headersSeen: Set<string> | null = null;
@@ -293,9 +290,7 @@ function validateHeaders(headers: string[], fileLabel?: string): void {
   if (headers.length === 0) {
     throw new DataLoaderError("No headers found", fileLabel);
   }
-  const blanks = headers
-    .map((h, i) => (h.length === 0 ? i : -1))
-    .filter((i) => i >= 0);
+  const blanks = headers.map((h, i) => (h.length === 0 ? i : -1)).filter((i) => i >= 0);
   if (blanks.length > 0) {
     throw new DataLoaderError(
       `Header row has blank column(s) at index: ${blanks.join(", ")}`,

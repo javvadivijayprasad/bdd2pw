@@ -181,7 +181,13 @@ export function synthesiseRegex(texts: string[]): string {
   // align — emit a more permissive `.*?` placeholder pattern.
   const length = tokenised[0].length;
   if (!tokenised.every((tok) => tok.length === length)) {
-    return "^" + escapeForRegex(texts[0]).replace(/\\?\\?"[^"]*"/g, '"([^"]+)"').replace(/<NUM>/g, "(\\d+)") + "$";
+    return (
+      "^" +
+      escapeForRegex(texts[0])
+        .replace(/\\?\\?"[^"]*"/g, '"([^"]+)"')
+        .replace(/<NUM>/g, "(\\d+)") +
+      "$"
+    );
   }
   const out: string[] = [];
   for (let i = 0; i < length; i++) {
@@ -225,9 +231,7 @@ async function resolveJsonlPath(inputPath: string): Promise<string> {
     const nested = path.join(inputPath, "artefacts", "candidate-rules.jsonl");
     if (await fs.pathExists(nested)) return nested;
   }
-  throw new Error(
-    `Could not find candidate-rules.jsonl at or under: ${inputPath}`,
-  );
+  throw new Error(`Could not find candidate-rules.jsonl at or under: ${inputPath}`);
 }
 
 async function readCandidates(jsonlPath: string): Promise<CandidateRuleEntry[]> {

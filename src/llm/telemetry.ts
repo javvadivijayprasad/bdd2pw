@@ -263,17 +263,9 @@ export class LLMTelemetry {
   };
 
   toSummary(): TelemetrySummary {
-    const latencies = this.completedCalls
-      .map((c) => c.latencyMs)
-      .sort((a, b) => a - b);
-    const inputTokens = this.completedCalls.reduce(
-      (acc, c) => acc + c.inputTokens,
-      0,
-    );
-    const outputTokens = this.completedCalls.reduce(
-      (acc, c) => acc + c.outputTokens,
-      0,
-    );
+    const latencies = this.completedCalls.map((c) => c.latencyMs).sort((a, b) => a - b);
+    const inputTokens = this.completedCalls.reduce((acc, c) => acc + c.inputTokens, 0);
+    const outputTokens = this.completedCalls.reduce((acc, c) => acc + c.outputTokens, 0);
     const pricing = this.modelPricing ?? {
       inputUsdPerMillion: 0,
       outputUsdPerMillion: 0,
@@ -292,8 +284,7 @@ export class LLMTelemetry {
         bindingsGenerated: this.bindingsGenerated,
         cacheHits: this.cacheHits,
         cacheMisses: this.cacheMisses,
-        cacheHitRate:
-          totalCacheChecks === 0 ? 0 : this.cacheHits / totalCacheChecks,
+        cacheHitRate: totalCacheChecks === 0 ? 0 : this.cacheHits / totalCacheChecks,
         inputTokens,
         outputTokens,
         estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),

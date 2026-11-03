@@ -40,9 +40,7 @@ async function probeFixture(
   if (activateDomain) setActiveDomains([domain]);
   else setActiveDomains(undefined);
 
-  const feature = await parseFeature(
-    path.join(FIXTURES, domain, "input.feature"),
-  );
+  const feature = await parseFeature(path.join(FIXTURES, domain, "input.feature"));
   let matched = 0;
   const warnings: string[] = [];
   for (const scenario of feature.scenarios) {
@@ -94,9 +92,7 @@ describe("v3.4.0 — domain rule packs", () => {
   it("multiple domains additively activated", async () => {
     setActiveDomains(["banking", "healthcare", "insurance"]);
     for (const { domain } of cases) {
-      const feature = await parseFeature(
-        path.join(FIXTURES, domain, "input.feature"),
-      );
+      const feature = await parseFeature(path.join(FIXTURES, domain, "input.feature"));
       for (const scenario of feature.scenarios) {
         for (const step of scenario.steps) {
           const binding = matchStep(step, EMPTY_POM, "page");

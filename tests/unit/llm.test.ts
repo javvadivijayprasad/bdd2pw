@@ -51,9 +51,7 @@ class MockLLMClient implements LLMClient {
   scriptError(stepText: string, error: string) {
     this.errors.set(stepText, error);
   }
-  async generateBinding(
-    input: GenerateBindingInput,
-  ): Promise<GenerateBindingResult> {
+  async generateBinding(input: GenerateBindingInput): Promise<GenerateBindingResult> {
     this.calls.push(input);
     const err = this.errors.get(input.step.text);
     if (err) {
@@ -182,19 +180,11 @@ describe("parseBindingJson", () => {
   it("v2.2.3 — detectHallucinatedLocators flags invented page.getBy* methods", () => {
     // Real methods are clean.
     expect(detectHallucinatedLocators("page.getByRole('button')")).toEqual([]);
-    expect(detectHallucinatedLocators("page.getByLabel('Username')")).toEqual(
-      [],
-    );
-    expect(detectHallucinatedLocators("page.getByText('Hello').first()")).toEqual(
-      [],
-    );
-    expect(
-      detectHallucinatedLocators("page.getByTestId('login-btn')"),
-    ).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByLabel('Username')")).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByText('Hello').first()")).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByTestId('login-btn')")).toEqual([]);
     expect(detectHallucinatedLocators("page.getByAltText('logo')")).toEqual([]);
-    expect(
-      detectHallucinatedLocators("page.getByPlaceholder('Email')"),
-    ).toEqual([]);
+    expect(detectHallucinatedLocators("page.getByPlaceholder('Email')")).toEqual([]);
     expect(detectHallucinatedLocators("page.getByTitle('Submit')")).toEqual([]);
 
     // Hallucinated — the actual production bug from BUG-6.
@@ -202,15 +192,9 @@ describe("parseBindingJson", () => {
       "getByURL",
     ]);
     // Other plausible-but-fake variants we've seen the LLM invent.
-    expect(detectHallucinatedLocators("page.getByPath('/login')")).toEqual([
-      "getByPath",
-    ]);
-    expect(detectHallucinatedLocators("page.getByHref('/about')")).toEqual([
-      "getByHref",
-    ]);
-    expect(detectHallucinatedLocators("page.getByLink('Home')")).toEqual([
-      "getByLink",
-    ]);
+    expect(detectHallucinatedLocators("page.getByPath('/login')")).toEqual(["getByPath"]);
+    expect(detectHallucinatedLocators("page.getByHref('/about')")).toEqual(["getByHref"]);
+    expect(detectHallucinatedLocators("page.getByLink('Home')")).toEqual(["getByLink"]);
 
     // Multiple hits in one string.
     const hits = detectHallucinatedLocators(
@@ -221,9 +205,9 @@ describe("parseBindingJson", () => {
     // Doesn't false-positive on non-page receivers (locator.getByXxx
     // chaining is fine even if the inner method is unusual — Playwright
     // exposes the same factory set on Locator, and we only police `page.*`).
-    expect(
-      detectHallucinatedLocators("loginPage.usernameInput.getByURL('x')"),
-    ).toEqual([]);
+    expect(detectHallucinatedLocators("loginPage.usernameInput.getByURL('x')")).toEqual(
+      [],
+    );
   });
 
   it("v2.2.3 — rejects bindings whose assertion.locator uses page.getByURL", () => {
@@ -248,8 +232,7 @@ describe("parseBindingJson", () => {
     const out = parseBindingJson(
       JSON.stringify({
         step: { keyword: "When", text: "I navigate to the dashboard" },
-        customBody:
-          "await expect(page.getByURL(/dashboard/)).toBeVisible();",
+        customBody: "await expect(page.getByURL(/dashboard/)).toBeVisible();",
       }),
       stub,
     );
@@ -632,17 +615,11 @@ describe("matchStepWithLLM", () => {
     });
     const written = await writer.readAll();
     expect(written).toHaveLength(2);
-    expect(written.map((e) => e.stepText).sort()).toEqual([
-      stepA.text,
-      stepB.text,
-    ]);
+    expect(written.map((e) => e.stepText).sort()).toEqual([stepA.text, stepB.text]);
     // Every entry has the POM signature.
     for (const e of written) {
       expect(e.pomSignature.className).toBe("LoginPage");
-      expect(e.pomSignature.fieldNames).toEqual([
-        "usernameInput",
-        "passwordInput",
-      ]);
+      expect(e.pomSignature.fieldNames).toEqual(["usernameInput", "passwordInput"]);
     }
   });
 });

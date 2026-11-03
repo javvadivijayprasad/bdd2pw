@@ -74,24 +74,56 @@ program
     "v4.6.4 — what to emit for unbound steps: 'skip' (default — test.fixme so Playwright reports 'skipped'), 'throw' (test fails at the unbound step), or 'none' (pre-v4.6.4 silent-pass). attestqa handoff 2026-10-19.",
     "skip",
   )
-  .option("--snapshot-file <path>", "Read elements from a JSON file instead of launching a browser")
+  .option(
+    "--snapshot-file <path>",
+    "Read elements from a JSON file instead of launching a browser",
+  )
   .option(
     "--no-discovery",
     "Skip page discovery entirely (rule-only probing). Field-referencing rules will fall to TODO.",
   )
-  .option("--llm <provider>", "Enable LLM fallback for unmatched steps. v3.12.0: 'anthropic', 'openai', or 'gemini'.")
+  .option(
+    "--llm <provider>",
+    "Enable LLM fallback for unmatched steps. v3.12.0: 'anthropic', 'openai', or 'gemini'.",
+  )
   .option(
     "--governance-url <url>",
     "ai-governance sidecar URL — every prompt is sanitised here before leaving the perimeter (fail-closed).",
     "http://localhost:4900",
   )
-  .option("--llm-model <model>", "Override the LLM model. Defaults: anthropic→claude-sonnet-4-6, openai→gpt-4o-mini, gemini→gemini-2.5-flash.")
-  .option("--llm-max-calls <n>", "Max LLM provider calls per scaffold. Default 50. Cache hits don't count.", "50")
-  .option("--llm-cache <path>", "SQLite cache path. Default <repo>/.bdd2pw/llm-cache.sqlite. Use ':memory:' for one-shot.")
-  .option("--llm-skip-governance", "DO NOT USE in production — bypass the sidecar sanitisation step. Test-only escape hatch.", false)
-  .option("--llm-step-timeout-ms <n>", "v2.2.0 — per-step deadline (ms). On expiry the step lands as TODO and the scaffold proceeds. Default 60000.", "60000")
-  .option("--llm-provider-timeout-ms <n>", "v2.2.0 — Anthropic SDK per-call timeout (ms). Default 30000.", "30000")
-  .option("--llm-governance-timeout-ms <n>", "v2.2.0 — governance /sanitize timeout (ms). Default 15000.", "15000")
+  .option(
+    "--llm-model <model>",
+    "Override the LLM model. Defaults: anthropic→claude-sonnet-4-6, openai→gpt-4o-mini, gemini→gemini-2.5-flash.",
+  )
+  .option(
+    "--llm-max-calls <n>",
+    "Max LLM provider calls per scaffold. Default 50. Cache hits don't count.",
+    "50",
+  )
+  .option(
+    "--llm-cache <path>",
+    "SQLite cache path. Default <repo>/.bdd2pw/llm-cache.sqlite. Use ':memory:' for one-shot.",
+  )
+  .option(
+    "--llm-skip-governance",
+    "DO NOT USE in production — bypass the sidecar sanitisation step. Test-only escape hatch.",
+    false,
+  )
+  .option(
+    "--llm-step-timeout-ms <n>",
+    "v2.2.0 — per-step deadline (ms). On expiry the step lands as TODO and the scaffold proceeds. Default 60000.",
+    "60000",
+  )
+  .option(
+    "--llm-provider-timeout-ms <n>",
+    "v2.2.0 — Anthropic SDK per-call timeout (ms). Default 30000.",
+    "30000",
+  )
+  .option(
+    "--llm-governance-timeout-ms <n>",
+    "v2.2.0 — governance /sanitize timeout (ms). Default 15000.",
+    "15000",
+  )
   .option("--templates <dir>", "Override default project template directory")
   .option("--dry-run", "Print plan, write nothing", false)
   .option("--no-validate", "Skip tsc --noEmit step")
@@ -139,11 +171,7 @@ program
     "--schema <path>",
     "v4.0.0 — JSON schema for --gen-data. Object of {column: source} where source is 'faker.X.Y', 'llm:<prompt>', or a literal string.",
   )
-  .option(
-    "--rows <n>",
-    "v4.0.0 — row count for --gen-data. Default 20.",
-    "20",
-  )
+  .option("--rows <n>", "v4.0.0 — row count for --gen-data. Default 20.", "20")
   .option(
     "--seed <n>",
     "v4.0.0 — Faker RNG seed for --gen-data reproducibility. Default 42.",
@@ -164,26 +192,24 @@ program
           ? opts.llm
           : null;
       const llmConfig = llmProvider
-        ? ({
-              provider: llmProvider as "anthropic" | "openai" | "gemini",
-              model: opts.llmModel,
-              governanceUrl: opts.governanceUrl,
-              maxCalls: opts.llmMaxCalls
-                ? Number(opts.llmMaxCalls)
-                : undefined,
-              cachePath: opts.llmCache,
-              skipGovernance: opts.llmSkipGovernance,
-              // v2.2.0 timeouts.
-              stepTimeoutMs: opts.llmStepTimeoutMs
-                ? Number(opts.llmStepTimeoutMs)
-                : undefined,
-              providerTimeoutMs: opts.llmProviderTimeoutMs
-                ? Number(opts.llmProviderTimeoutMs)
-                : undefined,
-              governanceTimeoutMs: opts.llmGovernanceTimeoutMs
-                ? Number(opts.llmGovernanceTimeoutMs)
-                : undefined,
-            })
+        ? {
+            provider: llmProvider as "anthropic" | "openai" | "gemini",
+            model: opts.llmModel,
+            governanceUrl: opts.governanceUrl,
+            maxCalls: opts.llmMaxCalls ? Number(opts.llmMaxCalls) : undefined,
+            cachePath: opts.llmCache,
+            skipGovernance: opts.llmSkipGovernance,
+            // v2.2.0 timeouts.
+            stepTimeoutMs: opts.llmStepTimeoutMs
+              ? Number(opts.llmStepTimeoutMs)
+              : undefined,
+            providerTimeoutMs: opts.llmProviderTimeoutMs
+              ? Number(opts.llmProviderTimeoutMs)
+              : undefined,
+            governanceTimeoutMs: opts.llmGovernanceTimeoutMs
+              ? Number(opts.llmGovernanceTimeoutMs)
+              : undefined,
+          }
         : undefined;
       // v4.0.0 — warn if user passed both data sources. --data wins.
       if (opts.data && opts.genData) {
@@ -214,7 +240,8 @@ program
         storageState: opts.storageState,
         headed: opts.headed,
         // v4.6.0 — attestqa Request C
-        browserChannel: typeof opts.browserChannel === "string" ? opts.browserChannel : undefined,
+        browserChannel:
+          typeof opts.browserChannel === "string" ? opts.browserChannel : undefined,
         // v4.6.0 — attestqa P1-1
         rollbackOnTscErrors: opts.rollbackOnTscErrors === true,
         // v4.6.4 — attestqa 2026-10-19 handoff
@@ -261,9 +288,7 @@ program
           : opts.genData
             ? {
                 type: "synthetic" as const,
-                schemaPath: opts.schema
-                  ? path.resolve(opts.schema)
-                  : undefined,
+                schemaPath: opts.schema ? path.resolve(opts.schema) : undefined,
                 rows: opts.rows ? Number(opts.rows) : undefined,
                 seed: opts.seed ? Number(opts.seed) : undefined,
               }
@@ -381,10 +406,7 @@ program
   .description(
     "Cluster LLM-generated bindings in <repo>/artefacts/candidate-rules.jsonl and propose draft regex rules.",
   )
-  .argument(
-    "<input>",
-    "Path to candidate-rules.jsonl OR the scaffold repo containing it",
-  )
+  .argument("<input>", "Path to candidate-rules.jsonl OR the scaffold repo containing it")
   .option(
     "--out <path>",
     "Where to write propose-rules.md. Defaults to next to the JSONL.",
@@ -398,9 +420,7 @@ program
     const result = await proposeRules({
       inputPath: input,
       outputPath: raw.out,
-      minClusterSize: raw.minClusterSize
-        ? Number(raw.minClusterSize)
-        : undefined,
+      minClusterSize: raw.minClusterSize ? Number(raw.minClusterSize) : undefined,
     });
     logger.info(
       {
@@ -440,9 +460,7 @@ program
   .option("--json", "Print the report as JSON to stdout instead of the table.", false)
   .action(async (repo: string, raw: { out?: string; json?: boolean }) => {
     try {
-      const pkgVersion = (
-        require("../package.json") as { version: string }
-      ).version;
+      const pkgVersion = (require("../package.json") as { version: string }).version;
       const { stats, outputPath } = await analyseQuarantineStats({
         repo: path.resolve(repo),
         version: pkgVersion,
@@ -452,9 +470,7 @@ program
         process.stdout.write(JSON.stringify(stats, null, 2) + "\n");
       } else {
         process.stdout.write(renderQuarantineStatsTable(stats));
-        process.stdout.write(
-          `\nquarantine-stats: wrote ${outputPath}\n`,
-        );
+        process.stdout.write(`\nquarantine-stats: wrote ${outputPath}\n`);
       }
     } catch (err) {
       logger.error({ err }, "quarantine-stats: read error");
@@ -471,7 +487,10 @@ program
     "<repo>",
     "Path to the scaffolded test repo (contains tests/ and artefacts/).",
   )
-  .option("--out <path>", "Where to write coverage.json. Defaults to <repo>/artefacts/coverage.json.")
+  .option(
+    "--out <path>",
+    "Where to write coverage.json. Defaults to <repo>/artefacts/coverage.json.",
+  )
   .option("--json", "Print the report as JSON to stdout instead of the table.", false)
   .option(
     "--suggest-retire",
@@ -504,13 +523,9 @@ program
           : undefined;
         if (domainList) {
           // Best-effort — invalid names are silently dropped by setActiveDomains.
-          setActiveDomains(
-            domainList as Parameters<typeof setActiveDomains>[0],
-          );
+          setActiveDomains(domainList as Parameters<typeof setActiveDomains>[0]);
         }
-        const pkgVersion = (
-          require("../package.json") as { version: string }
-        ).version;
+        const pkgVersion = (require("../package.json") as { version: string }).version;
         const { coverage, outputPath } = await analyseCoverage({
           repo: path.resolve(repo),
           version: pkgVersion,

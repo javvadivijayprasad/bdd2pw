@@ -59,12 +59,7 @@ const STEP: GenerateBindingInput = {
   scaffoldId: "scaffold-test",
 };
 
-const KNOWN_FIELDS = new Set([
-  "page",
-  "usernameInput",
-  "passwordInput",
-  "signInButton",
-]);
+const KNOWN_FIELDS = new Set(["page", "usernameInput", "passwordInput", "signInButton"]);
 const KNOWN_METHODS = new Set(["goto"]);
 
 describe("v4.1.0 — tryRewriteInventedHelper (unit)", () => {

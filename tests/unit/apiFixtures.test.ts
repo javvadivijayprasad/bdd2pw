@@ -85,17 +85,12 @@ function pomFor(fixtureName: string): { pom: PageObjectIR; pageVar: string } {
  * emitted .spec.ts string. Skips POM imports (pure-API features don't
  * need a POM class).
  */
-async function renderFeature(
-  featurePath: string,
-  fixtureName: string,
-): Promise<string> {
+async function renderFeature(featurePath: string, fixtureName: string): Promise<string> {
   const feature = await parseFeature(featurePath);
   const { pom, pageVar } = pomFor(fixtureName);
   const scenarios = feature.scenarios.map((s) => ({
     name: s.name,
-    bindings: s.steps.map<StepBinding>((step) =>
-      matchStep(step, pom, pageVar),
-    ),
+    bindings: s.steps.map<StepBinding>((step) => matchStep(step, pom, pageVar)),
     tags: s.tags,
   }));
   const out = emitTestFile({

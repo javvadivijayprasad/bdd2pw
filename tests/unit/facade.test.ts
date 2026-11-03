@@ -9,10 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  emitTestFile,
-  sanitizeLocatorReferences,
-} from "../../src/emitters/facade";
+import { emitTestFile, sanitizeLocatorReferences } from "../../src/emitters/facade";
 import type { StepBinding } from "../../src/types";
 
 function renderOneBinding(binding: StepBinding): string {
@@ -37,9 +34,7 @@ describe("bindingsToBody — assertion rendering", () => {
         expected: 'new RegExp("/dashboard")',
       },
     });
-    expect(out).toContain(
-      'await expect(page).toHaveURL(new RegExp("/dashboard"));',
-    );
+    expect(out).toContain('await expect(page).toHaveURL(new RegExp("/dashboard"));');
     expect(out).not.toMatch(/await expect\(\)/);
   });
 
@@ -65,9 +60,7 @@ describe("bindingsToBody — assertion rendering", () => {
         expected: 'new RegExp("/login")',
       },
     });
-    expect(out).toContain(
-      'await expect(page).not.toHaveURL(new RegExp("/login"));',
-    );
+    expect(out).toContain('await expect(page).not.toHaveURL(new RegExp("/login"));');
     expect(out).not.toMatch(/await expect\(\)/);
   });
 
@@ -93,9 +86,7 @@ describe("bindingsToBody — assertion rendering", () => {
         matcher: "toBeVisible",
       },
     });
-    expect(out).toContain(
-      "await expect(loginPage.usernameInput).toBeVisible();",
-    );
+    expect(out).toContain("await expect(loginPage.usernameInput).toBeVisible();");
   });
 });
 
@@ -104,12 +95,8 @@ describe("sanitizeLocatorReferences (v2.2.5 — BUG-9 safety net)", () => {
     // Exact reproduction: cached LLM binding from v2.2.4 references the
     // unsanitized POM field `0Of0`. Without rewriting, the .spec.ts
     // refuses to parse with "Identifier directly after number".
-    expect(sanitizeLocatorReferences("r0c934ddf001.0Of0")).toBe(
-      "r0c934ddf001._0Of0",
-    );
-    expect(sanitizeLocatorReferences("loginPage.1500Of0")).toBe(
-      "loginPage._1500Of0",
-    );
+    expect(sanitizeLocatorReferences("r0c934ddf001.0Of0")).toBe("r0c934ddf001._0Of0");
+    expect(sanitizeLocatorReferences("loginPage.1500Of0")).toBe("loginPage._1500Of0");
   });
 
   it("strips commas from digit-leading segments (1,500 case)", () => {

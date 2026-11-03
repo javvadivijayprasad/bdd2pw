@@ -58,9 +58,7 @@ describe("v3.7.1 — TestForge regression report (2026-05-22)", () => {
           bindings: [reproBinding()],
         },
       ],
-      pomImports: [
-        { className: "Repro", fromPath: "../pages/repro.page" },
-      ],
+      pomImports: [{ className: "Repro", fromPath: "../pages/repro.page" }],
     });
     // Import uses PascalCase.
     expect(out.contents).toMatch(/import\s*\{\s*Repro\s*\}/);
@@ -115,8 +113,6 @@ describe("v3.7.1 — TestForge regression report (2026-05-22)", () => {
     });
     // v3.1.0 made testInfo unconditional. TestForge's report flagged
     // that v3.7.0 was missing it — verify it's still there.
-    expect(out.contents).toMatch(
-      /async\s*\(\s*\{\s*page\s*\}\s*,\s*testInfo\s*\)\s*=>/,
-    );
+    expect(out.contents).toMatch(/async\s*\(\s*\{\s*page\s*\}\s*,\s*testInfo\s*\)\s*=>/);
   });
 });

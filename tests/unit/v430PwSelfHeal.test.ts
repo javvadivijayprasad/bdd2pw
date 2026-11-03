@@ -63,10 +63,7 @@ describe("v4.3.0 — pw-self-heal scaffold (default mode)", () => {
       selfHealing: true,
       selfHealingMode: "heuristic",
     });
-    const contents = await fs.readFile(
-      path.join(repo, "tests", "fixtures.ts"),
-      "utf8",
-    );
+    const contents = await fs.readFile(path.join(repo, "tests", "fixtures.ts"), "utf8");
     expect(contents).toContain('mode: "heuristic"');
     expect(contents).not.toContain('mode: "hybrid"');
   });
@@ -85,10 +82,7 @@ describe("v4.3.0 — pw-self-heal scaffold (default mode)", () => {
       selfHealing: true,
       selfHealingMode: "hybrid",
     });
-    const contents = await fs.readFile(
-      path.join(repo, "tests", "fixtures.ts"),
-      "utf8",
-    );
+    const contents = await fs.readFile(path.join(repo, "tests", "fixtures.ts"), "utf8");
     expect(contents).toContain('mode: "hybrid"');
     expect(contents).not.toContain('mode: "heuristic"');
   });
@@ -100,9 +94,7 @@ describe("v4.3.0 — pw-self-heal scaffold (default mode)", () => {
       baseUrl: "https://example.com",
       selfHealing: true,
     });
-    expect(
-      await fs.pathExists(path.join(repo, ".pwheal", ".gitkeep")),
-    ).toBe(true);
+    expect(await fs.pathExists(path.join(repo, ".pwheal", ".gitkeep"))).toBe(true);
   });
 
   it("appends pw-self-heal + onnxruntime-node to package.json devDependencies (hybrid mode)", async () => {
@@ -118,9 +110,7 @@ describe("v4.3.0 — pw-self-heal scaffold (default mode)", () => {
     expect(pkg.devDependencies["@vijaypjavvadi/pw-self-heal"]).toMatch(
       /^\^\d+\.\d+\.\d+$/,
     );
-    expect(pkg.devDependencies["onnxruntime-node"]).toMatch(
-      /^\^\d+\.\d+\.\d+$/,
-    );
+    expect(pkg.devDependencies["onnxruntime-node"]).toMatch(/^\^\d+\.\d+\.\d+$/);
   });
 
   it("omits onnxruntime-node in heuristic mode (no native deps)", async () => {
@@ -175,9 +165,7 @@ describe("v4.3.0 — --legacy-healing (deprecated fallback)", () => {
       selfHealing: true,
       legacyHealing: true,
     });
-    expect(
-      await fs.pathExists(path.join(repo, "tests", "fixtures.ts")),
-    ).toBe(false);
+    expect(await fs.pathExists(path.join(repo, "tests", "fixtures.ts"))).toBe(false);
   });
 });
 
@@ -189,9 +177,7 @@ describe("v4.3.0 — --self-healing off (default)", () => {
       baseUrl: "https://example.com",
       selfHealing: false,
     });
-    expect(
-      await fs.pathExists(path.join(repo, "tests", "fixtures.ts")),
-    ).toBe(false);
+    expect(await fs.pathExists(path.join(repo, "tests", "fixtures.ts"))).toBe(false);
     expect(await fs.pathExists(path.join(repo, "lib", "heal.ts"))).toBe(false);
     expect(await fs.pathExists(path.join(repo, ".pwheal"))).toBe(false);
   });

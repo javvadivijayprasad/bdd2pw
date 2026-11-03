@@ -148,7 +148,14 @@ export interface StepBinding {
      * `undefined` for the built-in registry.
      */
     ruleId?: string;
-    pack?: "banking" | "healthcare" | "insurance" | "retail" | "gov" | "education" | "telecom";
+    pack?:
+      | "banking"
+      | "healthcare"
+      | "insurance"
+      | "retail"
+      | "gov"
+      | "education"
+      | "telecom";
     /** Populated when `source === "llm"`. */
     llm?: {
       provider: "anthropic" | "openai" | "gemini";
