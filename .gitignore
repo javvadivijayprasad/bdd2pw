@@ -37,3 +37,7 @@ bench/results/results-*.md
 # v4.4+ report outputs
 artefacts/quarantine-stats.json
 artefacts/coverage.json
+
+# Local safety-net backups — never committed
+*.bak
+.github/workflows/*.bak

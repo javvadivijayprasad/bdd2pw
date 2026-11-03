@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - docs: add Examples section to README landing (closes gap flagged in vitalets/playwright-bdd#405)
+- chore(release): unified release.yml per 2026-11-03 handoff — single workflow, check (Windows + Ubuntu) + publish (npm, VS Code Marketplace, GitHub release + Zenodo), idempotent, trusted-publishing only (no tokens). Deletes ci.yml.
+- chore(release): CITATION.cff restructured to concept-DOI shape (placeholder for Vijay to fill after Zenodo-GitHub integration is flipped on).
+- chore(release): add `preflight`, `format:check`, `typecheck`, `smoke` npm scripts.
+- docs: add docs/RELEASING.md (one release = one tag = one workflow).
+- docs: add RELEASE_NOTES.md (per-release body for the GitHub release).
 - docs: add `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1)
 - docs: add `SECURITY.md` with supported-versions matrix + private reporting flow
 - docs: add `SUPPORT.md` routing table for different question types

@@ -1,61 +1,68 @@
-# YAML 1.2
-# Citation File Format 1.2.0
-# https://citation-file-format.github.io/
 cff-version: 1.2.0
-message: "If you use this software, please cite it using these metadata."
-title: "bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
-abstract: >
-  bdd2pw is an open-source Node.js test-generation tool that produces
-  compiling Playwright TypeScript test suites from Gherkin behaviour
-  specifications via live-DOM page object scaffolding using the
-  Microsoft Playwright MCP. Validated on 7 domain packs with API rule
-  enforcement, JSON scenarios, merge-mode authoring, hook fixtures,
-  and LLM batching diagnostics.
+message: "If you use bdd2pw, please cite it as below. The DOI is the concept DOI and resolves to the latest archived version; a specific version has its own DOI on its Zenodo page."
 type: software
-license: MIT
-version: 4.6.5
-date-released: 2026-10-19
+title: "bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
+abstract: >-
+  bdd2pw is an open-source Node.js test-generation tool that produces compiling
+  Playwright TypeScript test suites from Gherkin behaviour specifications via
+  live-DOM page object scaffolding using the Microsoft Playwright MCP.
+  Validated on 7 domain packs with API rule enforcement, JSON scenarios,
+  merge-mode authoring, hook fixtures, and LLM batching diagnostics.
 authors:
-  - family-names: "Javvadi"
-    given-names: "Vijay Prasad"
+  - family-names: Javvadi
+    given-names: Vijay Prasad
     orcid: "https://orcid.org/0009-0004-1192-6906"
     affiliation: "Independent Researcher, Plainsboro, NJ, USA"
-    email: "vijay@vijayjavvadiresearch.ai"
-identifiers:
-  - description: "Archived release on Zenodo"
-    type: doi
-    value: "10.5281/zenodo.20452068"
-  - description: "Companion preprint on SSRN"
-    type: doi
-    value: "10.2139/ssrn.6905717"
-  - description: "npm package"
-    type: url
-    value: "https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw"
+    email: vijay@vijayjavvadiresearch.ai
+version: 4.6.5
+date-released: "2026-11-03"
+license: MIT
 repository-code: "https://github.com/javvadivijayprasad/bdd2pw"
-url: "https://www.npmjs.com/package/@vijaypjavvadi/bdd2pw"
+url: "https://github.com/javvadivijayprasad/bdd2pw#readme"
+# NOTE (2026-11-03): Before pushing, replace <CONCEPT_DOI_TBD> with the Zenodo
+# CONCEPT DOI once the GitHub-Zenodo integration has been flipped on and the
+# first auto-archived release has minted it. The concept DOI is the number
+# shown under "Cite all versions?" on any Zenodo record page for this repo.
+# Until then, the 10.5281/zenodo.21050268 entry below (the v4.0.1 manual
+# deposit evaluated in the SoftwareX paper) is the authoritative identifier.
+doi: 10.5281/zenodo.21050268
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21050268
+    description: "Version v4.0.1, the manual Zenodo deposit evaluated in the SoftwareX paper (10.1016/j.softx.2026.102933)."
+  # - type: doi
+  #   value: <CONCEPT_DOI_TBD>
+  #   description: "Concept DOI: all versions, resolves to the latest (Zenodo). Uncomment and fill after the first auto-archive."
+  - type: doi
+    value: 10.1016/j.softx.2026.102933
+    description: "Peer-reviewed paper in Elsevier SoftwareX (preferred citation)."
+  - type: doi
+    value: 10.2139/ssrn.6905717
+    description: "Companion preprint on SSRN."
 keywords:
   - test automation
   - Gherkin
   - BDD
+  - Cucumber
   - Playwright
   - page object
   - Microsoft Playwright MCP
   - TypeScript
   - npm
 preferred-citation:
-  type: software
+  type: article
   title: "bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP"
   authors:
-    - family-names: "Javvadi"
-      given-names: "Vijay Prasad"
+    - family-names: Javvadi
+      given-names: Vijay Prasad
       orcid: "https://orcid.org/0009-0004-1192-6906"
       affiliation: "Independent Researcher, Plainsboro, NJ, USA"
+  journal: "SoftwareX"
   year: 2026
-  version: "4.0.1"
-  doi: "10.5281/zenodo.21050268"
-  url: "https://doi.org/10.5281/zenodo.21050268"
+  doi: "10.1016/j.softx.2026.102933"
+  url: "https://doi.org/10.1016/j.softx.2026.102933"
   notes: >
-    A companion peer-reviewed manuscript on bdd2pw is currently under
-    review at Elsevier SoftwareX (manuscript ID SOFTX-S-26-00858); the
-    open-access preprint is available on SSRN at
-    https://doi.org/10.2139/ssrn.6905717.
+    The paper's experimental results were produced against v4.0.1
+    (Zenodo DOI 10.5281/zenodo.21050268). Releases after v4.0.1 are
+    feature + documentation extensions on top of that artifact; cite
+    v4.0.1 for exact reproducibility.

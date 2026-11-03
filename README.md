@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20450278.svg)](https://doi.org/10.5281/zenodo.20450278)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21050268.svg)](https://doi.org/10.5281/zenodo.21050268)
 
 
 # bdd2pw — Gherkin `.feature` → Playwright TypeScript scaffold
@@ -504,13 +504,30 @@ Each release is shaped to be self-contained, ship in ~2 weeks, and keep `domains
 
 ## Citation
 
-If you use `@vijaypjavvadi/bdd2pw` in academic work, please cite:
+If you use `@vijaypjavvadi/bdd2pw` in academic work, please cite the
+peer-reviewed SoftwareX paper (preferred) and the archived software
+artifact (for exact-version reproducibility):
 
-> Javvadi, V. P. (2026). *@vijaypjavvadi/bdd2pw: Live-DOM Page Object Scaffolding from Gherkin Specifications via the Microsoft Playwright MCP* (Version 4.0.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21050268
+**Paper (preferred):**
 
-(v4.0.2 is a documentation-only patch on top of the v4.0.1 artifact; cite v4.0.1 for reproducibility.)
+> Javvadi, V. P. (2026). *bdd2pw: Live-DOM Page Object Scaffolding
+> from Gherkin Specifications via the Microsoft Playwright MCP.*
+> SoftwareX. https://doi.org/10.1016/j.softx.2026.102933
 
-A machine-readable [`CITATION.cff`](CITATION.cff) file is included in the repository root.
+**Software artifact (reproducibility pin):**
+
+> Javvadi, V. P. (2026). *@vijaypjavvadi/bdd2pw: Live-DOM Page Object
+> Scaffolding from Gherkin Specifications via the Microsoft Playwright
+> MCP* (Version 4.0.1) [Computer software]. Zenodo.
+> https://doi.org/10.5281/zenodo.21050268
+
+v4.0.2 and later are documentation + feature releases on top of the
+v4.0.1 artifact; cite v4.0.1 for reproducibility. The paper's
+experimental results were produced against v4.0.1.
+
+A machine-readable [`CITATION.cff`](CITATION.cff) file is included in
+the repository root; GitHub's "Cite this repository" button reads from
+it automatically.
 
 ## License
 

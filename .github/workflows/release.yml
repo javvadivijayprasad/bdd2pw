@@ -1,40 +1,152 @@
-name: Release
+name: release
+# The one workflow (adapted from attestqa, 2026-11-03).
+#   push to main / pull request  -> "check" only: the same checks on Windows and Ubuntu.
+#   push of a tag vX.Y.Z         -> "check", then "publish": npm, VS Code Marketplace,
+#                                   GitHub release (+ Zenodo archive via the release).
+#   Run workflow (manual)        -> dry run by default: check + package, publish nothing.
+#
+# Every publish step is idempotent: if that version is already out, the step says so
+# and skips, so re-running a failed run is always safe.
+# Locally, `npm run preflight` at the repo root runs exactly what "check" runs.
+#
+# bdd2pw-specific notes (differs from attestqa — ADR of 2026-11-03):
+#   • Single package at repo root (no monorepo paths).
+#   • The VS Code extension in `vscode-extension/` has its OWN version cadence
+#     (currently v0.3.0 while the engine is on v4.6.5). The tag matches the ENGINE
+#     version only; the extension publish step uses its own package.json version
+#     and the idempotent skip means a tag that doesn't bump the extension is a
+#     no-op on the Marketplace. Bump `vscode-extension/package.json` as a separate
+#     commit when you want to publish a new extension version.
 
 on:
+  pull_request:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    # A pre-release tag (v4.6.6-rc.1) marks a commit and publishes nothing.
+    tags: ["v*.*.*", "!v*.*.*-*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, test and package only - publish nothing"
+        type: boolean
+        default: true
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write # the GitHub release
+  id-token: write # npm provenance / trusted publishing (also used by vsce --oidc)
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run preflight
+      - name: bdd2pw smoke scripts (vitest-independent regression guards)
+        shell: bash
+        run: |
+          # The scripts/smoke-*.mjs files bypass vitest (rollup native-binary
+          # mismatch on some sandboxes) and catch the attestqa regression
+          # fixtures. Each must pass on both OSes.
+          for s in scripts/smoke-*.mjs; do
+            echo "=== $s ==="
+            node "$s"
+          done
+
+  publish:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm run lint
       - run: npm run build
-      - run: npm test
-      # v4.5.3 — switched from NPM_TOKEN to npm Trusted Publishing (OIDC).
-      # The id-token: write permission above is what npm's OIDC validator
-      # reads; no NPM_TOKEN secret is used anywhere in this workflow.
-      # Trusted-publisher config lives on npmjs.com side:
-      #   npmjs.com → @vijaypjavvadi/bdd2pw → Settings → Trusted publishers
-      #   organization: javvadivijayprasad
-      #   repository:   bdd2pw
-      #   workflow:     release.yml
-      #   environment:  (blank)
-      - name: Publish to npm with provenance (OIDC)
-        run: npm publish --provenance --access public
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+
+      - name: The tag matches the engine package version
+        if: github.event_name == 'push'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          echo "tag $tag, package $pkg"
+          [ "$tag" = "$pkg" ] || { echo "::error::package.json is $pkg but the tag is v$tag"; exit 1; }
+
+      - name: Engine - what would ship
+        run: npm pack --dry-run
+
+      - name: Engine - publish to npm
+        if: env.DRY_RUN != 'true'
+        # No token: npm trusted publishing (OIDC). The publisher is configured on
+        # npmjs.com (package @vijaypjavvadi/bdd2pw -> Settings -> Trusted Publisher
+        # -> GitHub Actions, this repo, this workflow file). Nothing to rotate, no OTP.
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if npm view "@vijaypjavvadi/bdd2pw@$v" version >/dev/null 2>&1; then
+            echo "@vijaypjavvadi/bdd2pw@$v is already on npm - skipping"
+          else
+            npm publish --provenance --access public
+          fi
+
+      # ---- VS Code extension (separate cadence from the engine) ----
+      - name: Extension - install (vscode-extension subdir has its own deps)
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Extension - package
+        working-directory: vscode-extension
+        run: npx @vscode/vsce@4.1.0 package --no-dependencies
+
+      - name: Extension - publish to the Marketplace
+        if: env.DRY_RUN != 'true'
+        working-directory: vscode-extension
+        # Trusted publishing (no token): the Marketplace publisher vijaypjavvadi
+        # has a Trusted Publishing policy for this repository and this workflow
+        # file (marketplace.visualstudio.com/manage -> Trusted Publishing).
+        # vsce >= 4.1 exchanges the job's GitHub OIDC token for a short-lived
+        # Marketplace credential. It never falls back to a PAT.
+        run: |
+          v=$(node -p "require('./package.json').version")
+          live=$(npx @vscode/vsce@4.1.0 show vijaypjavvadi.bdd2pw --json 2>/dev/null | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).versions[0].version}catch{''}")
+          if [ "$live" = "$v" ]; then
+            echo "vijaypjavvadi.bdd2pw $v is already on the Marketplace - skipping"
+          else
+            npx @vscode/vsce@4.1.0 publish --oidc --no-dependencies --packagePath bdd2pw-*.vsix
+          fi
+      # ---- end extension ----
+
+      - name: GitHub release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists - skipping"
+          else
+            # Attach the VSIX so folks without the Marketplace can sideload it.
+            gh release create "$GITHUB_REF_NAME" vscode-extension/bdd2pw-*.vsix \
+              --title "bdd2pw $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          generate_release_notes: true
+          name: bdd2pw-vscode-extension
+          path: vscode-extension/bdd2pw-*.vsix
