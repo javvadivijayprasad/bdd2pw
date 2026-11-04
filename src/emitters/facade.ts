@@ -116,7 +116,7 @@ export function sanitizeLocatorReferences(s: string): string {
           parts.push("${");
           j += 2;
           let depth = 1;
-          let exprStart = j;
+          const exprStart = j;
           while (j < s.length && depth > 0) {
             const cc = s[j];
             if (cc === "{") depth++;

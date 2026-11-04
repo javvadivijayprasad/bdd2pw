@@ -931,7 +931,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   // and tsc reported ANY error, restore every pre-emit snapshot for the
   // files we just wrote. Files that didn't exist before are deleted.
   // Reports what was rolled back so the caller can see what happened.
-  let rolledBack: string[] = [];
+  const rolledBack: string[] = [];
   if (
     opts.rollbackOnTscErrors === true &&
     tscErrorCount > 0 &&
