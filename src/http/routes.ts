@@ -103,12 +103,10 @@ export function mountRoutes(app: Application): void {
       return res.status(409).json({ error: "ArtifactNotReady", status: job.status });
     }
     if (!(await fs.pathExists(job.artifactDir))) {
-      return res
-        .status(410)
-        .json({
-          error: "ArtifactExpired",
-          message: "Artifact directory no longer exists.",
-        });
+      return res.status(410).json({
+        error: "ArtifactExpired",
+        message: "Artifact directory no longer exists.",
+      });
     }
     try {
       await streamArtifactZip(res, job.artifactDir, job.id);
