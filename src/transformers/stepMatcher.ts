@@ -392,8 +392,7 @@ const RULES: Rule[] = [
       // bypassing the no-arg helper and preserving the step's intent.
       // Narrative targets ("the login page", "dashboard") still route to
       // the POM's goto() helper, which knows the right default URL.
-      const looksLikePath =
-        /^(?:https?:\/\/|\/|#)/.test(target) || target.includes("?");
+      const looksLikePath = /^(?:https?:\/\/|\/|#)/.test(target) || target.includes("?");
       if (looksLikePath) {
         return {
           step,
