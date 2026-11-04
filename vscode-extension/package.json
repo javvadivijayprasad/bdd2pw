@@ -2,7 +2,7 @@
   "name": "bdd2pw",
   "displayName": "bdd2pw — Gherkin to Playwright",
   "description": "Scaffold runnable Playwright TypeScript tests from your Gherkin .feature files. Right-click a feature, get POMs + specs ready to run.",
-  "version": "0.3.0",
+  "version": "4.6.6",
   "publisher": "vijaypjavvadi",
   "license": "MIT",
   "icon": "icon.png",

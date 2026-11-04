@@ -5,11 +5,10 @@ can be followed without remembering anything.
 
 A release is the tag `vX.Y.Z`. It ships `@vijaypjavvadi/bdd2pw` to npm, the
 `vijaypjavvadi.bdd2pw` extension to the VS Code Marketplace, and a GitHub
-release (which Zenodo archives), all from `.github/workflows/release.yml`. The
-tag matches `package.json` (the engine); the extension in `vscode-extension/`
-carries its own version cadence — bump `vscode-extension/package.json` only
-when you want a new Marketplace version, and the publish step idempotently
-skips on tags that don't change it.
+release (which Zenodo archives), all from `.github/workflows/release.yml`.
+The tag, `package.json` (engine) and `vscode-extension/package.json`
+(extension) must carry the same number (ADR of 2026-11-03 — locked
+versioning); the workflow refuses a tag that does not match both.
 
 ## Each release
 
@@ -53,10 +52,11 @@ Keep the CHANGELOG section and `RELEASE_NOTES.md` saying the same thing.
 - **A published npm version cannot be replaced.** If a release is broken,
   publish a fixed PATCH and
   `npm deprecate @vijaypjavvadi/bdd2pw@X.Y.Z "broken; use X.Y.Z+1"`.
-- **Extension version is independent from engine version.** The engine is on
-  v4.6.x; the extension is on v0.3.x. Both are correct. Bump
-  `vscode-extension/package.json` only when the extension itself changes;
-  tags that don't touch it leave the Marketplace untouched.
+- **Extension version is locked to the engine version** (from v4.6.6 onwards).
+  Bump both `package.json` AND `vscode-extension/package.json` in the same
+  commit, every release. The workflow refuses a tag that does not match
+  both. Pre-v4.6.6 drift (engine on 4.6.5 while the Marketplace sat on 0.3.0
+  for two months) is what this rule stops.
 - **`git add -A` stages junk.** Add release files by name. `.gitignore` covers
   `bench/.work`, `.pwheal/`, `artefacts/`, VSIX build output; don't fight it.
 - **`npm ci` lock mismatch.** Any version bump must be followed by `npm install

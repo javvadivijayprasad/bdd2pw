@@ -1,12 +1,23 @@
 # bdd2pw v4.6.6 — November 2026
 
-A small patch on 4.6.5: the release pipeline is now unified. One tag push
-runs one GitHub Actions workflow that publishes to npm, to the VS Code
-Marketplace (if the extension's `vscode-extension/package.json` version
-bumped), and creates the GitHub release (which Zenodo archives on its
-own). Every publish step is idempotent, so re-running a failed run is
-always safe. No tokens anywhere — npm and the Marketplace both use
-trusted publishing against the job's GitHub OIDC identity.
+A small patch on 4.6.5 that unifies the release pipeline **and** the
+version numbers. One tag push runs one GitHub Actions workflow that
+publishes to npm, to the VS Code Marketplace, and creates the GitHub
+release (which Zenodo archives on its own). Every publish step is
+idempotent, so re-running a failed run is always safe. No tokens
+anywhere — npm and the Marketplace both use trusted publishing against
+the job's GitHub OIDC identity.
+
+**Version-lock change — important for Marketplace users.** The VS Code
+extension version jumps from **0.3.0 → 4.6.6** in this release. From
+v4.6.6 onwards the engine (`@vijaypjavvadi/bdd2pw` on npm) and the
+extension (`vijaypjavvadi.bdd2pw` on the Marketplace) always share the
+same version number per release. The workflow refuses any tag that
+doesn't match both. The pre-v4.6.6 drift that let the Marketplace sit
+at 0.3.0 while the engine moved through v4.1 → v4.6.5 can't happen
+again. Marketplace users on 0.3.0 will see "4.6.6" as the next update —
+it IS the next update; semver allows the jump and installed
+functionality is a strict superset.
 
 bdd2pw is a deterministic scaffolder with an optional governed LLM
 fallback across three providers. It parses a Gherkin `.feature`,
@@ -28,6 +39,12 @@ this release.
 
 ## Changed in 4.6.6
 
+- **Version-lock**: engine and extension now share one version number
+  per release; `release.yml` refuses a tag that doesn't match both
+  `package.json` and `vscode-extension/package.json`.
+- **Extension bump 0.3.0 → 4.6.6**: aligns with the engine; no code
+  changes in the extension itself (feature catch-up is tracked in
+  Issue #31, scheduled for the next minor).
 - `CITATION.cff` restructured to the concept-DOI shape so the
   reference resolves to the latest archived version automatically
   (per the 2026-11-03 release-pipeline handoff).
@@ -41,6 +58,9 @@ this release.
   v4.4.1 provenance comments) run on both OSes in CI.
 - `docs/RELEASING.md` is the four-step routine; obsoletes
   `docs/RELEASE.md` (kept as a backup for one release).
+- `.prettierignore` extended to skip `tests/expected-output/`,
+  `examples/`, `bench/` — fixtures the generator must match
+  byte-for-byte and shouldn't be reformatted.
 
 ## Fixed before 4.6.6
 
