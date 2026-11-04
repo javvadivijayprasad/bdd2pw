@@ -42,7 +42,12 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "preflight": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test",
-    "smoke": "for s in scripts/smoke-*.mjs; do echo \"=== $s ===\"; node \"$s\" || exit 1; done"
+    "smoke": "for s in scripts/smoke-*.mjs; do echo \"=== $s ===\"; node \"$s\" || exit 1; done",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "src/**/*.ts": "prettier --write",
+    "tests/**/*.ts": "prettier --write"
   },
   "keywords": [
     "playwright",
@@ -85,13 +90,13 @@
   },
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
-    "openai": "^4.77.0",
-    "@google/generative-ai": "^0.21.0",
     "@faker-js/faker": "^9.3.0",
-    "xlsx": "^0.18.5",
+    "@google/generative-ai": "^0.21.0",
     "better-sqlite3": "^11.0.0",
+    "openai": "^4.77.0",
     "pino-pretty": "^11.0.0",
-    "playwright": "^1.45.0"
+    "playwright": "^1.45.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.2",
@@ -102,6 +107,8 @@
     "@typescript-eslint/parser": "^8.18.0",
     "@vitest/coverage-v8": "^1.6.0",
     "eslint": "^8.57.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
