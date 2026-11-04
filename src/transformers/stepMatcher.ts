@@ -379,6 +379,27 @@ const RULES: Rule[] = [
           warning: `Navigation target in "${step.text}" looks like a pagination phrase, not a URL or page object; emitting TODO so the user can bind it to a real pagination control (e.g. a 'Page-${digit}' button).`,
         };
       }
+      // v4.6.7 — attestqa 2026-11-04 handoff (F-0095). The target captured
+      // from `I navigate to "<path>"` was silently dropped when the POM
+      // already had a no-arg `goto()` helper: the step bound to
+      // `pageObject.goto()`, which opens "/" from the base URL, not the
+      // captured path. The test then ran against the wrong page but was
+      // green (no runtime error, no TODO).
+      //
+      // Fix: when the target LOOKS LIKE A PATH (starts with "/", "#",
+      // "http(s)://", or contains "?"), emit
+      // `<pageVar>.page.goto("<path>")` directly via customBody —
+      // bypassing the no-arg helper and preserving the step's intent.
+      // Narrative targets ("the login page", "dashboard") still route to
+      // the POM's goto() helper, which knows the right default URL.
+      const looksLikePath =
+        /^(?:https?:\/\/|\/|#)/.test(target) || target.includes("?");
+      if (looksLikePath) {
+        return {
+          step,
+          customBody: `await ${pageVar}.page.goto(${JSON.stringify(target)});`,
+        };
+      }
       const hasGoto = pom.methods.some((mm) => mm.name === "goto");
       if (hasGoto) {
         return {
