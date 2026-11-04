@@ -4,3 +4,10 @@ examples/output-playwright
 templates
 *.log
 .bdd2pw
+
+# v4.6.6 — fixtures the generator's output must match byte-for-byte.
+# Reformatting them would break every apiFixtures.test.ts assertion.
+tests/expected-output/
+examples/
+bench/
+
