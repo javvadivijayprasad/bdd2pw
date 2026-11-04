@@ -102,10 +102,15 @@ describe("llm-narrative-login end-to-end", () => {
   });
 
   describe("Navigate to <URL> — handled by existing rule 1", () => {
-    it("emits goto() for 'Navigate to <URL>' (synthesised method)", () => {
-      // The scaffolder synthesises a goto() that navigates to opts.url, so
-      // the spec calls it without arguments.
-      expect(specContents).toContain("await loginPage.goto();");
+    it("emits page.goto(<url>) for 'Navigate to <URL>' (preserves the captured URL)", () => {
+      // v4.6.7 — attestqa F-0095 fix. When the step names an explicit URL,
+      // rule 1 emits `loginPage.page.goto("<url>")` directly rather than
+      // the no-arg `loginPage.goto()` helper (which would silently drop
+      // the URL and open the base). Pre-v4.6.7 this test asserted the
+      // dropped-URL behaviour.
+      expect(specContents).toContain(
+        'await loginPage.page.goto("https://practicetestautomation.com/practice-test-login/");',
+      );
     });
   });
 

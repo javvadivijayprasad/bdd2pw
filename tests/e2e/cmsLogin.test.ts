@@ -82,11 +82,18 @@ describe("cms-login end-to-end (third-person dialect + compound input)", () => {
       expect(specContents).toContain('test.describe("Login Test CMS"');
     });
 
-    it("rule 1 (third-person + bare text + quoted URL) → goto()", () => {
-      // Background contains: Given User navigate to Login Page for Admin "URL"
+    it("rule 1 (third-person + bare text + quoted URL) → preserves the quoted URL", () => {
+      // Background contains: Given User navigate to Login Page for Admin "URL".
+      // v4.6.7 — attestqa F-0095 fix. When the captured target looks like a
+      // URL/path, rule 1 emits `pageVar.page.goto("<url>")` directly instead
+      // of the no-arg `loginPage.goto()` helper (which previously silently
+      // discarded the path). Pre-v4.6.7 this test asserted the dropped-path
+      // behaviour.
       const beforeEachIdx = specContents.indexOf("test.beforeEach");
       const slice = specContents.slice(beforeEachIdx, beforeEachIdx + 400);
-      expect(slice).toContain("await loginPage.goto();");
+      expect(slice).toContain(
+        'await loginPage.page.goto("https://cms.anhtester.com/login");',
+      );
     });
 
     it("rule 2c (compound input) emits TWO .fill() lines from ONE Gherkin step", () => {

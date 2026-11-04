@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.6.7] — 2026-11-04
+
+### Fixed — rule 1 (navigation) no longer drops the captured path
+
+attestqa handoff `bdd2pw-handoff-rule-26-drops-path-2026-11-04.md` (their
+finding F-0095 from Juice Shop run `20261023T173121Z-2fc20316`): when
+the POM already had a no-arg `goto()` helper, the navigation rule bound
+`I navigate to "<path>"` to `pageObject.goto()` — which opens the base
+URL, silently discarding the captured path. The test ran on the home
+page, asserted "Apple Juice (1000ml)" is visible (true on the home page
+too), and passed green against the wrong page.
+
+**Fix:** when the captured target looks like a path (starts with `/`,
+`#`, `http://`, `https://`, or contains `?`), rule 1 now emits
+`<pageVar>.page.goto("<path>")` directly via `customBody`, bypassing
+the no-arg helper. Narrative targets like "the login page" or
+"dashboard" still route to the POM's `goto()` helper so the baked-in
+default URL continues to work.
+
+Verified against 7 step shapes: `I navigate to "/#/search?q=…"` →
+`page.goto("/#/search?q=…")`; `I navigate to the login page` → still
+calls `pageObject.goto()`; pagination veto still fires on
+`I navigate to page 2`.
+
 ## [4.6.6] — 2026-11-03
 
 ### Theme: unified release pipeline + version-lock between engine and extension
