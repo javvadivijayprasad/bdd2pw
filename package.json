@@ -105,14 +105,14 @@
     "@types/node": "^20.12.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
-    "@vitest/coverage-v8": "^1.6.0",
+    "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^8.57.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=18"
