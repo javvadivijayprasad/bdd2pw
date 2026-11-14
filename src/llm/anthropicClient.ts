@@ -28,7 +28,7 @@ import type {
 } from "./types";
 import { SYSTEM_PROMPT, buildBatchUserPrompt, buildUserPrompt, cacheKey } from "./prompt";
 import { GovernanceClient, GovernanceUnreachableError } from "./governanceClient";
-import { type BindingCache, InMemoryCache, openSqliteCache } from "./cache";
+import { type BindingCache, openSqliteCache } from "./cache";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_GOVERNANCE_URL = "http://localhost:4900";

@@ -60,6 +60,12 @@ export interface ScaffoldProjectOptions {
    * Issue 9 and pw-emit v1.3.0.
    */
   dependencyStrategy?: "caret" | "exact";
+  /**
+   * v4.7.0 — when set to "pomwright", append the `pomwright` package to
+   * the scaffolded repo's `devDependencies`. Default `"classic"` emits
+   * the pre-v4.7.0 package.json.
+   */
+  target?: "classic" | "pomwright";
 }
 
 export interface ScaffoldProjectResult {
@@ -102,6 +108,34 @@ export async function scaffoldProject(
         filesWritten,
         warnings,
       );
+    }
+  }
+
+  // v4.7.0 — POMWright target PoC. When the scaffolder is emitting
+  // POMWright-shape POMs (opts.target === "pomwright"), the emitted
+  // project needs `pomwright` as a dev-dependency; otherwise the POM's
+  // `import { PageObject } from "pomwright"` line doesn't resolve on
+  // the first `npm install` in the output repo. Idempotent — re-scaffold
+  // with the same target doesn't produce a duplicate entry.
+  if (opts.target === "pomwright") {
+    const pkgPath = path.join(opts.repoRoot, "package.json");
+    if (await fs.pathExists(pkgPath)) {
+      try {
+        const pkgRaw = await fs.readFile(pkgPath, "utf8");
+        const pkg = JSON.parse(pkgRaw);
+        pkg.devDependencies ??= {};
+        if (!pkg.devDependencies["pomwright"]) {
+          pkg.devDependencies["pomwright"] = "^3.0.0";
+          const trailer = pkgRaw.endsWith("\n") ? "\n" : "";
+          await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + trailer, "utf8");
+        }
+      } catch {
+        warnings.push({
+          severity: "warn",
+          message:
+            "Could not append `pomwright` to package.json — file was malformed. Add it manually: `npm i -D pomwright`.",
+        });
+      }
     }
   }
 

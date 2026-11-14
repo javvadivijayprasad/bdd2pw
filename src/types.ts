@@ -281,6 +281,34 @@ export interface ScaffoldOptions {
    *     bare `// TODO:` comment, no runtime signal. Not recommended.
    */
   todoStepHandling?: "skip" | "throw" | "none";
+  /**
+   * v4.7.0 — alternative output shape (POMWright integration PoC, per
+   * DyHex design discussion on POMWright#63). `"classic"` (default)
+   * keeps byte-identical behaviour: Page Object classes with
+   * `readonly fieldName = page.getBy...` properties. `"pomwright"`
+   * emits `class LoginPage extends PageObject<Paths>` with locators
+   * registered under hierarchical dotted paths
+   * (`main.form@login.input@username`) via `this.add(path).method()`.
+   * The companion spec uses POMWright's own `test` fixture so
+   * `getNestedLocator(path)` works.
+   *
+   * POMWright is a runtime dep of the emitted project when this is
+   * set; add `pomwright` to the scaffolded repo's package.json.
+   *
+   * New POMs only in the PoC — updating existing POMWright POMs is
+   * deferred until the LocatorRegistry round-trip is figured out.
+   */
+  target?: "classic" | "pomwright";
+  /**
+   * v4.7.0 PoC gap #2a close-out. When `target === "pomwright"` and
+   * this is true, each scenario's bindings become a `@step()`-decorated
+   * method on the POM, and the test calls that method instead of
+   * inlining `test.step(...)` per Gherkin step. The Playwright report
+   * then shows one row per scenario — matching how a hand-written
+   * POMWright suite reads. Ignored when `target !== "pomwright"`.
+   * Default: false.
+   */
+  pomwrightStepMethods?: boolean;
   llm?: "anthropic" | "openai" | "gemini";
   governanceUrl?: string;
   templates?: string;

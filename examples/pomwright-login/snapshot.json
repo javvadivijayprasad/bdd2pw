@@ -1,0 +1,48 @@
+{
+  "url": "https://practicetestautomation.com/practice-test-login/",
+  "title": "Test Login | Practice Test Automation",
+  "elements": [
+    {
+      "tag": "input",
+      "role": "textbox",
+      "label": "Username",
+      "placeholder": "Username",
+      "cssSelector": "input#username",
+      "xpath": "/html/body/main/form[@id=\"login\"]/input[@name=\"username\"]"
+    },
+    {
+      "tag": "input",
+      "role": "textbox",
+      "label": "Password",
+      "placeholder": "Password",
+      "cssSelector": "input#password",
+      "xpath": "/html/body/main/form[@id=\"login\"]/input[@name=\"password\"]"
+    },
+    {
+      "tag": "button",
+      "role": "button",
+      "name": "Submit",
+      "text": "Submit",
+      "cssSelector": "button#submit",
+      "xpath": "/html/body/main/form[@id=\"login\"]/button[@id=\"submit\"]"
+    },
+    {
+      "tag": "h1",
+      "role": "heading",
+      "name": "Logged In Successfully",
+      "text": "Logged In Successfully",
+      "cssSelector": "h1.post-title",
+      "xpath": "/html/body/main/div/h1"
+    },
+    {
+      "tag": "div",
+      "role": "alert",
+      "name": "Your password is invalid!",
+      "text": "Your password is invalid!",
+      "cssSelector": "div#error",
+      "xpath": "/html/body/main/div[@id=\"error\"]"
+    }
+  ],
+  "domSnapshot": "<main><form id=\"login\"><input name=\"username\"/><input name=\"password\"/><button id=\"submit\">Submit</button></form></main>",
+  "accessibilityTree": null
+}

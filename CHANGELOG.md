@@ -9,6 +9,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.7.0] — 2026-11-10
+
+### Theme: POMWright integration — `--target=pomwright` emits DyHex/POMWright-shape POMs
+
+Per the design discussion with POMWright's author on
+[POMWright#63](https://github.com/DyHex/POMWright/issues/63). Classic
+emission is byte-identical to v4.6.x; the new target is behind an
+opt-in flag.
+
+### Added
+
+- **`--target={classic|pomwright}`** CLI flag (default `classic` — no
+  change to existing behaviour). When `pomwright`, the scaffolder
+  emits POMs that extend POMWright's `PageObject<Paths>` with
+  `LocatorRegistry` paths like `main.form@login.input@username`, and
+  tests use POMWright's own `test` fixture + `getNestedLocator(path)`.
+- **`src/transformers/hierarchyInferrer.ts`** — walks each scanned
+  element's xpath (CSS fallback) for stable ancestor containers
+  (landmarks `main`/`nav`/`header`/`footer`/`aside`; named containers
+  `form@login`/`section@checkout`/`dialog@...`); drops positional and
+  unnamed ancestors. Returns a flat-path + review-marker fallback
+  when no stable ancestor is found — per DyHex's explicit request.
+- **`src/emitters/pomwrightEmitter.ts`** — emits POMWright POM class,
+  `defineLocators()` body, and the companion spec with every
+  `pom.<field>` rewritten to `pom.getNestedLocator("<path>")` and
+  `pom.goto()` rewritten to `pom.navigation.goto()` (POMWright's own
+  base-class API).
+- **`--pomwright-step-methods`** — opt-in variant that turns each
+  scenario into a `@step()`-decorated POM method; the test calls that
+  method instead of inlining `test.step(...)`. Matches a hand-written
+  POMWright suite's shape. Inside method bodies, references become
+  `this.<x>` / `this.getNestedLocator(...)`.
+- **`src/repo/pomwrightScanner.ts`** — parses an existing POMWright
+  POM's `defineLocators()` body + `@step()` methods back into IR for
+  AUGMENT. Re-scaffold preserves hand-curated registrations verbatim
+  (new scan can't overwrite a `getByTestId("custom-username")` with a
+  freshly-picked `getByLabel("Username")`). `@step()` methods survive
+  byte-for-byte. The attestqa v4.5.x safety nets apply unchanged
+  because POMWright POMs now populate `repoState.pageObjects` just
+  like classic POMs.
+- **Auto-add `pomwright` to scaffolded `package.json`** when
+  `--target=pomwright` is set — `npm install` in the output repo just
+  works. Idempotent on re-scaffold.
+- **Unbound-step defence parity (v4.6.4)** — POMWright-target tests
+  with any TODO binding now get `test.fixme(true, "bdd2pw: N step(s)
+  not bound: …")` at the top, same as the classic target. Playwright
+  reports the test as skipped rather than silently passed.
+- **`tests/unit/pomwrightEmitter.test.ts`** — 8 cases pin the
+  hierarchy inference, POM emission, spec rewrite, `@step()` decoration,
+  and unknown-field warning behaviour.
+- **`examples/pomwright-login/`** — runnable fixture with feature,
+  snapshot, and before/after walkthrough README.
+- **`docs/POMWRIGHT_TARGET.md`** — full integration contract,
+  CLI/HTTP surface, hierarchy rules, PoC-covered-vs-deferred list,
+  feedback channel.
+
+### Changed — docs tidy
+
+- README section header advanced from `## What `bdd2pw` is and isn't
+  (as of v4.4.0)` → `(as of v4.7.0)`.
+- README `## What's new in v4.0.0` rewritten as `## What's new in
+  v4.7.0` with a compact history of v4.1 → v4.6.
+- README Verification table — test count advanced from `101/101 green
+  across 10 test files` to `455+ passing across 34+ test files` plus
+  a new POMWright verification row.
+
+### Changed — CI quiet
+
+- 13 pre-existing unused-import / unused-var lint warnings cleaned up
+  (drop unused imports in `anthropicClient`, `facade`, `openaiClient`,
+  `specMerge`, `v3110OpenAI.test`, `v400Data.test`; `_`-prefix
+  intentional-but-unused locals; drop catch binding where the error
+  is ignored). `npm run lint` is now `0 errors, 0 warnings`.
+
+### Known limitations of the POMWright target (deferred — tracked in `docs/POMWRIGHT_TARGET.md`)
+
+- Method parameter round-trip — AUGMENT preserves method bodies
+  verbatim but `params: []`; `loginAs(user: string)` becomes
+  `loginAs()` with `user` referenced undefined inside.
+- Shared-segment deduplication across pages (POMWright's locator
+  modules).
+- Session-storage overload — `super(..., { sessionStorage })` not
+  parsed or emitted; needs a Gherkin step shape to motivate it.
+
+### Breaking? No
+
+Classic target is byte-identical. All POMWright work is behind
+`--target=pomwright`. Engine ↔ extension version-lock from v4.6.6
+holds (both bumped to v4.7.0).
+
+- **#3 Auto-add `pomwright` to scaffolded `package.json`** — when `--target=pomwright`,
+  `scaffoldProject` now appends `"pomwright": "^3.0.0"` to the emitted
+  repo's `devDependencies`. The first `npm install` in the output
+  resolves `import { PageObject } from "pomwright"` out of the box.
+- **#2a Emit methods with `@step()` decoration** — new
+  `--pomwright-step-methods` flag (and `ScaffoldOptions.pomwrightStepMethods`).
+  When set, each scenario becomes a `@step()`-decorated method on the
+  POM (`scenarioSuccessfulLogin()`), and the test calls that method
+  instead of inlining `test.step(...)`. Matches the shape of a
+  hand-written POMWright suite and makes the Playwright report viewer
+  show one row per scenario. Method bodies use `this.<x>` /
+  `this.getNestedLocator(...)` (not `pom.<x>`) so they're valid inside
+  the class.
+- **#1 AUGMENT existing POMWright POMs** — new `src/repo/pomwrightScanner.ts`
+  parses an existing POMWright POM's `defineLocators()` body + its
+  `@step()` methods into the same `PageObjectIR` the classic scanner
+  produces. On re-scaffold, existing registrations are preserved
+  verbatim (`this.add("…").method(args)` kept byte-identical) and only
+  genuinely-missing paths are added; `@step()` methods are carried
+  forward verbatim. The attestqa v4.5.x safety nets (P0-1 REUSE no-op,
+  P0-3 unparseable → missing, P0-4 spec-reference guard) apply
+  unchanged because POMWright POMs now populate `repoState.pageObjects`
+  the same way classic POMs do.
+
+Known PoC limitations after this round (deferred):
+- Method params aren't round-tripped — `loginAs(user: string)` comes
+  back as `loginAs()` after AUGMENT. Method body is preserved but any
+  parameter references inside become undefined. Fix: extend
+  `pomwrightScanner`'s method-param parser (currently `params: []`).
+- Shared-segment deduplication across pages (POMWright's locator
+  modules) still not synthesised.
+- Session-storage `super(..., { sessionStorage })` overload not parsed
+  or emitted — needs a Gherkin step shape to motivate it.
+
 ## [4.6.7] — 2026-11-04
 
 ### Fixed — rule 1 (navigation) no longer drops the captured path

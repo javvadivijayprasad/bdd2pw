@@ -155,7 +155,7 @@ async function scanPageWithBrowser(opts: ScanPageOptions): Promise<PageSnapshot>
         waitUntil: "networkidle",
         timeout: opts.waitForNetworkIdleMs ?? 5000,
       });
-    } catch (err) {
+    } catch {
       // Network-idle is best-effort; some SPAs never reach it. Fall back to
       // domcontentloaded — the page DOM is at least populated.
       try {
