@@ -7,12 +7,12 @@
  * a controllable mock that returns canned responses.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import Module from "module";
 import { OpenAILLMClient } from "../../src/llm/openaiClient";
 import { DEFAULT_PRICING } from "../../src/llm/telemetry";
 import type { GenerateBindingInput } from "../../src/llm/types";
-import type { PageObjectIR, StepIR } from "../../src/types";
+import type { PageObjectIR } from "../../src/types";
 
 const POM: PageObjectIR = {
   className: "LoginPage",

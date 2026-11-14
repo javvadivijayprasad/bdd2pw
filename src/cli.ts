@@ -75,6 +75,16 @@ program
     "skip",
   )
   .option(
+    "--target <output>",
+    "v4.7.0 PoC — Page Object shape: 'classic' (default — readonly class fields + plain Playwright test) or 'pomwright' (LocatorRegistry paths + POMWright fixture). The emitted project needs `pomwright` as a runtime dep when 'pomwright' is set. PoC per POMWright#63.",
+    "classic",
+  )
+  .option(
+    "--pomwright-step-methods",
+    "v4.7.0 — when --target=pomwright, emit each scenario as a @step()-decorated POM method; the test calls that method. One report row per scenario instead of one per Gherkin step. Ignored when target is classic.",
+    false,
+  )
+  .option(
     "--snapshot-file <path>",
     "Read elements from a JSON file instead of launching a browser",
   )
@@ -251,6 +261,9 @@ program
           opts.todoStepHandling === "none"
             ? (opts.todoStepHandling as "skip" | "throw" | "none")
             : "skip",
+        // v4.7.0 — POMWright target PoC
+        target: opts.target === "pomwright" ? "pomwright" : "classic",
+        pomwrightStepMethods: opts.pomwrightStepMethods === true,
         llm: opts.llm,
         llmConfig,
         governanceUrl: opts.governanceUrl,

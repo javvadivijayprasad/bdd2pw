@@ -62,7 +62,6 @@ import {
   LLMTelemetry,
   createLLMClient,
   matchScenarioWithLLM,
-  matchStepWithLLM,
   type LLMClient,
 } from "./llm";
 
@@ -91,7 +90,11 @@ export type {
   ReviewItem,
 } from "./types";
 
-class NotImplementedError extends Error {
+// Historical: NotImplementedError was used by the pre-v4.0 skeleton to
+// mark stubs. Every entry point is implemented now; the class is kept
+// here only in case a downstream caller imports it (unexported, so
+// unused-vars gates would fire — the prefix below silences that).
+class _NotImplementedError extends Error {
   constructor(fn: string, phase: string) {
     super(
       `bdd2pw.${fn}() is not implemented yet — landing in ${phase}. ` +
@@ -165,11 +168,46 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     selfHealingMode: opts.selfHealingMode,
     legacyHealing: opts.legacyHealing,
     dependencyStrategy: opts.dependencyStrategy,
+    // v4.7.0 — POMWright target PoC
+    target: opts.target,
   });
   reviewItems.push(...scaffoldResult.warnings);
 
   // 3) Scan target repo for existing POMs
   const repoState = await scanRepo(opts.repo);
+
+  // v4.7.0 PoC gap #1 close-out. When --target=pomwright, also parse
+  // every existing POMWright-shape POM in `pages/` and merge it into
+  // `repoState.pageObjects`. Without this pass the classic scanner
+  // sees no fields (POMWright doesn't use class-field locators),
+  // every scan looks like CREATE, and AUGMENT re-overwrites the
+  // existing registry. With the pass, the resolver's REUSE / AUGMENT
+  // decision works against the POMWright path vocabulary, and the
+  // attestqa v4.5.x safety nets (P0-1 REUSE no-op, P0-3 unparseable
+  // → missing, P0-4 spec-reference guard) apply unchanged.
+  if (opts.target === "pomwright") {
+    const { parsePomwrightSource } = await import("./repo/pomwrightScanner");
+    const pagesDir = path.join(opts.repo, "pages");
+    if (await fs.pathExists(pagesDir)) {
+      for (const entry of await fs.readdir(pagesDir)) {
+        if (!entry.endsWith(".page.ts")) continue;
+        const pomPath = path.join(pagesDir, entry);
+        const raw = await fs.readFile(pomPath, "utf8").catch(() => undefined);
+        if (!raw) continue;
+        const parsed = parsePomwrightSource(raw, pomPath);
+        if (!parsed) continue;
+        // Replace or add the POM in repoState. The classic scanner may
+        // have mis-parsed it as empty; overwrite with the POMWright view.
+        repoState.pageObjects.set(parsed.pom.className, parsed.pom);
+        if (parsed.unparseableFieldNames.length > 0) {
+          repoState.unparseableFieldNames.set(
+            parsed.pom.className,
+            parsed.unparseableFieldNames,
+          );
+        }
+      }
+    }
+  }
 
   // 4) Discover page elements
   //    Three modes:
@@ -829,31 +867,109 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
         : undefined;
     const specStem = resolvedSpecName ?? pomStem.replace(/\.page$/, ""); // "login"
     const specPath = path.join(opts.repo, "tests", `${specStem}.spec.ts`);
-    const specEmit = emitTestFile({
-      describeName: feature.name,
-      beforeEach: beforeEachBindings.length ? beforeEachBindings : undefined,
-      scenarios: flattened,
-      pomImports: [
-        {
-          // v3.7.1 — use the normalised PascalCase className so the
-          // emitted `import { Repro } from ...` and `new Repro(page)`
-          // don't shadow the camelCase `const repro = ...` variable.
-          className: pageClassName,
-          fromPath: `../pages/${pomStem}`,
-        },
-      ],
-      // v3.1.0 — pass through the instrumentation flags so cloud-jobs /
-      // TestForge can opt into per-step hooks + boundary markers.
-      stepHooks: opts.stepHooks === true,
-      stepMarkers: opts.stepMarkers === true,
-      // v4.4.1 — provenance comments default ON. Users opt out via
-      // --no-provenance-comments or `provenanceComments: false`.
-      provenanceComments: opts.provenanceComments !== false,
-      // v4.6.4 — attestqa handoff. Default "skip" marks tests with any
-      // unbound step as test.fixme() so Playwright reports them skipped
-      // rather than silently passed.
-      todoStepHandling: opts.todoStepHandling ?? "skip",
-    });
+    // v4.7.0 — POMWright target PoC (POMWright#63). When
+    // --target=pomwright, re-emit BOTH the POM and the spec via
+    // pomwrightEmitter and skip the classic paths below. The POM file
+    // path is the same (pages/<name>.page.ts); the spec file path is
+    // the same (tests/<name>.spec.ts). Everything else in the pipeline
+    // (tsc validate, review report, rollback guard, etc.) still runs.
+    let specEmit: { contents: string; warnings: ReviewItem[] };
+    if (opts.target === "pomwright") {
+      const { emitPomwrightPom, emitPomwrightSpec } =
+        await import("./emitters/pomwrightEmitter");
+      const urlObj = new URL(opts.url);
+      // v4.7.0 PoC gap #1 — if the scanner parsed an existing POMWright
+      // POM for this class, carry its registrations + @step() methods
+      // forward so AUGMENT preserves hand-curated work.
+      const existingPomwrightPom = repoState.pageObjects.get(pageClassName);
+      const existingRegistrations = new Map<string, string>();
+      const existingMethods: Array<{ name: string; body: string }> = [];
+      if (existingPomwrightPom) {
+        for (const f of existingPomwrightPom.fields) {
+          if (f.confidence === "unparseable") continue;
+          existingRegistrations.set(f.fieldName, `${f.api}(${f.args})`);
+        }
+        for (const m of existingPomwrightPom.methods) {
+          if (m.origin === "existing") {
+            existingMethods.push({ name: m.name, body: m.body });
+          }
+        }
+      }
+      // First pass: emit the POM to get pathByFieldName for the spec
+      // rewriter. We pass methodsAppend later on the second pass only
+      // if stepMethods was requested.
+      const pomwrightPom1 = emitPomwrightPom({
+        pom: finalPom,
+        baseUrl: urlObj.origin,
+        urlPath: urlObj.pathname + urlObj.search + urlObj.hash,
+        existingRegistrations,
+        existingMethods,
+      });
+      // Spec emission uses the path map; also returns pomMethodsAppend
+      // when stepMethods is set (v4.7.0 PoC gap #2a close-out).
+      specEmit = emitPomwrightSpec({
+        describeName: feature.name,
+        pomClassName: pageClassName,
+        pomVar: pageVar,
+        pomImportPath: `../pages/${pomStem}`,
+        scenarios: flattened,
+        pathByFieldName: pomwrightPom1.pathByFieldName,
+        beforeEach: beforeEachBindings.length ? beforeEachBindings : undefined,
+        stepMethods: opts.pomwrightStepMethods === true,
+        // v4.7.0 — parity with the classic emitter's v4.6.4 default:
+        // mark tests with any unbound step as test.fixme() so
+        // Playwright reports them skipped rather than silently passed.
+        todoStepHandling: opts.todoStepHandling ?? "skip",
+      }) as typeof specEmit & { pomMethodsAppend?: string };
+      // Second pass: re-emit the POM with the method block appended,
+      // but only when the spec emitter actually produced one.
+      const methodsAppend = (specEmit as { pomMethodsAppend?: string }).pomMethodsAppend;
+      const pomwrightPomFinal = methodsAppend
+        ? emitPomwrightPom({
+            pom: finalPom,
+            baseUrl: urlObj.origin,
+            urlPath: urlObj.pathname + urlObj.search + urlObj.hash,
+            methodsAppend,
+            existingRegistrations,
+            existingMethods,
+          })
+        : pomwrightPom1;
+      // Overwrite the POM contents that would have been written by the
+      // classic path above.
+      if (!shouldSkipPomEmit && !isReuseNoop && !blockedByStillUsed) {
+        await fs.writeFile(finalPom.filePath, pomwrightPomFinal.contents, "utf8");
+        // filesWritten was already pushed by the classic write; don't double-count.
+      }
+      reviewItems.push(
+        ...pomwrightPomFinal.warnings.map((w) => ({ ...w, file: finalPom.filePath })),
+      );
+    } else {
+      specEmit = emitTestFile({
+        describeName: feature.name,
+        beforeEach: beforeEachBindings.length ? beforeEachBindings : undefined,
+        scenarios: flattened,
+        pomImports: [
+          {
+            // v3.7.1 — use the normalised PascalCase className so the
+            // emitted `import { Repro } from ...` and `new Repro(page)`
+            // don't shadow the camelCase `const repro = ...` variable.
+            className: pageClassName,
+            fromPath: `../pages/${pomStem}`,
+          },
+        ],
+        // v3.1.0 — pass through the instrumentation flags so cloud-jobs /
+        // TestForge can opt into per-step hooks + boundary markers.
+        stepHooks: opts.stepHooks === true,
+        stepMarkers: opts.stepMarkers === true,
+        // v4.4.1 — provenance comments default ON. Users opt out via
+        // --no-provenance-comments or `provenanceComments: false`.
+        provenanceComments: opts.provenanceComments !== false,
+        // v4.6.4 — attestqa handoff. Default "skip" marks tests with any
+        // unbound step as test.fixme() so Playwright reports them skipped
+        // rather than silently passed.
+        todoStepHandling: opts.todoStepHandling ?? "skip",
+      });
+    }
     reviewItems.push(...specEmit.warnings.map((w) => ({ ...w, file: specPath })));
     await fs.ensureDir(path.dirname(specPath));
     // v3.2.0 — TestForge Issue 7: merge mode. Preserve user-edited

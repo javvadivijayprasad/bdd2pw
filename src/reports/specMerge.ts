@@ -50,7 +50,7 @@ export function extractUserBlocks(existing: string): Map<string, string> {
   let m: RegExpExecArray | null;
   while ((m = re.exec(existing)) !== null) {
     const id = m[1];
-    const body = m[2];
+    const _body = m[2]; // kept via m[2] capture semantics; actual splice uses m[0] below
     // Stash the WHOLE block including markers so the splice keeps
     // them in the output. (If we only captured `body`, a subsequent
     // regen would lose the markers and the next regen wouldn't see

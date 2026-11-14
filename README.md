@@ -25,7 +25,7 @@ Most teams writing BDD test cases (via Cucumber `.feature` files, possibly autho
 
 Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live page with Chromium, picks the most stable locator for every interactive element, matches each step to a POM method call, and emits a runnable Playwright TypeScript repo — including `playwright.config.ts`, `pages/login.page.ts`, `tests/login.spec.ts`, and a `BDD_REVIEW.md` listing anything a human still needs to look at.
 
-## What `bdd2pw` is and isn't (as of v4.4.0)
+## What `bdd2pw` is and isn't (as of v4.7.0)
 
 `bdd2pw` is a **deterministic scaffolder with an optional governed LLM fallback across three providers**. The output is honest about its limits:
 
@@ -49,22 +49,21 @@ Point it at a `.feature` file and a URL. It parses the Gherkin, scans the live p
 
 > **The pitch.** Run `bdd2pw scaffold` and you get a Playwright TS repo where `npx playwright test` runs against the real site. For specific fixtures, all green. For vague ones, the 60-90% you'd otherwise hand-write is done; you finish the rest — or you let the governed LLM finish them.
 
-## What's new in v4.0.0
+## What's new in v4.7.0
 
-- **NEW** `--data <path>` — load CSV / JSON / XLSX file and inject rows into every Scenario Outline's Examples table. Drop in a 500-row dataset without touching the .feature file.
-- **NEW** `--gen-data --schema <path> --rows N` — generate synthetic Examples rows. Schema picks per-column source: `faker.internet.email` for common fields, `llm:auto insurance claim description` for context-aware domain data. Seeded for reproducibility (`--seed 42`).
-- **NEW** `LLMClient.generateText()` — generic single-prompt API on all three providers (Anthropic, OpenAI, Gemini). Same governance + budget + timeout + telemetry pipeline as binding generation.
-- Gemini provider — three-provider parity complete. `--llm gemini` defaults to `gemini-2.5-flash` ($0.10/M input — cheapest across all three providers). (v3.12.0)
-- OpenAI provider with full parity. `--llm openai` defaults to `gpt-4o-mini`. (v3.11.0)
-- `bdd2pw heal-stats <repo>` CLI reads `<repo>/artefacts/heal-events.jsonl` and writes a heal-stats.json sidecar with heal rate, top failing fields, retry latency, candidate-selector promotions (v3.10.0).
-- `llmStats: true` writes `<repo>/artefacts/llm-stats.json` with per-call latency, token counts, cache hit rate, and an estimated cost in USD (v3.9.0).
-- Seven domain rule packs (banking, healthcare, insurance, retail, gov, education, telecom) — ~140 industry-specific patterns total.
-- Per-scenario LLM batching cuts Anthropic spend by ~75% on unmatched-heavy scaffolds.
-- `bdd2pw propose-rules` CLI clusters past LLM bindings into draft regex proposals — turning the offline-review pipeline into one command.
-- `diagnostics: true` adds a "Rule trace" block to `BDD_REVIEW.md` showing exactly which rules declined a step and why.
-- `merge: true` preserves user-edited blocks across regenerations.
-- `metaSidecar: true` writes `<spec>.spec.meta.json` describing every step's semantic intent for downstream tools.
-- VS Code extension (`vijaypjavvadi.bdd2pw`) v0.2.0 surfaces all the above as settings + commands.
+- **NEW** `--target=pomwright` — opt-in alternative output shape that emits POMs compatible with [POMWright](https://github.com/DyHex/POMWright) (`LocatorRegistry` paths like `main.form@login.input@username`, tests use POMWright's `test` fixture + `getNestedLocator(path)`). Hierarchy inferred from the scanned xpath/CSS; flat-path fallback + review warning when the DOM lacks structure. New-POM AUGMENT preserves hand-curated registrations and `@step()` methods verbatim. Full write-up: [`docs/POMWRIGHT_TARGET.md`](./docs/POMWRIGHT_TARGET.md). Walkthrough: [`examples/pomwright-login/`](./examples/pomwright-login/). Per the design discussion with POMWright's author on [POMWright#63](https://github.com/DyHex/POMWright/issues/63).
+- **NEW** `--pomwright-step-methods` — when set with `--target=pomwright`, each scenario becomes a `@step()`-decorated POM method the test calls. Matches a hand-written POMWright suite's shape; Playwright's report viewer shows one row per scenario.
+- Classic target is byte-identical to v4.6.x — zero diff for existing users.
+
+**Recent minors (full history in [`CHANGELOG.md`](./CHANGELOG.md)):**
+
+- **v4.6.0 → v4.6.7** — unified release pipeline (one tag → npm + VS Code Marketplace + GitHub release + Zenodo via trusted publishing, no tokens); engine/extension version-lock; attestqa integration continuity (spec-reference safety net, tsc-regression rollback, `--browser-channel`, unbound-step `test.fixme()` defence, navigation rule preserves captured path, list-field detection, N4e/N4f rules, active-page assertion with poll retry).
+- **v4.5.x** — attestqa Bug A (never emit `page.locator("")`); Bug B (re-scaffold no longer blanks hand-maintained POMs on discovery failure); REUSE + unparseable-field defences.
+- **v4.4.x** — `@llm-generated` scenario tag + `*.spec.meta.json` sidecar with full rule/pack/provider/model provenance; `bdd2pw quarantine-stats` + `bdd2pw coverage` reporting CLIs; `--spec-name` flag for attestqa integration; in-spec `// @bdd2pw lane=…` provenance comments.
+- **v4.3.x** — in-process self-healing via `@vijaypjavvadi/pw-self-heal` (trained ONNX ranker, no server, no API key); `--self-healing` emits the 3-line `tests/fixtures.ts` wrapper.
+- **v4.2.x** — DOM-drift detection via POM-header sha256; `--fail-on-drift` turns silent UI changes into a non-zero exit.
+- **v4.1.x** — six-pattern LLM-binding rewriter mechanically fixes common LLM emission mistakes before the hallucination-rejection gates (3/8 → 8/8 benchmark apps emit tsc-clean specs).
+- **v4.0.x** — data-driven scaffolds (`--data`, `--gen-data --schema`, `--seed`); three-provider LLM fallback (Anthropic + OpenAI + Gemini) with per-scenario batching; seven domain rule packs; three hallucination-rejection gates.
 
 ## Where this fits in the platform
 
@@ -432,11 +431,12 @@ output/
 |---|---|
 | `npm run lint` | ✅ clean |
 | `tsc --noEmit` | ✅ clean |
-| `npm test` (vitest) | ✅ **101/101 green** across 10 test files |
+| `npm test` (vitest) | ✅ **455+ passing** across 34+ test files |
 | `practice-test-login` end-to-end vs the live site | ✅ **7/7** scenarios green via `npx playwright test` |
 | `cms-login` (selenium14 dialect) regression | ✅ 12 assertions green, third-person + compound input + `is redirected` |
 | HTTP worker zip download | ✅ end-to-end test verifies real ZIP magic bytes |
 | `update-pom` preserves hand-edited method bodies | ✅ 5 byte-identical-survival assertions |
+| POMWright target emission + AUGMENT | ✅ 8-case unit suite + end-to-end `tsc --noEmit` against real `pomwright@^3.0.0` |
 
 ## Roadmap
 

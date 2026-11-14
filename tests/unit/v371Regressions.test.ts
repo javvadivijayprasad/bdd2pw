@@ -21,7 +21,7 @@ import { emitTestFile } from "../../src/emitters/facade";
 import { pascalCase } from "../../src/utils/naming";
 import type { PageObjectIR, StepBinding } from "../../src/types";
 
-const EMPTY_POM: PageObjectIR = {
+const _EMPTY_POM: PageObjectIR = {
   className: "Repro",
   filePath: "pages/repro.page.ts",
   fields: [],

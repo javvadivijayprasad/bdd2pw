@@ -18,7 +18,7 @@ import {
   type EmitPageObjectOptions,
 } from "@vijaypjavvadi/pw-emit";
 
-import type { PageObjectIR, LocatorChoice, StepBinding, ReviewItem } from "../types";
+import type { PageObjectIR, LocatorChoice, StepBinding } from "../types";
 import { camelCase } from "../utils/naming";
 import { flattenForComment } from "../utils/commentSafe";
 

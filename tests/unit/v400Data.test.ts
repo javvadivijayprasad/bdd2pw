@@ -21,7 +21,6 @@ import {
 import {
   generateSyntheticRows,
   loadSchema,
-  SynthGeneratorError,
   type SynthSchema,
 } from "../../src/data/synthGenerator";
 import {
@@ -31,7 +30,6 @@ import {
 } from "../../src/data/examplesInjector";
 import type { FeatureIR, ScenarioIR } from "../../src/types";
 import type {
-  GenerateBindingInput,
   GenerateBindingResult,
   GenerateTextResult,
   LLMClient,
