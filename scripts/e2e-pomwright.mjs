@@ -101,20 +101,23 @@ try {
   // 3. Install dependencies (pulls real `pomwright` + `@playwright/test`)
   run("npm", ["install", "--no-audit", "--no-fund"], { cwd: outDir });
 
-  // 4. Patch tsconfig moduleResolution if the scaffolder didn't already.
-  //    `"node"` is the removed `node10` alias on TypeScript 5.5+; patch
-  //    to `"node16"` (compatible with the template's `module: "commonjs"`
-  //    — unlike `"bundler"` which needs `module: "esnext"`/`"preserve"`).
+  // 4. Patch tsconfig if the scaffolder didn't already (defence in depth).
+  //    Upgrade both `module` and `moduleResolution` to the esnext+bundler
+  //    pair — avoids the TypeScript 5.5+ removed-node10-alias error while
+  //    keeping the lenient relative-import resolution the emitted spec
+  //    relies on (`../pages/login.page` without `.js`).
   const tsconfigPath = join(outDir, "tsconfig.json");
   if (existsSync(tsconfigPath)) {
     const raw = readFileSync(tsconfigPath, "utf8");
     if (/"moduleResolution"\s*:\s*"node"(?!(?:16|next))/.test(raw)) {
-      const patched = raw.replace(
-        /("moduleResolution"\s*:\s*)"node"(?!(?:16|next))/,
-        '$1"node16"',
-      );
+      const patched = raw
+        .replace(/("module"\s*:\s*)"commonjs"/, '$1"esnext"')
+        .replace(
+          /("moduleResolution"\s*:\s*)"node"(?!(?:16|next))/,
+          '$1"bundler"',
+        );
       writeFileSync(tsconfigPath, patched, "utf8");
-      console.log("e2e-pomwright: patched tsconfig moduleResolution node → node16");
+      console.log("e2e-pomwright: patched tsconfig module+moduleResolution → esnext+bundler");
     }
   }
 
