@@ -64,6 +64,13 @@ jobs:
             node "$s"
           done
 
+      - name: POMWright end-to-end check (scaffold → npm install → tsc --noEmit)
+        # v4.7.1 — attestqa POMWright review (POMWright#73 close, gate #2).
+        # Runs on both Windows and Ubuntu to catch OS-specific pathing bugs
+        # in the scaffolder. ~30-60s per OS because of the npm install.
+        shell: bash
+        run: node scripts/e2e-pomwright.mjs
+
   publish:
     needs: check
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'

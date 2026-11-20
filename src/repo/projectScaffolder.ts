@@ -91,6 +91,28 @@ export async function scaffoldProject(
   const filesWritten = [...result.filesWritten];
   const warnings = [...result.warnings];
 
+  // v4.7.1 audit fix — pw-emit's bundled tsconfig.json.tmpl writes
+  // `"moduleResolution": "node"`, which TypeScript 5.5+ treats as the
+  // removed `node10` alias and errors on. Patching in-place keeps the
+  // emitted output valid for modern TypeScript without a pw-emit
+  // version bump. Idempotent: skips if already `bundler` / `node16` /
+  // `nodenext`. Follow-up: fix at the pw-emit template level.
+  const emittedTsconfig = path.join(opts.repoRoot, "tsconfig.json");
+  if (await fs.pathExists(emittedTsconfig)) {
+    try {
+      const raw = await fs.readFile(emittedTsconfig, "utf8");
+      if (/"moduleResolution"\s*:\s*"node"(?!(?:16|next))/.test(raw)) {
+        const patched = raw.replace(
+          /("moduleResolution"\s*:\s*)"node"(?!(?:16|next))/,
+          '$1"bundler"',
+        );
+        await fs.writeFile(emittedTsconfig, patched, "utf8");
+      }
+    } catch {
+      // Non-fatal — leave the tsconfig as emitted.
+    }
+  }
+
   if (opts.selfHealing) {
     if (opts.legacyHealing) {
       warnings.push({

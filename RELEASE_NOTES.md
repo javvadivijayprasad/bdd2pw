@@ -1,13 +1,10 @@
-# bdd2pw v4.7.0 — November 2026
+# bdd2pw v4.7.1 — November 2026
 
-A minor release that lands the **POMWright integration**: a new
-`--target=pomwright` flag that emits Page Objects compatible with
-[POMWright](https://github.com/DyHex/POMWright), DyHex's typed-path
-`LocatorRegistry` library for Playwright. Classic emission is
-byte-identical to v4.6.x — zero diff for existing users.
-
-Per the design discussion with POMWright's author on
-[POMWright#63](https://github.com/DyHex/POMWright/issues/63).
+Closes the three gates POMWright's maintainer (@DyHex) named in his
+[POMWright#73 review](https://github.com/DyHex/POMWright/pull/73) of
+v4.7.0's `--target=pomwright` PoC, plus the self-healing disclosure
+request he added. No breaking changes for classic-target users; this
+is a patch release that makes the POMWright target correct.
 
 ## Install
 
@@ -18,235 +15,107 @@ npx playwright install chromium             # browser for live page discovery
 
 VS Code: install **bdd2pw — Gherkin to Playwright** from the
 Marketplace (publisher `vijaypjavvadi`), or the `.vsix` attached to
-this release. Engine and extension share one version (locked from
-v4.6.6 onwards) — this release ships v4.7.0 of both.
+this release. Engine and extension share one version.
 
-## The POMWright target, by example
+## What was wrong in v4.7.0 (the three gates)
 
-**Input** — any `.feature` file, e.g. `examples/pomwright-login/login.feature`:
+### Gate 1 — hierarchy inference emitted `getByRole` that never matched
 
-```gherkin
-Scenario: Successful login
-  Given I am on the login page
-  When I enter "student" into the username field
-  And I enter "Password123" into the password field
-  And I click the Submit button
-```
+v4.7.0's `hierarchyInferrer` registered `<form id="login">` as
+`getByRole("form", { name: "Login" })`. Playwright's `getByRole(role,
+{ name })` requires the accessible name to come from `aria-label` or
+the browser's computed name — **`id` alone doesn't satisfy it**
+([Playwright's own rule](https://github.com/microsoft/playwright/blob/v1.65.1/packages/injected/src/roleUtils.ts#L113),
+via `hasExplicitAccessibleName`). Every path below the form segment
+was silently dead. Same bug for `*[@id="..."]` → `getByRole("region",
+{name})` and for treating `aria-labelledby` as the label text.
 
-**Scaffold** — opt in via `--target=pomwright`:
+**Fixed in v4.7.1:** the inferrer now carries per-segment attribute-source
+metadata to the emitter, which picks the right Playwright call per
+source:
 
-```bash
-npx bdd2pw scaffold login.feature \
-  --url https://practicetestautomation.com/practice-test-login/ \
-  --page LoginPage \
-  --target=pomwright \
-  --repo ./out
-```
+| Scanner input | v4.7.0 (wrong) | v4.7.1 (right) |
+|---|---|---|
+| `form[@aria-label="Checkout"]` | `getByRole("form", { name: "Checkout" })` | `getByRole("form", { name: "Checkout" })` ✓ unchanged |
+| `form[@id="login"]` | `getByRole("form", { name: "Login" })` ✗ dead | `.locator("form#login")` ✓ |
+| `dialog[@aria-labelledby="h"]` | `getByRole("region", { name: "H" })` ✗ wrong | `.locator('dialog[aria-labelledby="h"]')` + review warning ✓ |
+| `form[@name="X"]` | `getByRole("form", { name: "X" })` ✗ dead | `.locator('form[name="X"]')` ✓ |
+| `main`, `nav`, `header`, `footer`, `aside` | `getByRole(landmark)` | `getByRole(landmark)` ✓ unchanged |
 
-**Emitted `pages/login.page.ts`** — POMWright-shape with hierarchical
-`LocatorRegistry` paths inferred from the scanned xpath/CSS:
+### Gate 2 — no end-to-end check that the emission compiles
 
-```ts
-import { type Page } from "@playwright/test";
-import { PageObject } from "pomwright";
+v4.7.0's unit tests compared emitted strings against expected strings.
+Didn't catch the gate-1 bug (the wrong-API strings matched the wrong
+expectations). A real `tsc --noEmit` against real `pomwright` would
+also not have caught it (the TypeScript is valid; it just doesn't
+MATCH on a page) — but it would catch the next class of bug, where
+the emitter uses a POMWright API that doesn't exist or has changed.
 
-type Paths =
-  | "main"
-  | "main.form@login"
-  | "main.form@login.button@submit"
-  | "main.form@login.input@password"
-  | "main.form@login.input@username";
+**Added in v4.7.1:** new `scripts/e2e-pomwright.mjs` scaffolds the
+example, runs `npm install` to pull real `pomwright@^3`, and runs
+`tsc --noEmit`. Wired into `release.yml`'s `check` job on both
+Windows and Ubuntu. Also exposed as `npm run e2e:pomwright` for
+local use.
 
-export class LoginPage extends PageObject<Paths> {
-  constructor(page: Page) {
-    super(page, "https://practicetestautomation.com", "/practice-test-login/");
-  }
+### Gate 3 — docs disagreed about PoC scope
 
-  protected defineLocators(): void {
-    this.add("main").getByRole("main");
-    this.add("main.form@login").getByRole("form", { name: "Login" });
-    this.add("main.form@login.input@username").getByLabel("Username");
-    this.add("main.form@login.input@password").getByLabel("Password");
-    this.add("main.form@login.button@submit").getByRole("button", { name: "Submit" });
-  }
-}
-```
+The PoC was originally agreed on POMWright#63 as new-POM-only. v4.7.0's
+`docs/POMWRIGHT_TARGET.md` and the PR README text said AUGMENT and
+`@step()` methods were supported; the `examples/pomwright-login/README.md`
+said new-POM only. Documentation disagreed with itself.
 
-**Emitted `tests/login.spec.ts`** — uses POMWright's own `test`
-fixture; every step references the registered path via
-`getNestedLocator`:
+**Clarified in v4.7.1:** the PoC merge contract is new-POM only, as
+originally agreed. The `--pomwright-step-methods` flag and AUGMENT
+code are still in the codebase (both work, both pass unit tests), but
+all three docs now label them as **experimental, opt-in, not part of
+the PoC merge contract**. Teams that want them can still use them;
+the first-round POMWright integration doesn't promise them.
 
-```ts
-import { expect } from "@playwright/test";
-import { test as base } from "pomwright";
-import { LoginPage } from "../pages/login.page";
+## Also added — self-healing / POMWright incompatibility note
 
-const test = base.extend<{ loginPage: LoginPage }>({
-  loginPage: async ({ page }, use) => { await use(new LoginPage(page)); },
-});
+bdd2pw's `--self-healing` flag wraps the emitted `test` with a runtime
+healer that picks a similar element when the primary locator fails to
+match. POMWright is built on the opposite principle: a test fails when
+the page changes rather than finding a similar element elsewhere (see
+[POMWright Principles](https://dyhex.github.io/POMWright/docs/principles/)).
 
-test("Successful login", async ({ loginPage }) => {
-  await test.step("Given I am on the login page", async () => {
-    await loginPage.navigation.goto();
-  });
-  await test.step("When I enter \"student\" into the username field", async () => {
-    await loginPage.getNestedLocator("main.form@login.input@username").fill("student");
-  });
-  await test.step("When I enter \"Password123\" into the password field", async () => {
-    await loginPage.getNestedLocator("main.form@login.input@password").fill("Password123");
-  });
-  await test.step("When I click the Submit button", async () => {
-    await loginPage.getNestedLocator("main.form@login.button@submit").click();
-  });
-});
-```
+The two flags are orthogonal — nothing at the CLI prevents combining
+them. But the combination **silently weakens POMWright's guarantees**.
+`docs/POMWRIGHT_TARGET.md` now carries an explicit "do not combine"
+section with the rationale; `examples/pomwright-login/README.md` echoes
+it; the top-level README mentions it in the v4.7 what's-new.
 
-`pomwright` is added to the scaffolded repo's `devDependencies`
-automatically — `npm install` just works. `npx tsc --noEmit` in the
-emitted project passes against real `pomwright@^3.0.0`, verified
-end-to-end on Windows.
+## Also fixed — scaffolded tsconfig `moduleResolution`
 
-## Hierarchy inference — how the paths are picked
+The pw-emit-bundled `tsconfig.json.tmpl` emits `"moduleResolution":
+"node"`, which TypeScript 5.5+ treats as the removed `node10` alias
+and errors on. The e2e-pomwright script now patches this to
+`"bundler"` (TypeScript's recommended modern value, stable across 5.x)
+after `npm install` and before `tsc --noEmit`. Permanent fix lives at
+the pw-emit source level — tracked as a follow-up.
 
-bdd2pw walks each scanned element's `xpath` (or CSS selector fallback)
-and keeps only stable ancestor containers:
+## Changed in 4.7.1
 
-| Container shape | Kept as path segment? |
-|---|---|
-| `main`, `nav`, `header`, `footer`, `aside` (bare landmarks) | ✅ yes — unique on the page |
-| `form[@id="…"]`, `section[@aria-label="…"]`, `dialog[@id="…"]` | ✅ yes — carries an identifying name |
-| `div[2]`, `span`, unnamed `section` | ❌ no — positional/unstable |
+- `src/transformers/hierarchyInferrer.ts` — new `AncestorMeta` + `AncestorAttrSource` types; `extractAncestors` returns richer entries; `inferPomwrightPath` builds a `Map<path, AncestorMeta>`.
+- `src/emitters/pomwrightEmitter.ts` — reads the per-ancestor metadata and emits the right Playwright call per attribute source.
+- `scripts/e2e-pomwright.mjs` — new E2E CI script.
+- `.github/workflows/release.yml` — wires the e2e script into the `check` job.
+- `package.json` — new `e2e:pomwright` npm script.
+- `docs/POMWRIGHT_TARGET.md` — PoC scope section rewritten; self-healing incompatibility section added.
+- `examples/pomwright-login/README.md` — limitations list updated to match; self-healing note added.
+- `README.md` — v4.7 what's-new entry rewritten to match PoC scope + self-healing note.
 
-When an element has no stable ancestor, the path falls back to the
-leaf alone and `BDD_REVIEW.md` records a warning:
-
-```
-[warn] POMWright hierarchy fell back to flat for "heroHeading" — no stable
-       ancestor (main/form/nav/section-with-name) was found in the scanned
-       xpath/CSS. Consider adding an id, aria-label or role to the container,
-       or editing the registered path in the generated POM by hand.
-```
-
-This is the explicit design call from DyHex's review: simpler paths +
-manual-review marker over brittle chains.
-
-## Opt-in `@step()` methods for POMWright-idiomatic suites
-
-Add `--pomwright-step-methods` and each scenario becomes a
-`@step()`-decorated method on the POM; the test calls that method
-instead of inlining `test.step(...)`. Matches a hand-written POMWright
-suite's shape — Playwright's report viewer shows one row per scenario.
-
-```ts
-// Emitted with --pomwright-step-methods:
-test("Successful login", async ({ loginPage }) => {
-  await loginPage.scenarioSuccessfulLogin();
-});
-```
-
-```ts
-// …and inside LoginPage (appended by the emitter):
-@step()
-async scenarioSuccessfulLogin(): Promise<void> {
-  await this.navigation.goto();
-  await this.getNestedLocator("main.form@login.input@username").fill("student");
-  await this.getNestedLocator("main.form@login.input@password").fill("Password123");
-  await this.getNestedLocator("main.form@login.button@submit").click();
-}
-```
-
-Inside the method body, every `pom.<x>` reference becomes `this.<x>` /
-`this.getNestedLocator(...)` (not `pom.…`) — valid TypeScript inside
-the class.
-
-## AUGMENT — re-scaffold preserves hand-curated work
-
-Running the scaffolder again against a repo that already has a
-POMWright POM preserves every existing registration and
-`@step()`-decorated method verbatim. The new scan only adds
-genuinely-missing paths. The classic bdd2pw AUGMENT contract:
-hand-curated locator tuning (e.g. `getByTestId("custom-username")`
-that the user wrote by hand) is never overwritten by what the fresh
-scan picked.
-
-The attestqa v4.5.x safety nets (P0-1 REUSE no-op, P0-3 unparseable-fields
-counted as missing, P0-4 spec-reference guard) apply unchanged because
-POMWright POMs now populate `repoState.pageObjects` via the new
-`src/repo/pomwrightScanner.ts`, just like classic POMs.
-
-## Unbound-step defence (v4.6.4 parity)
-
-If a step fails to match any rule, the emitted test gets
-`test.fixme(true, "bdd2pw: N step(s) not bound: …")` at the top.
-Playwright reports it as **skipped** with the reason, not a silent
-pass. Same default behaviour as the classic target since v4.6.4.
-
-## Changed in 4.7.0
-
-- **NEW `--target=pomwright`** — POMWright-shape POM + spec emission.
-  `classic` is the default and byte-identical to v4.6.x.
-- **NEW `--pomwright-step-methods`** — scenario-per-method emission
-  with `@step()` decoration.
-- **NEW `src/transformers/hierarchyInferrer.ts`** — walks xpath/CSS
-  for stable ancestor chains; flat fallback with review marker.
-- **NEW `src/emitters/pomwrightEmitter.ts`** — produces the POMWright
-  POM class, spec, and the `@step()` method block.
-- **NEW `src/repo/pomwrightScanner.ts`** — parses an existing
-  POMWright POM into IR for the AUGMENT path.
-- **NEW `tests/unit/pomwrightEmitter.test.ts`** — 8 cases pinning the
-  emitted shape.
-- **NEW `examples/pomwright-login/`** — runnable fixture with feature
-  + snapshot + README walkthrough.
-- **NEW `docs/POMWRIGHT_TARGET.md`** — full integration contract,
-  CLI/HTTP surface, inference rules, PoC-covered-vs-deferred list.
-- **Scaffolded `package.json`** — auto-adds `"pomwright": "^3.0.0"`
-  to `devDependencies` when `--target=pomwright` is set.
-
-### Docs tidy
-
-- README `What bdd2pw is and isn't (as of v4.7.0)` — version tag
-  advanced from v4.4.0.
-- README `What's new in v4.0.0` section rewritten as `What's new in
-  v4.7.0` with a compact history of recent minors.
-- README Verification table — test count updated from `101/101 green
-  across 10 test files` to `455+ passing across 34+ test files` plus a
-  new POMWright verification row.
-- Citation section now references the SoftwareX paper (DOI
-  `10.1016/j.softx.2026.102933`) as the preferred cite; v4.0.1 Zenodo
-  artifact kept as the reproducibility pin.
-
-### CI quiet
-
-- All 13 pre-existing unused-import/unused-var lint warnings cleaned up.
-  CI output is now `0 errors, 0 warnings`.
-
-## Known POMWright-target limitations (deferred)
-
-- **Method parameter round-trip** — AUGMENT preserves method bodies
-  verbatim but the scanner currently uses `params: []`, so
-  `loginAs(user: string)` round-trips to `loginAs()` with `user`
-  referenced-undefined inside. Fix is ~20 lines in the scanner.
-- **Shared-segment deduplication across pages** — POMWright's
-  locator-module patterns aren't synthesised; each page's registry is
-  self-contained.
-- **Session-storage overload** — `super(page, baseUrl, path, {
-  sessionStorage })` isn't parsed or emitted; needs a Gherkin step
-  shape to motivate it.
-
-## How to upgrade
+## Upgrade
 
 ```bash
-npm install -D @vijaypjavvadi/bdd2pw@4.7.0
+npm install -D @vijaypjavvadi/bdd2pw@4.7.1
 ```
 
-Existing users on v4.6.x: no breaking change, no flag change, no
-output-shape change. Classic target is byte-identical.
-
-POMWright users: run `bdd2pw scaffold feature.feature --target=pomwright`
-and you get a POMWright POM + spec ready to run. `npm install` in the
-scaffolded repo adds `pomwright` automatically.
+No breaking changes. Classic-target users see no diff. POMWright-target
+users on v4.7.0 should re-scaffold any POM that depends on a `form` /
+`dialog` / `section` ancestor — the old output had broken `getByRole`
+calls on those; the new output uses `.locator("#id")` instead.
 
 See [`docs/POMWRIGHT_TARGET.md`](docs/POMWRIGHT_TARGET.md) for the
-full integration contract, [`examples/pomwright-login/`](examples/pomwright-login/)
-for a hands-on walkthrough, and [`CHANGELOG.md`](CHANGELOG.md) for the
+full integration contract and [`CHANGELOG.md`](CHANGELOG.md) for the
 full version history.

@@ -117,14 +117,25 @@ simpler paths + flag for manual review are preferable to brittle chains.
 
 ## Known limitations of the PoC
 
-- **New POMs only.** Updating an existing POMWright POM (preserving its
-  LocatorRegistry) is deferred.
-- **No reusable segment deduplication across pages.** Each page's registry
-  is self-contained; POMWright's locator-module / shared-segment patterns
-  aren't synthesised.
-- **No `@step()` decoration.** The PoC emits plain `test.step(...)` blocks
-  rather than methods with `@step()` — keeps the scope honest.
-- **Mobile dialect is untested** against POMWright shape.
+Per the POMWright#73 design-review follow-up (2026-11-16), the PoC
+merge contract is deliberately narrow. These are the limitations:
 
-See `docs/POMWRIGHT_TARGET.md` for the full integration contract and
-feedback channel.
+- **New POMs only.** AUGMENT of existing POMWright POMs exists in the
+  code but is marked experimental — not part of the PoC merge
+  contract.
+- **No `@step()` decoration by default.** `--pomwright-step-methods`
+  exists as an opt-in experimental flag; the PoC emits plain
+  `test.step(...)` blocks.
+- **No reusable segment deduplication across pages.** Each page's
+  registry is self-contained; POMWright's locator-module /
+  shared-segment patterns aren't synthesised.
+- **Mobile dialect is untested** against POMWright shape.
+- **`--self-healing` is NOT recommended with `--target=pomwright`.**
+  Self-healing conflicts with POMWright's fail-fast principle (a
+  POMWright suite is designed to fail when the page changes, not to
+  find a similar element elsewhere). See
+  [`docs/POMWRIGHT_TARGET.md`](../../docs/POMWRIGHT_TARGET.md) for the
+  full note.
+
+See [`docs/POMWRIGHT_TARGET.md`](../../docs/POMWRIGHT_TARGET.md) for
+the full integration contract and feedback channel.

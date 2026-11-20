@@ -9,6 +9,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [4.7.1] — 2026-11-16
+
+### Theme: POMWright PoC — three review gates closed (POMWright#73)
+
+The POMWright maintainer (DyHex) reviewed v4.7.0's `--target=pomwright`
+PoC on [POMWright#73](https://github.com/DyHex/POMWright/pull/73) and
+named three concrete gates for the integration to be ready for the
+"Community integrations" page he offered. v4.7.1 closes all three
+plus the self-healing disclosure.
+
+### Fixed — hierarchy inference emits the wrong Playwright call (gate 1)
+
+v4.7.0's `hierarchyInferrer` collapsed every ancestor attribute source
+into the segment name and let the emitter assume every value was an
+accessible name. The emitted `getByRole("form", { name: "Login" })`
+for `<form id="login">` **never matched** on a real page, because
+Playwright's `getByRole(role, { name })` requires the name to come
+from `aria-label` or the browser's computed name — `id` alone doesn't
+satisfy it. Every leaf below the form segment was silently dead.
+
+v4.7.1's `hierarchyInferrer` now carries per-segment `AncestorMeta`
+(`tag`, `attrSource`, `attrValue`) through to the emitter, which
+picks the right Playwright call per source:
+
+- `aria-label="X"` → `getByRole(role, { name: "X" })` ✓ real accessible name
+- `id="X"` only → `.locator("<tag>#X")` ✓ CSS id fallback
+- `aria-labelledby="Y"` → `.locator('<tag>[aria-labelledby="Y"]')` + review warning (snapshot doesn't carry element#Y's text; user tightens)
+- `name="X"` (form attr) → `.locator('<tag>[name="X"]')`
+- landmark (`main`, `nav`, `header`, `footer`, `aside`) → `getByRole(landmark)` unchanged
+
+Verified against three cases: `form[@id="login"]`, `form[@aria-label="Checkout"]`, `dialog[@aria-labelledby="h"]`.
+
+### Added — end-to-end CI check (gate 2)
+
+New `scripts/e2e-pomwright.mjs` scaffolds `examples/pomwright-login/`
+into a tmp dir with `--target=pomwright`, runs `npm install` to pull
+real `pomwright@^3`, patches the pw-emit-emitted tsconfig's
+`moduleResolution` from `"node"` (removed as the `node10` alias in
+TypeScript 5.5+) to `"bundler"`, and runs `tsc --noEmit`. Wired into
+`release.yml`'s `check` job on both Windows and Ubuntu. Proves the
+emitted POM + spec actually compile against the real library's type
+definitions — not just against a string-compare expectation.
+
+Also exposed as the `e2e:pomwright` npm script for local use.
+
+### Changed — PoC scope narrowed to new-POM only (gate 3)
+
+Per the POMWright#73 review, the PoC merge contract is deliberately
+new-POM-only — as originally agreed on #63. `--pomwright-step-methods`
+and the AUGMENT-of-existing-POM code are still in the code (both
+work; both pass unit tests), but `docs/POMWRIGHT_TARGET.md`,
+`examples/pomwright-login/README.md`, and the top-level README now
+label them as **experimental, opt-in, not part of the PoC merge
+contract**. Teams that want them can still use them; the first-round
+POMWright integration doesn't promise them.
+
+### Added — explicit self-healing / POMWright incompatibility note
+
+`--self-healing` and `--target=pomwright` are orthogonal flags; nothing
+at the CLI prevents the combination. But self-healing's "find a
+similar element when the primary locator fails" behaviour silently
+weakens [POMWright's fail-fast principle](https://dyhex.github.io/POMWright/docs/principles/).
+`docs/POMWRIGHT_TARGET.md` now carries an explicit "do not combine"
+section with the rationale; `examples/pomwright-login/README.md` echoes
+it; the top-level README mentions it in the v4.7 what's-new.
+
+### Credit
+
+POMWright#73 review by @DyHex on 2026-11-16 naming all three gates
+(hierarchy-inference name attribute, end-to-end CI check, PoC scope
+narrowing) + the self-healing disclosure request. Thanks for the
+honest shaping — the integration is better for it.
+
 ## [4.7.0] — 2026-11-10
 
 ### Theme: POMWright integration — `--target=pomwright` emits DyHex/POMWright-shape POMs
