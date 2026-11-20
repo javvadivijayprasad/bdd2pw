@@ -91,6 +91,37 @@ export async function scaffoldProject(
   const filesWritten = [...result.filesWritten];
   const warnings = [...result.warnings];
 
+  // v4.7.1 audit fix — pw-emit's bundled tsconfig.json.tmpl writes
+  // `"module": "commonjs"` + `"moduleResolution": "node"`. TypeScript
+  // 5.5+ treats `moduleResolution: "node"` as the removed `node10`
+  // alias and errors. The valid replacement pairs are:
+  //   - module=node16 + moduleResolution=node16 (but requires `.js`
+  //     extensions on relative imports — breaks our `../pages/login.page`)
+  //   - module=esnext + moduleResolution=bundler (ESM-flavoured; lenient
+  //     on extensions; works with Playwright's test runner, which
+  //     accepts both module systems transparently)
+  //
+  // Patching both keys to the bundler pair is the clean fix. The emitted
+  // imports (`import { PageObject } from "pomwright"`) are already
+  // ESM-style, so no spec changes needed. Type-check-only; actual
+  // runtime goes through `npx playwright test` which handles both.
+  // Idempotent: skips if already patched. Follow-up: fix at the pw-emit
+  // template level.
+  const emittedTsconfig = path.join(opts.repoRoot, "tsconfig.json");
+  if (await fs.pathExists(emittedTsconfig)) {
+    try {
+      const raw = await fs.readFile(emittedTsconfig, "utf8");
+      if (/"moduleResolution"\s*:\s*"node"(?!(?:16|next))/.test(raw)) {
+        const patched = raw
+          .replace(/("module"\s*:\s*)"commonjs"/, '$1"esnext"')
+          .replace(/("moduleResolution"\s*:\s*)"node"(?!(?:16|next))/, '$1"bundler"');
+        await fs.writeFile(emittedTsconfig, patched, "utf8");
+      }
+    } catch {
+      // Non-fatal — leave the tsconfig as emitted.
+    }
+  }
+
   if (opts.selfHealing) {
     if (opts.legacyHealing) {
       warnings.push({

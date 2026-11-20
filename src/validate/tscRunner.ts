@@ -21,9 +21,30 @@ export interface TscResult {
 }
 
 export async function tscValidate(repoRoot: string): Promise<TscResult> {
+  // v4.7.1 audit fix — if the scaffolded repo has no `node_modules`
+  // directory, every `import ... from "@playwright/test"` / "pomwright" /
+  // etc. will error with "Cannot find module", which drowns out the real
+  // diagnostics in BDD_REVIEW.md. Skip validation instead and leave a
+  // single info item telling the user to install deps first. Matches
+  // the user's mental model: tsc errors against uninstalled projects
+  // aren't about THEIR code; they're about THEIR deps not being there yet.
+  const nodeModulesDir = path.join(repoRoot, "node_modules");
+  if (!(await fs.pathExists(nodeModulesDir))) {
+    return {
+      errorCount: 0,
+      items: [
+        {
+          severity: "info",
+          message:
+            "Skipped tsc --noEmit: node_modules not found in the scaffolded repo. " +
+            "Run `npm install` in the output directory then `npx tsc --noEmit` to validate.",
+        },
+      ],
+    };
+  }
+
   const localTsc = path.join(
-    repoRoot,
-    "node_modules",
+    nodeModulesDir,
     ".bin",
     process.platform === "win32" ? "tsc.cmd" : "tsc",
   );

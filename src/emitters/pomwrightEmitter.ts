@@ -100,10 +100,25 @@ export function emitPomwrightPom(input: EmitPomwrightPomInput): EmitPomwrightPom
   //    when `getNestedLocator()` is called, because the chain is built
   //    bottom-up from the registered segments.
   const allPaths = new Set<string>();
+  // v4.7.1 — collect per-ancestor-path metadata from every inferred
+  // entry so the emitter can pick the right Playwright call (getByRole
+  // only when there's a real accessible name; .locator("#id") when
+  // only an id is available; attribute selector + review warning when
+  // we have an aria-labelledby ref without the label text).
+  const ancestorMetaByPath = new Map<
+    string,
+    import("../transformers/hierarchyInferrer").AncestorMeta
+  >();
   for (const { inf } of inferred) {
     // Walk prefixes of the dotted path so parents are present.
     for (let i = 1; i <= inf.segments.length; i++) {
       allPaths.add(inf.segments.slice(0, i).join("."));
+    }
+    // Merge in ancestor metadata; first-write wins (if two elements
+    // share the same ancestor path, both have the same ancestor DOM
+    // and so the same metadata — order doesn't matter).
+    for (const [prefix, meta] of inf.ancestorSources) {
+      if (!ancestorMetaByPath.has(prefix)) ancestorMetaByPath.set(prefix, meta);
     }
   }
   // v4.7.0 PoC gap #1 — fold in every existing registration's path so
@@ -192,34 +207,71 @@ export function emitPomwrightPom(input: EmitPomwrightPomInput): EmitPomwrightPom
       continue;
     }
 
-    // Ancestor-only segment — synthesise from the last `<tag>@<name>` piece.
-    const lastSegment = path.split(".").pop() ?? path;
-    const [tag, name] = lastSegment.split("@");
-    if (name) {
-      // Prefer getByRole when the tag corresponds to an ARIA landmark role.
-      const landmarkRole = ARIA_LANDMARK_ROLE[tag];
-      if (landmarkRole) {
-        lines.push(
-          `    this.add(${JSON.stringify(path)}).getByRole(${JSON.stringify(landmarkRole)}, { name: ${JSON.stringify(deCamel(name))} });`,
-        );
-      } else {
-        // Fall back to CSS selector on the tag + name as id/aria-label (best effort).
-        lines.push(
-          `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(`${tag}[id="${name}"], ${tag}[aria-label="${deCamel(name)}"], ${tag}[name="${name}"]`)});`,
-        );
-      }
-    } else {
+    // v4.7.1 — attestqa POMWright review (POMWright#73 close). Ancestor
+    // registration now reads the attribute SOURCE from the inferrer
+    // metadata. `getByRole(role, { name })` is only valid when the name
+    // came from `aria-label` (or a computed name); `id` alone doesn't
+    // satisfy Playwright's name-requirement rule for roles like `form`
+    // or `region`, so we fall back to `.locator("<tag>#<id>")` in that
+    // case. `aria-labelledby` needs the referenced element's text —
+    // which the snapshot doesn't carry — so we fall back to an
+    // attribute selector AND push a review warning.
+    const meta = ancestorMetaByPath.get(path);
+    const landmarkRole = meta ? ARIA_LANDMARK_ROLE[meta.tag] : undefined;
+
+    if (!meta) {
+      // Shouldn't happen for well-formed paths, but keep a sane default.
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(path.split(".").pop() ?? path)});`,
+      );
+      continue;
+    }
+
+    if (!meta.attrSource) {
       // Bare landmark (`main`, `nav`, `header`, `footer`, `aside`).
-      const landmarkRole = ARIA_LANDMARK_ROLE[tag];
       if (landmarkRole) {
         lines.push(
           `    this.add(${JSON.stringify(path)}).getByRole(${JSON.stringify(landmarkRole)});`,
         );
       } else {
         lines.push(
-          `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(tag)});`,
+          `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(meta.tag)});`,
         );
       }
+    } else if (meta.attrSource === "aria-label" && landmarkRole) {
+      // Real accessible name → getByRole with name.
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).getByRole(${JSON.stringify(landmarkRole)}, { name: ${JSON.stringify(meta.attrValue ?? "")} });`,
+      );
+    } else if (meta.attrSource === "id") {
+      // id alone → CSS id selector. Does NOT satisfy getByRole's name rule.
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(`${meta.tag}#${meta.attrValue}`)});`,
+      );
+    } else if (meta.attrSource === "name") {
+      // form[name="X"] etc — not an accessible name either.
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(`${meta.tag}[name="${meta.attrValue}"]`)});`,
+      );
+    } else if (meta.attrSource === "aria-labelledby") {
+      // We don't have the text of the referenced element in the snapshot.
+      // Register as an attribute selector so the locator at least compiles,
+      // and warn the user to replace it with getByRole(..., {name: <text>}).
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(`${meta.tag}[aria-labelledby="${meta.attrValue}"]`)});`,
+      );
+      warnings.push({
+        severity: "warn",
+        message:
+          `POMWright: path "${path}" uses aria-labelledby ("${meta.attrValue}"); ` +
+          `the referenced element's text is not in the snapshot. Registered as an attribute selector. ` +
+          `Replace with .getByRole("${landmarkRole ?? meta.tag}", { name: "<actual label text>" }) if possible.`,
+      });
+    } else {
+      // Unknown attr source — safe fallback.
+      lines.push(
+        `    this.add(${JSON.stringify(path)}).locator(${JSON.stringify(meta.tag)});`,
+      );
     }
   }
 
@@ -274,12 +326,13 @@ const ARIA_LANDMARK_ROLE: Record<string, string> = {
   fieldset: "group",
 };
 
-/**
- * `userName` → `User Name`, `login` → `Login`. Used to turn a camelCase
- * path-segment name back into something that matches the element's
- * accessible name on the page (best effort).
- */
-function deCamel(s: string): string {
+// Historical: `deCamel(userName)` → `"User Name"`. Was used by v4.7.0's
+// ancestor fallback to guess at an accessible name from a camelCased
+// path segment. Dropped in v4.7.1 when the emitter switched to reading
+// the real attribute source (`aria-label` → real name; `id` → CSS id
+// selector). Kept here with `_` prefix in case a future
+// read-the-browser-computed-name path wants to recover from it.
+function _deCamel(s: string): string {
   return s.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 }
 

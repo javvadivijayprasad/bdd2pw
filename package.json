@@ -1,6 +1,6 @@
 {
   "name": "@vijaypjavvadi/bdd2pw",
-  "version": "4.7.0",
+  "version": "4.7.1",
   "description": "Scaffold runnable Playwright TypeScript tests from Gherkin .feature files. Detects existing Page Objects, scans live pages via Microsoft Playwright MCP, emits POMs + specs, ready for execution. CLI + HTTP service. Optional governed LLM fallback (Anthropic / OpenAI / Gemini).",
   "bin": {
     "bdd2pw": "dist/cli.js"
@@ -43,6 +43,7 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "preflight": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test",
     "smoke": "for s in scripts/smoke-*.mjs; do echo \"=== $s ===\"; node \"$s\" || exit 1; done",
+    "e2e:pomwright": "npm run build && node scripts/e2e-pomwright.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

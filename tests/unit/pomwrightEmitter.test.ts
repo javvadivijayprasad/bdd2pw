@@ -154,9 +154,13 @@ describe("v4.7.0 PoC — emitPomwrightPom", () => {
     expect(r.contents).toContain(
       'this.add("main.form@login.input@username").getByLabel("Username");',
     );
-    expect(r.contents).toContain(
-      'this.add("main.form@login").getByRole("form", { name: "Login" });',
-    );
+    // v4.7.1 — the sample xpaths use `form[@id="login"]`. Per POMWright#73
+    // review (gate 1), `id` alone doesn't satisfy Playwright's
+    // getByRole-with-name rule, so the ancestor registers as a CSS id
+    // selector, NOT as getByRole("form", { name: "Login" }). The leaf
+    // locators still match correctly because Playwright chains them
+    // from the form ancestor.
+    expect(r.contents).toContain('this.add("main.form@login").locator("form#login");');
     expect(r.contents).toContain('this.add("main").getByRole("main");');
     // No warnings for this clean input
     expect(r.warnings.length).toBe(0);
@@ -189,6 +193,85 @@ describe("v4.7.0 PoC — emitPomwrightPom", () => {
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0].message).toContain("heroHeading");
     expect(r.warnings[0].severity).toBe("warn");
+  });
+
+  it("v4.7.1 — emits getByRole(role, {name}) ONLY when the ancestor has aria-label", () => {
+    const pom: PageObjectIR = {
+      className: "CheckoutPage",
+      filePath: "/tmp/checkout.page.ts",
+      fields: [
+        makeChoice({
+          fieldName: "emailInput",
+          source: {
+            tag: "input",
+            role: "textbox",
+            label: "Email",
+            xpath: '/html/body/main/form[@aria-label="Checkout"]/input[@name="email"]',
+          },
+        }),
+      ],
+      methods: [],
+    };
+    const r = emitPomwrightPom({ pom, baseUrl: "https://e.com", urlPath: "/" });
+    // aria-label → real getByRole with name
+    expect(r.contents).toContain(
+      'this.add("main.form@checkout").getByRole("form", { name: "Checkout" });',
+    );
+    expect(r.warnings).toHaveLength(0);
+  });
+
+  it("v4.7.1 — emits .locator('tag[aria-labelledby]') + warning when the label text isn't available", () => {
+    const pom: PageObjectIR = {
+      className: "DialogPage",
+      filePath: "/tmp/dialog.page.ts",
+      fields: [
+        makeChoice({
+          fieldName: "okButton",
+          source: {
+            tag: "button",
+            role: "button",
+            name: "OK",
+            xpath: '/html/body/dialog[@aria-labelledby="h"]/button',
+          },
+        }),
+      ],
+      methods: [],
+    };
+    const r = emitPomwrightPom({ pom, baseUrl: "https://e.com", urlPath: "/" });
+    expect(r.contents).toContain(
+      'this.add("dialog@h").locator("dialog[aria-labelledby=\\"h\\"]");',
+    );
+    expect(r.warnings.some((w) => w.message.includes("aria-labelledby"))).toBe(true);
+  });
+
+  it("v4.7.1 — leaf noun on a generic wrapper tag prefers the ARIA role over the tag mapping", () => {
+    // A <div role="alert"> should produce `main.alert@error`, NOT
+    // `main.region@error` (which would mismatch the actual
+    // getByRole("alert", ...) call the leaf is registered as).
+    const pom: PageObjectIR = {
+      className: "LoginPage",
+      filePath: "/tmp/login.page.ts",
+      fields: [
+        makeChoice({
+          api: "getByRole",
+          args: '"alert", { name: "Your password is invalid!" }',
+          fieldName: "error",
+          source: {
+            tag: "div",
+            role: "alert",
+            name: "Your password is invalid!",
+            xpath: '/html/body/main/div[@id="error"]',
+          },
+        }),
+      ],
+      methods: [],
+    };
+    const r = emitPomwrightPom({ pom, baseUrl: "https://e.com", urlPath: "/" });
+    // Path noun should match the real role — alert, not region.
+    expect(r.contents).toContain(
+      'this.add("main.alert@error").getByRole("alert", { name: "Your password is invalid!" });',
+    );
+    expect(r.contents).not.toContain('"main.region@error"');
   });
 });
 

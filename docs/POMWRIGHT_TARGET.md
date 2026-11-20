@@ -116,39 +116,63 @@ npm install --save-dev pomwright
 
 ## What the PoC covers, and what it doesn't
 
-### Covered (v4.7.0)
+Per the design-review follow-up on
+[POMWright#73](https://github.com/DyHex/POMWright/pull/73) (close
+comment 2026-11-16), the **PoC merge contract is deliberately
+narrow**: new POMs only, no `@step()` decoration, no AUGMENT. The
+extra features exist in the code behind opt-in flags for teams that
+want to experiment, but they are NOT part of what DyHex reviews or
+what the "Community integrations" entry will cover when linked from
+POMWright's docs.
+
+### Part of the PoC (v4.7.1)
 
 - ✅ `--target=pomwright` CLI flag and `options.target` HTTP body field
 - ✅ POMWright POM class with `LocatorRegistry` paths
 - ✅ `getNestedLocator(path)` rewrite in the spec for every field reference
 - ✅ Base-class method handoff: `pom.goto()` → `pom.navigation.goto()`
-- ✅ Hierarchy inference from xpath + CSS selector
-- ✅ Flat-path fallback with review warning
+- ✅ Hierarchy inference from xpath + CSS selector, with the right
+  Playwright call per attribute source (v4.7.1 close of POMWright#73
+  gate 1):
+  - `aria-label="X"` → `getByRole(role, { name: "X" })`
+  - `id="X"` only → `.locator("<tag>#X")`
+  - `aria-labelledby="Y"` → `.locator('<tag>[aria-labelledby="Y"]')` + review warning (snapshot doesn't carry element#Y's text)
+  - landmark (`main`, `nav`, …) → `getByRole(landmark)` bare
+- ✅ Flat-path fallback with a `BDD_REVIEW.md` marker when no stable
+  ancestor is found
 - ✅ Unit tests pin the emitted shape
+- ✅ End-to-end check: `scripts/e2e-pomwright.mjs` scaffolds the
+  example, runs `npm install` to pull real `pomwright`, and verifies
+  `tsc --noEmit` passes. Runs on Windows + Ubuntu in CI (v4.7.1 close
+  of POMWright#73 gate 2)
 - ✅ **Auto-adds `pomwright` to the scaffolded `package.json`** — the
-  first `npm install` in the output just works. Idempotent on
-  re-scaffold.
-- ✅ **`@step()` decoration via `--pomwright-step-methods`** — opt-in flag
-  that turns each scenario into a `@step()`-decorated POM method the
-  test calls. One Playwright report row per scenario, matching
-  hand-written POMWright shape. Inside method bodies, references
-  become `this.<x>` / `this.getNestedLocator(...)`.
-- ✅ **AUGMENT existing POMWright POMs** — new `src/repo/pomwrightScanner.ts`
-  parses `defineLocators()` + `@step()` methods back into IR.
-  Re-scaffold preserves hand-curated registrations verbatim (new scan
-  can't overwrite a user's `getByTestId("custom-username")` with a
-  freshly-picked `getByLabel("Username")`). `@step()` methods survive
-  byte-for-byte. The attestqa v4.5.x safety nets apply unchanged
-  because POMWright POMs now populate `repoState.pageObjects` just
-  like classic POMs.
+  first `npm install` in the output just works
 
-### Not yet covered (feedback welcome at POMWright#63)
+### Experimental — in the code behind opt-in flags, NOT part of the PoC merge contract
 
-- ❌ **Method parameter round-trip.** The POMWright scanner records
-  methods' bodies verbatim but currently `params: []`, so
+Per the POMWright#73 review, the PoC is new-POM-only. These features
+exist and work for teams that want to try them, but they're not
+documented as supported for the first-integration round:
+
+- 🧪 **`@step()` method decoration via `--pomwright-step-methods`** —
+  opt-in flag that turns each scenario into a `@step()`-decorated POM
+  method the test calls. Matches a hand-written POMWright suite's
+  shape. Keep this flag OFF until POMWright#73's follow-up review
+  explicitly covers it.
+- 🧪 **AUGMENT existing POMWright POMs** — `src/repo/pomwrightScanner.ts`
+  parses `defineLocators()` + `@step()` methods back into IR so
+  re-scaffold preserves hand-curated registrations verbatim. Works,
+  but PoC scope is new-POM only. If you re-scaffold a POMWright POM
+  and want to override this preservation behaviour (or you hit the
+  method-param round-trip gap below), hand-edit the output.
+
+### Not covered (feedback welcome)
+
+- ❌ **Method parameter round-trip in AUGMENT.** The POMWright scanner
+  records method bodies verbatim but currently `params: []`, so
   `loginAs(user: string)` round-trips to `loginAs()` with `user`
-  referenced undefined inside. Fix queued — extend the scanner's
-  param parser.
+  referenced undefined inside. Only hits the experimental AUGMENT
+  path above.
 - ❌ **Reusable segment deduplication across pages.** Each page is a
   self-contained registry; POMWright's shared-segment and locator-module
   patterns aren't synthesised. Only pays off on multi-page scaffolds.
@@ -157,6 +181,30 @@ npm install --save-dev pomwright
   directly for storage; the `super(page, baseUrl, path, { sessionStorage
   })` overload isn't synthesised. Blocked on a Gherkin step shape
   motivating it.
+
+## Self-healing — incompatible with POMWright's fail-fast principle
+
+bdd2pw's `--self-healing` flag wraps the emitted `test` with a
+runtime healer that picks a similar element when the primary locator
+fails to match. POMWright is built on the opposite principle: a test
+fails when the page changes rather than finding a similar element
+somewhere else (see
+[POMWright Principles](https://dyhex.github.io/POMWright/docs/principles/)).
+
+`--self-healing` and `--target=pomwright` are orthogonal flags
+today — nothing prevents combining them. But the combination
+**silently weakens POMWright's guarantees**: a POMWright suite with
+self-healing enabled no longer reliably fails when the page
+changes. The POMWright maintainer flagged this explicitly in the
+POMWright#73 review.
+
+**Recommendation:** do not combine `--self-healing` with
+`--target=pomwright`. If you need runtime healing, use the classic
+target (`--target=classic`, default). If you need POMWright's
+registry model, keep `--self-healing` off. The PoC doesn't block
+the combination at CLI level because both flags are independently
+useful on their own, but the emitted README in the output repo
+should carry the same note for any team using both.
 
 ## Feedback
 

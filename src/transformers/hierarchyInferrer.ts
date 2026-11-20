@@ -80,6 +80,32 @@ const ROLE_NOUN: Record<string, string> = {
   div: "region",
 };
 
+/**
+ * v4.7.1 — attestqa POMWright review (POMWright#73 close). Playwright's
+ * `getByRole(role, { name })` requires the accessible name to come from
+ * `aria-label` or the browser's computed name — `id` alone does NOT
+ * satisfy it. Earlier (v4.7.0) the inferrer collapsed every ancestor
+ * attribute source into the segment name, so `form[@id="login"]` got
+ * emitted as `getByRole("form", { name: "Login" })` — which never
+ * matches on a real page and silently kills the whole subtree.
+ *
+ * Fix: carry the attribute SOURCE through to the emitter so it can pick
+ * the right Playwright call:
+ *   - `aria-label="X"`         → `getByRole(role, { name: "X" })`       ✓ real a11y name
+ *   - `id="X"` only            → `.locator("<tag>#X")`                    ✓ CSS id fallback
+ *   - `aria-labelledby="Y"`    → `.locator("<tag>[aria-labelledby='Y']")` + review marker
+ *                                (we don't have element#Y's text in the snapshot)
+ *   - `name="X"` (form attr)   → `.locator("<tag>[name='X']")`
+ *   - landmark bare (main etc) → `getByRole(landmark)` unchanged
+ */
+export type AncestorAttrSource = "aria-label" | "id" | "aria-labelledby" | "name";
+
+export interface AncestorMeta {
+  tag: string;
+  attrSource?: AncestorAttrSource;
+  attrValue?: string;
+}
+
 export interface InferredPath {
   /** The dotted POMWright path, e.g. "main.form@login.input@username". */
   path: string;
@@ -89,6 +115,12 @@ export interface InferredPath {
   /** True when the DOM didn't give us enough to chain reliably; the
    *  caller should emit a review marker. */
   reviewNeeded: boolean;
+  /** v4.7.1 — per-ancestor-segment metadata so the emitter can pick the
+   *  right Playwright call (id-only → `.locator('#id')`, aria-label →
+   *  `getByRole(role, { name })`, etc.). Keyed by the full dotted path
+   *  prefix of the segment (e.g. "main", "main.form@login"). Leaf segment
+   *  is NOT in this map — the leaf uses the picked LocatorChoice's own api. */
+  ancestorSources: Map<string, AncestorMeta>;
 }
 
 /**
@@ -107,7 +139,17 @@ export interface InferredPath {
  */
 export function inferPomwrightPath(choice: LocatorChoice): InferredPath {
   const el = choice.source;
-  const leafNoun = ROLE_NOUN[el.tag] ?? el.role ?? "element";
+  // v4.7.1 audit fix — for GENERIC wrapper tags (`div`/`span`/`p`/`section`/
+  // `article`) prefer the actual ARIA role (e.g. `alert` for a div with
+  // role="alert") over the tag-to-noun mapping (which maps div → "region").
+  // Otherwise the path says `main.region@error` but the locator uses
+  // `getByRole("alert", ...)` — semantically confusing. For specific tags
+  // (`input` / `button` / `a` / `img` / `h1-h6`), keep the tag mapping:
+  // `input@username` reads better than `textbox@username`.
+  const GENERIC_WRAPPER_TAGS = new Set(["div", "span", "p", "section", "article"]);
+  const leafNoun = GENERIC_WRAPPER_TAGS.has(el.tag)
+    ? (el.role ?? ROLE_NOUN[el.tag] ?? "element")
+    : (ROLE_NOUN[el.tag] ?? el.role ?? "element");
   const leafName =
     camelCase(choice.fieldName)
       // Strip any role suffix the classic picker appended (`usernameInput` → `username`).
@@ -119,72 +161,104 @@ export function inferPomwrightPath(choice: LocatorChoice): InferredPath {
   const leafSegment = `${leafNoun}@${leafName}`;
 
   // Walk xpath first (most reliable), fall back to CSS selector.
-  const ancestorSegments = extractAncestors(el.xpath, el.cssSelector);
+  // v4.7.1 — extractAncestors now returns each segment with its source
+  // metadata so the emitter can pick the right Playwright call.
+  const ancestorMetas = extractAncestors(el.xpath, el.cssSelector);
 
-  if (ancestorSegments.length === 0) {
+  if (ancestorMetas.length === 0) {
     return {
       path: leafSegment,
       segments: [leafSegment],
       reviewNeeded: true,
+      ancestorSources: new Map(),
     };
   }
 
+  const ancestorSegments = ancestorMetas.map((m) => m.segment);
   const segments = [...ancestorSegments, leafSegment];
+
+  // Build the ancestorSources map keyed by the full dotted prefix of
+  // each ancestor segment (e.g. "main", "main.form@login"). The leaf
+  // segment is NOT in the map because its locator comes from the
+  // LocatorChoice the picker chose for the element itself.
+  const ancestorSources = new Map<string, AncestorMeta>();
+  for (let i = 0; i < ancestorMetas.length; i++) {
+    const prefix = ancestorSegments.slice(0, i + 1).join(".");
+    ancestorSources.set(prefix, {
+      tag: ancestorMetas[i].tag,
+      attrSource: ancestorMetas[i].attrSource,
+      attrValue: ancestorMetas[i].attrValue,
+    });
+  }
+
   return {
     path: segments.join("."),
     segments,
     reviewNeeded: false,
+    ancestorSources,
   };
 }
 
+interface _AncestorEntry {
+  segment: string;
+  tag: string;
+  attrSource?: AncestorAttrSource;
+  attrValue?: string;
+}
+
 /**
- * Walk an xpath (preferred) or CSS selector and return stable-ancestor
- * segments, root-first. Each segment is `<tag>@<name>` when a name is
- * available, or `<tag>` for landmarks (`main`, `header`, `nav`,
- * `footer`, `aside`) which are unique enough on their own.
+ * v4.7.1 — walk an xpath (preferred) or CSS selector and return
+ * stable-ancestor entries (root-first). Each entry carries BOTH the
+ * segment name AND the attribute source that produced the name, so
+ * downstream can pick the right Playwright call. Earlier (v4.7.0) only
+ * the segment name was returned, which forced the emitter to assume
+ * every attribute was accessible-name-worthy — wrong for `id` /
+ * `aria-labelledby` / `name`.
  */
-function extractAncestors(xpath: string | undefined, css: string | undefined): string[] {
-  const segments: string[] = [];
+function extractAncestors(
+  xpath: string | undefined,
+  css: string | undefined,
+): _AncestorEntry[] {
+  const entries: _AncestorEntry[] = [];
 
   if (xpath) {
-    // xpath like `/html/body/main/form[@id="login"]/input[@name="username"]`
-    // or `//*[@id="login"]/form/input`. Parse step-by-step.
     const steps = xpath.split("/").filter(Boolean);
     for (const step of steps) {
-      // Step shapes:
-      //   main
-      //   form[@id="login"]
-      //   section[@aria-label="Checkout"]
-      //   div[2]                  — positional, not stable → skip
-      //   *[@id="login"]          — any-tag with id
-      //   dialog[@aria-labelledby="h"]
       const m = step.match(
         /^(?<tag>[a-zA-Z][a-zA-Z0-9-]*|\*)(?:\[@(?<attr>id|name|aria-label|aria-labelledby)="(?<val>[^"]+)"\])?(?:\[\d+\])?$/,
       );
       if (!m || !m.groups) continue;
       const tag = m.groups.tag.toLowerCase();
+      const attrName = m.groups.attr as AncestorAttrSource | undefined;
       const attrVal = m.groups.val;
 
-      // Landmarks: stable on their own.
+      // Landmarks: stable on their own; emitted as bare `getByRole(role)`.
       if (["main", "nav", "header", "footer", "aside"].includes(tag)) {
-        segments.push(tag);
+        entries.push({ segment: tag, tag });
         continue;
       }
       // Other container tags: require a name attribute to be stable.
-      if (STABLE_CONTAINER_TAGS.has(tag) && attrVal) {
-        segments.push(`${tag}@${camelCase(attrVal)}`);
+      if (STABLE_CONTAINER_TAGS.has(tag) && attrVal && attrName) {
+        entries.push({
+          segment: `${tag}@${camelCase(attrVal)}`,
+          tag,
+          attrSource: attrName,
+          attrValue: attrVal,
+        });
         continue;
       }
-      // `*[@id="..."]` — unknown tag, named by id → treat as a generic
-      // section segment; keep because id is stable.
-      if (tag === "*" && attrVal) {
-        segments.push(`section@${camelCase(attrVal)}`);
+      // `*[@id="..."]` — unknown tag with an id → generic section segment.
+      if (tag === "*" && attrVal && attrName) {
+        entries.push({
+          segment: `section@${camelCase(attrVal)}`,
+          tag: "section",
+          attrSource: attrName,
+          attrValue: attrVal,
+        });
         continue;
       }
-      // Any other step (positional divs, unnamed containers, leaves) is
-      // dropped — unstable or redundant.
     }
-    if (segments.length > 0) return segments;
+    if (entries.length > 0) return entries;
   }
 
   // CSS selector fallback — far weaker, but catches `main form#login input[name=username]`
@@ -193,24 +267,37 @@ function extractAncestors(xpath: string | undefined, css: string | undefined): s
   if (css) {
     const parts = css.split(/\s+/).filter(Boolean);
     for (const part of parts) {
-      // part like `main` or `form#login` or `#checkout` or `section[aria-label="X"]`
       const tagMatch = part.match(/^([a-zA-Z][a-zA-Z0-9-]*)/);
       const idMatch = part.match(/#([a-zA-Z_][\w-]*)/);
       const ariaLabelMatch = part.match(/\[aria-label=["']([^"']+)["']\]/);
       const tag = (tagMatch ? tagMatch[1] : "").toLowerCase();
-      const name = idMatch?.[1] ?? ariaLabelMatch?.[1];
 
       if (["main", "nav", "header", "footer", "aside"].includes(tag)) {
-        segments.push(tag);
-      } else if (STABLE_CONTAINER_TAGS.has(tag) && name) {
-        segments.push(`${tag}@${camelCase(name)}`);
-      } else if (!tag && name) {
-        // Bare `#login` → section-like anchor.
-        segments.push(`section@${camelCase(name)}`);
+        entries.push({ segment: tag, tag });
+      } else if (STABLE_CONTAINER_TAGS.has(tag) && ariaLabelMatch) {
+        entries.push({
+          segment: `${tag}@${camelCase(ariaLabelMatch[1])}`,
+          tag,
+          attrSource: "aria-label",
+          attrValue: ariaLabelMatch[1],
+        });
+      } else if (STABLE_CONTAINER_TAGS.has(tag) && idMatch) {
+        entries.push({
+          segment: `${tag}@${camelCase(idMatch[1])}`,
+          tag,
+          attrSource: "id",
+          attrValue: idMatch[1],
+        });
+      } else if (!tag && idMatch) {
+        entries.push({
+          segment: `section@${camelCase(idMatch[1])}`,
+          tag: "section",
+          attrSource: "id",
+          attrValue: idMatch[1],
+        });
       }
-      // Leaves inside the chain are handled by the caller's leaf segment.
     }
   }
 
-  return segments;
+  return entries;
 }
