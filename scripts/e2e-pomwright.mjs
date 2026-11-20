@@ -35,9 +35,15 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+// v4.7.1 — `.pathname` on a file URL returns `/C:/...` on Windows (leading
+// slash from URL encoding), which is NOT a valid Windows filesystem path.
+// `fileURLToPath` handles the OS-specific conversion correctly on both
+// platforms.
+const __filename = fileURLToPath(import.meta.url);
+const REPO_ROOT = dirname(dirname(__filename));
 const FEATURE = join(REPO_ROOT, "examples", "pomwright-login", "login.feature");
 const SNAPSHOT = join(REPO_ROOT, "examples", "pomwright-login", "snapshot.json");
 
@@ -95,25 +101,20 @@ try {
   // 3. Install dependencies (pulls real `pomwright` + `@playwright/test`)
   run("npm", ["install", "--no-audit", "--no-fund"], { cwd: outDir });
 
-  // 4. Patch tsconfig moduleResolution. pw-emit's template writes
-  //    `"moduleResolution": "node"`, which TypeScript 5.5+ treats as
-  //    the removed `node10` alias and errors on. Modern users want
-  //    `"bundler"` (TypeScript's recommended value for library-consumer
-  //    projects, stable across 5.x). Done here rather than in the
-  //    scaffolder because bdd2pw's own in-process tsc validator runs
-  //    before `npm install` and would then surface unresolved-module
-  //    errors instead of silently bailing on the moduleResolution error.
-  //    Fix lives at pw-emit source level — track in POMWright#73 follow-up.
+  // 4. Patch tsconfig moduleResolution if the scaffolder didn't already.
+  //    `"node"` is the removed `node10` alias on TypeScript 5.5+; patch
+  //    to `"node16"` (compatible with the template's `module: "commonjs"`
+  //    — unlike `"bundler"` which needs `module: "esnext"`/`"preserve"`).
   const tsconfigPath = join(outDir, "tsconfig.json");
   if (existsSync(tsconfigPath)) {
     const raw = readFileSync(tsconfigPath, "utf8");
     if (/"moduleResolution"\s*:\s*"node"(?!(?:16|next))/.test(raw)) {
       const patched = raw.replace(
         /("moduleResolution"\s*:\s*)"node"(?!(?:16|next))/,
-        '$1"bundler"',
+        '$1"node16"',
       );
       writeFileSync(tsconfigPath, patched, "utf8");
-      console.log("e2e-pomwright: patched tsconfig moduleResolution node → bundler");
+      console.log("e2e-pomwright: patched tsconfig moduleResolution node → node16");
     }
   }
 
